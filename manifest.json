@@ -1,0 +1,59 @@
+{
+  "name": "Lie Detector Scanner",
+  "short_name": "LD Scanner",
+  "description": "NSE Index RSI Regime Scanner — Two-Pass RSI · Breadth Analysis · Live Prices",
+  "start_url": "index.html",
+  "id": "index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f0e8",
+  "theme_color": "#f5f0e8",
+  "lang": "en",
+  "scope": "./",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshot-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Lie Detector Scanner — NSE Regime Dashboard"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Run Scan",
+      "short_name": "Scan",
+      "description": "Launch and start X-Ray Audit",
+      "url": "index.html?autostart=1",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "prefer_related_applications": false
+}
