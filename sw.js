@@ -2,7 +2,7 @@
 // Caches the app shell (single-file HTML + manifest + icons) for offline use.
 // Bump CACHE_VERSION whenever index.html changes so clients pick up the
 // new file instead of serving a stale cached copy indefinitely.
-const CACHE_VERSION = 'timeline1a-v4';
+const CACHE_VERSION = 'timeline1a-v5';
 const APP_SHELL = [
   './',
   './index.html',
