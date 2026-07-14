@@ -1264,6 +1264,20 @@ var DD = (function() {
   var YAHOO_CHART_URL = 'https://query1.finance.yahoo.com/v8/finance/chart/';
   var GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
   var NPS_HISTORICAL_URL = 'https://npsnav.in/api/historical/';
+  var MFAPI_URL = 'https://api.mfapi.in/mf/';
+  // Balanced Advantage Fund (BAF) benchmark for each AMC's NPS Switch pair —
+  // ported from LD253A1-1.html's amcFunds table (the reference app this NPS
+  // Switch tab's UI/logic was ported from). mfapi.in codes, one per AMC.
+  // These are the AMC's "defensive hold" fund referenced by LD253A1-1's SOP
+  // ("Retreat 100% to BAF as defensive hold") — Timeline had no data pipeline
+  // for these at all before this addition (no fetch, no dailyMap entry), so
+  // scannerRowFor() on any of these names previously returned null.
+  var BAF_FUNDS = {
+    HDFC:  { name: 'HDFC Balanced Advantage - Growth',  code: '118968' },
+    ICICI: { name: 'ICICI Balanced Advantage - Growth', code: '120377' },
+    KOTAK: { name: 'KOTAK Balanced Advantage - Growth', code: '144335' },
+    ABSL:  { name: 'ABSL Balanced Advantage - Growth',  code: '131670' }
+  };
   // Real NPS scheme codes, ported from the working NPS-Clues_1F reference
   // app's amcFunds table (8 AMCs × 4 schemes: Equity/Corporate-bond ×
   // Tier I/II). The earlier placeholder list here (SM008001-4, invented as
@@ -1521,6 +1535,75 @@ var DD = (function() {
     };
   })();
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // SUB-CONTAINER: DD.BAF — mfapi.in (Balanced Advantage Fund NAV history)
+  // ═══════════════════════════════════════════════════════════════════════
+  // Mirrors DD.NPS exactly (same response shape: {data:[{date:'DD-MM-YYYY',
+  // nav:'string'}]}, newest-first — confirmed identical between npsnav.in
+  // and mfapi.in in LD253A1-1.html, the reference app this is ported from).
+  // mfapi.in sends its own CORS headers, so — like DD.NPS — this calls
+  // fetch() directly rather than going through fetchURL/CORS_PROXIES.
+  var BAF = (function() {
+
+    // code: mfapi.in scheme code, e.g. '118968' (HDFC BAF).
+    // Returns [{date:'DD-MM-YYYY', nav:Number}, ...] newest-first, or []
+    // on any failure — never throws (same contract as NPS.fetchHistory).
+    function fetchHistory(code, opts) {
+      var timeout = (opts && opts.timeout) || 12000;
+      var url = MFAPI_URL + code;
+      // No AbortController — see NPS.fetchHistory's note above; the same
+      // environment issue (AbortSignal not structured-cloneable) applies
+      // here, so a Promise.race timeout is used instead.
+      var fetchPromise = fetch(url).then(function(res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      });
+      var timeoutPromise = new Promise(function(_, reject) {
+        setTimeout(function() { reject(new Error('timeout after ' + timeout + 'ms')); }, timeout);
+      });
+      return Promise.race([fetchPromise, timeoutPromise]).then(function(json) {
+        // mfapi.in's documented shape is {data:[...]}, but handle a bare
+        // array too, same defensive pattern as NPS.fetchHistory.
+        var rows = Array.isArray(json) ? json : (json && Array.isArray(json.data) ? json.data : null);
+        if (!rows) { console.warn('[BAF] unexpected response shape for', code, json); return []; }
+        var parsed = rows.map(function(r) {
+          return { date: r.date, nav: parseFloat(r.nav) };
+        }).filter(function(r) { return !isNaN(r.nav) && r.nav > 0; });
+        if (parsed.length === 0) console.warn('[BAF]', code, 'returned 0 usable rows from', rows.length, 'raw rows');
+        return parsed;
+      }).catch(function(err) {
+        console.warn('[BAF] fetch failed for', code, '—', err && err.message ? err.message : err);
+        return [];
+      });
+    }
+
+    // codes: array of mfapi.in codes (defaults to all 4 BAF_FUNDS codes).
+    // Sequential with a small delay, mirroring NPS.fetchAllHistories.
+    function fetchAllHistories(codes, onProgress) {
+      var list = (codes && codes.length) ? codes : Object.keys(BAF_FUNDS).map(function(k) { return BAF_FUNDS[k].code; });
+      var out = {};
+      var i = 0;
+      function next() {
+        if (i >= list.length) return Promise.resolve(out);
+        var code = list[i];
+        return fetchHistory(code).then(function(rows) {
+          out[code] = rows;
+          i++;
+          if (onProgress) onProgress(i, list.length, code);
+          return new Promise(function(res) { setTimeout(res, 150); }).then(next);
+        });
+      }
+      return next();
+    }
+
+    return {
+      _url: MFAPI_URL,
+      _funds: BAF_FUNDS,
+      fetchHistory: fetchHistory,
+      fetchAllHistories: fetchAllHistories
+    };
+  })();
+
   // ── Public API ──
   return {
     _proxies: CORS_PROXIES,
@@ -1531,7 +1614,8 @@ var DD = (function() {
     fetchNSECSV: fetchNSECSV,
     fetchYahooChart: fetchYahooChart,
     fetchGemini: fetchGemini,
-    NPS: NPS
+    NPS: NPS,
+    BAF: BAF
   };
 })();
 // Expose DD globally
@@ -2223,6 +2307,39 @@ var U = (function() {
     if (normKey.indexOf('schemec') !== -1) return 'NPS Corporate Debt';
     return 'NPS Schemes'; // unrecognized scheme-letter — kept out of Other so it's still visibly grouped as NPS
   }
+  // BAF (Balanced Advantage Fund) benchmark keys are the normalized fund
+  // names from DD.BAF._funds (Section 1: 'hdfcbalancedadvantagegrowth',
+  // etc.) — none of them start with 'nps' and none exist in
+  // EMBEDDED_NSE_DATA, so without this check every one of them silently
+  // fell into the generic 'Other' bucket alongside genuinely uncategorized
+  // indices. Checked by exact key match (built once, same lazy-init
+  // pattern as _masterCategoryByKey) rather than a substring test, since
+  // fund names like "kotak balanced advantage" could otherwise collide
+  // with an unrelated index name containing similar words.
+  //
+  // BUG FIXED: this previously read a bare `BAF_FUNDS` identifier, which
+  // does not exist in this scope — BAF_FUNDS is declared with `var` inside
+  // the separate DD (Container) IIFE (Section 1), not as a global. Because
+  // this is a `typeof x !== 'undefined'` check rather than a direct
+  // reference, the ReferenceError was suppressed entirely: `_bafKeySet`
+  // was silently built as `{}` every time and this function always
+  // returned null, so BAF funds kept falling into 'Other' even after the
+  // category fix that was supposed to separate them out. Fixed by reading
+  // the properly exported `DD.BAF._funds` (same object, reachable via the
+  // public API DD already returns) instead of the out-of-scope local name.
+  var _bafKeySet = null;
+  function bafCategoryForKey(normKey) {
+    if (!_bafKeySet) {
+      _bafKeySet = {};
+      if (typeof DD !== 'undefined' && DD.BAF && DD.BAF._funds) {
+        var bafFunds = DD.BAF._funds;
+        Object.keys(bafFunds).forEach(function(amc) {
+          _bafKeySet[normalize(bafFunds[amc].name)] = true;
+        });
+      }
+    }
+    return _bafKeySet[normKey] ? 'Balanced Advantage Funds' : null;
+  }
   function categoryForKey(key) {
     if (!_masterCategoryByKey) {
       _masterCategoryByKey = {};
@@ -2235,6 +2352,8 @@ var U = (function() {
     if (_masterCategoryByKey[key]) return _masterCategoryByKey[key];
     var npsCat = npsCategoryForKey(key);
     if (npsCat) return npsCat;
+    var bafCat = bafCategoryForKey(key);
+    if (bafCat) return bafCat;
     return 'Other';
   }
   return {
@@ -2246,7 +2365,8 @@ var U = (function() {
     buildIndexEntry: buildIndexEntry,
     buildIndexListFromMaster: buildIndexListFromMaster,
     categoryForKey: categoryForKey,
-    npsCategoryForKey: npsCategoryForKey
+    npsCategoryForKey: npsCategoryForKey,
+    bafCategoryForKey: bafCategoryForKey
   };
 })();
 window.U = U;
@@ -2975,6 +3095,60 @@ window.hmMergeNPSIntoDailyMap = async function(onRow) {
   return npsCount;
 };
 
+// ── BAF → dailyMap injection — mirrors hmMergeNPSIntoDailyMap exactly, one
+// IndexedDB cache (ld_deep_baf_v1) and one dailyMap merge for the 4 AMC
+// Balanced Advantage Fund benchmarks (HDFC/ICICI/KOTAK/ABSL). Kept as a
+// separate function (rather than folded into the NPS one) so the two
+// caches/pipelines stay independently debuggable — same reasoning as
+// _bafMergeScheme being its own copy rather than shared with _npsMergeScheme.
+// onRow(closes, fundName, navRows): same callback contract as the NPS
+// version. Returns the count of BAF funds merged.
+window.hmMergeBAFIntoDailyMap = async function(onRow) {
+  var bafCache = await Promise.race([
+    new Promise(function(res) { window._bafLoadCache(res); }),
+    new Promise(function(_, rej) { setTimeout(function(){ rej(new Error('BAF cache timeout')); }, 10000); })
+  ]).catch(function(){ return { bafMap: {} }; });
+  var bafMap = (bafCache && bafCache.bafMap) || {};
+  var bafCount = 0;
+  if (!window._deepWeeklyCache) window._deepWeeklyCache = {};
+  if (!window._deepWeeklyCache.dailyMap) window._deepWeeklyCache.dailyMap = {};
+  var idbDaily = await new Promise(function(res) {
+    window._idbGet(window.DEEP_CACHE_KEY_DAILY, function(d) { res((d && d.dailyMap) ? d : { lastDate: null, dailyMap: {} }); });
+  }).catch(function(){ return { lastDate: null, dailyMap: {} }; });
+  var idbDailyMapChanged = false;
+  // Build code → fund name lookup from BAF_FUNDS (Section 1), same pattern
+  // as DD.NPS._schemeNames for the NPS side.
+  var codeToName = {};
+  if (typeof DD !== 'undefined' && DD.BAF && DD.BAF._funds) {
+    Object.keys(DD.BAF._funds).forEach(function(amc) {
+      var f = DD.BAF._funds[amc];
+      codeToName[f.code] = f.name;
+    });
+  }
+  Object.keys(bafMap).forEach(function(code) {
+    var navRows = bafMap[code]; // newest-first: [{date, nav}, ...]
+    if (!navRows || navRows.length < 20) return;
+    var closes = navRows.slice().reverse().map(function(r) { return r.nav; });
+    var fundName = codeToName[code] || code;
+    var normName = fundName.toLowerCase();
+    var dailyEntries = navRows.slice().reverse().map(function(r) {
+      var parts = r.date.split('-');
+      var ddmm = parts[0] + parts[1] + parts[2]; // DDMMYYYY
+      var v = r.nav;
+      return ddmm + '|' + v + '|' + v + '|' + v + '|' + v;
+    });
+    window._deepWeeklyCache.dailyMap[normName] = dailyEntries;
+    idbDaily.dailyMap[normName] = dailyEntries;
+    idbDailyMapChanged = true;
+    bafCount++;
+    if (typeof onRow === 'function') onRow(closes, fundName, navRows);
+  });
+  if (idbDailyMapChanged) {
+    await window._idbPut(window.DEEP_CACHE_KEY_DAILY, idbDaily).catch(function(){});
+  }
+  return bafCount;
+};
+
 // ── 10.6 Main Scan ──
 async function ptRunScan(){
   if(_ptScanRunning){ptLog('⏳ Scan already in progress — skipping');return;}
@@ -3143,10 +3317,27 @@ async function ptRunScan(){
     });
     ptLog('✅ NPS merged — '+npsRowsForPT+' schemes with sufficient history');
   } catch (e) { ptLog('⚠️ NPS merge failed: '+(e.message||e)); }
+
+  // Step 3c: Same treatment for the 4 AMC BAF benchmark funds — mirrors
+  // Step 3b above exactly, using ptComputeRow unchanged on each fund's NAV
+  // series so HDFC/ICICI/KOTAK/ABSL Balanced Advantage rows appear in the
+  // main scanner table (and are therefore reachable by scannerRowFor() from
+  // the NPS Switch tab's E/C-vs-BAF comparisons).
+  try {
+    ptLog('🔧 Merging BAF funds into scanner rows...');
+    var bafRowsForPT = await win.hmMergeBAFIntoDailyMap(function(closes, fundName, navRows) {
+      var row = ptComputeRow(closes, fundName);
+      if (!row) return;
+      var prev = navRows[1];
+      row.change = (prev && prev.nav > 0) ? Math.round(((navRows[0].nav - prev.nav) / prev.nav * 100) * 100) / 100 : 0;
+      ptAllComputedRows.push(row);
+    });
+    ptLog('✅ BAF merged — '+bafRowsForPT+' funds with sufficient history');
+  } catch (e) { ptLog('⚠️ BAF merge failed: '+(e.message||e)); }
   var count=ptApplyHiddenFilter();
   ptEl('pt-st').textContent=(usedDeepCache?'[Data Engine]':'[NSE]')+' '+count+' indices scanned';
   ptEl('pt-ts').textContent=new Date().toLocaleString();
-  ptLog('✅ Scan complete — '+count+' indices (NSE + NPS)');
+  ptLog('✅ Scan complete — '+count+' indices (NSE + NPS + BAF)');
   if(typeof PSnap!=='undefined')PSnap.onScanComplete();
   }catch(e){ptLog('❌ Scan error: '+(e.message||e));console.warn('[PT] scan error:',e);}
   finally{_ptScanRunning=false;}
@@ -4026,6 +4217,16 @@ win.PSnap={
   restartFreshDownload:restartFreshDownload,
   get updateMode(){return updateMode;}
 };
+// scannerRowFor is declared inside this IIFE (private to Portfolio
+// Snapshot's own render code above), but the NPS Switch tab — a separate
+// <script> block later in the file — calls it as a bare global to look up
+// E/C/BAF rows by name. Function declarations inside an IIFE do NOT leak
+// to window automatically, so without this export every such call threw
+// "scannerRowFor is not defined" and the whole NPS Switch tab errored out
+// before rendering anything. This was a pre-existing bug (present before
+// any BAF-related changes) — fixed by exposing the same function globally
+// rather than duplicating its lookup logic in the NPS Switch tab's script.
+win.scannerRowFor = scannerRowFor;
 
 })(window);
 </script>
@@ -4070,6 +4271,7 @@ var DEEP_CACHE_KEY_DAILY   = 'ld_deep_daily_v1';   // { lastDate, dailyMap }
 var DEEP_CACHE_KEY_WEEKLY  = 'ld_deep_weekly_v1';  // { weeklyMap }
 var DEEP_CACHE_KEY_MONTHLY = 'ld_deep_monthly_v1'; // { monthlyMap }
 var DEEP_CACHE_KEY_NPS     = 'ld_deep_nps_v1';      // { lastUpdated, npsMap }
+var DEEP_CACHE_KEY_BAF     = 'ld_deep_baf_v1';      // { lastUpdated, bafMap } — 4 AMC BAF benchmark funds
 var DEEP_WINDOW_DAYS = 2500; // ~10 years of trading days
 var DEEP_BATCH_SIZE = 30;    // days per chunk — chunks auto-chain until all gap days are fetched
 var DEEP_BATCH_DELAY = 500; // ms between individual fetches — reduced for speed
@@ -4238,6 +4440,59 @@ function _npsLoadCache(cb) {
 
 function _npsSaveCache(cache) {
   return _idbPut(DEEP_CACHE_KEY_NPS, { lastUpdated: cache.lastUpdated, npsMap: cache.npsMap });
+}
+
+// ── 11.4c BAF Cache (Container DD sub-container) ──
+// Mirrors the NPS cache above exactly, one IndexedDB key of its own so it
+// never collides with or gets overwritten by the NPS map. Only 4 codes
+// (one BAF per AMC: HDFC/ICICI/KOTAK/ABSL), so this is even smaller/faster
+// than the NPS fetch step.
+function _bafLoadCache(cb) {
+  _idbGet(DEEP_CACHE_KEY_BAF, function(data) {
+    if (data && data.bafMap) { cb(data); return; }
+    cb({ lastUpdated: null, bafMap: {} });
+  });
+}
+
+function _bafSaveCache(cache) {
+  return _idbPut(DEEP_CACHE_KEY_BAF, { lastUpdated: cache.lastUpdated, bafMap: cache.bafMap });
+}
+
+// Same dedupe-by-date + newest-first sort + DEEP_WINDOW_DAYS slice as
+// _npsMergeScheme — identical row shape ({date:'DD-MM-YYYY', nav}), so the
+// merge logic is copied rather than shared to keep each cache's function
+// independently editable without risk of cross-affecting the other.
+function _bafMergeScheme(existingRows, freshRows) {
+  var byDate = {};
+  (existingRows || []).forEach(function(r) { byDate[r.date] = r; });
+  (freshRows || []).forEach(function(r) { byDate[r.date] = r; });
+  var merged = Object.keys(byDate).map(function(d) { return byDate[d]; });
+  merged.sort(function(a, b) {
+    var ka = a.date.split('-').reverse().join('');
+    var kb = b.date.split('-').reverse().join('');
+    return ka < kb ? 1 : ka > kb ? -1 : 0;
+  });
+  if (merged.length > DEEP_WINDOW_DAYS) merged = merged.slice(0, DEEP_WINDOW_DAYS);
+  return merged;
+}
+
+// Public entry point — call this alongside fetchDeepNPSHistory in the scan
+// flow. codes: optional array of mfapi.in codes (defaults to all 4 BAF
+// funds). onProgress(doneN, totalN, code): optional.
+async function fetchDeepBAFHistory(codes, onProgress) {
+  var cache = await new Promise(function(res) { _bafLoadCache(res); });
+  var list = (codes && codes.length) ? codes : Object.keys(DD.BAF._funds).map(function(k) { return DD.BAF._funds[k].code; });
+  var fresh = await DD.BAF.fetchAllHistories(list, onProgress);
+  var okCount = 0, emptyCount = 0;
+  list.forEach(function(code) {
+    var rows = fresh[code];
+    if (rows && rows.length > 0) okCount++; else emptyCount++;
+    cache.bafMap[code] = _bafMergeScheme(cache.bafMap[code], rows);
+  });
+  cache.lastUpdated = deepFmtDate(new Date());
+  await _bafSaveCache(cache);
+  console.log('[BAF] fetch complete —', okCount, 'funds with data,', emptyCount, 'empty/failed, out of', list.length, 'total');
+  return cache;
 }
 
 // Merge freshly-fetched rows for one scheme code into the existing map:
@@ -5698,6 +5953,9 @@ win.fetchDeepNPSHistory = fetchDeepNPSHistory;
 // despite the merge code itself being otherwise correct.
 win._npsLoadCache = _npsLoadCache;
 win._npsSaveCache = _npsSaveCache;
+win._bafLoadCache = _bafLoadCache;
+win._bafSaveCache = _bafSaveCache;
+win.fetchDeepBAFHistory = fetchDeepBAFHistory;
 win.DEEP_CACHE_KEY_NPS = DEEP_CACHE_KEY_NPS;
 // ── Auto-refresh on page load ─────────────────────────────────────────────
 // Check cache staleness and trigger background update if needed.
@@ -5839,7 +6097,7 @@ function _hmKeysSignature(dailyMapKeys) {
 async function _hmGetCategoryMap(dailyMap) {
   var sig = _hmKeysSignature(Object.keys(dailyMap));
   if (_hmCategoryMapMem && _hmCategoryMapMem.sig === sig) return _hmCategoryMapMem.map;
-  var cached = await new Promise(function(res){ CC.catMapGet('v1', res); });
+  var cached = await new Promise(function(res){ CC.catMapGet('v2', res); });
   if (cached && cached.sig === sig && cached.map) {
     _hmCategoryMapMem = cached;
     return cached.map;
@@ -5853,7 +6111,14 @@ async function _hmGetCategoryMap(dailyMap) {
   });
   var entry = { sig: sig, map: map };
   _hmCategoryMapMem = entry;
-  CC.catMapPut('v1', entry).catch(function(){});
+  // Cache key bumped v1 -> v2: categoryForKey() gained a BAF branch (see
+  // Section 1/bafCategoryForKey) after some 'v1' entries were already
+  // persisted with BAF funds misclassified as 'Other'. The key-set
+  // signature alone wouldn't catch this (dailyMap's keys didn't change,
+  // only what categoryForKey() returns for them), so the version bump is
+  // what forces one rebuild; after that, 'v2' behaves exactly like 'v1'
+  // did — signature-invalidated only.
+  CC.catMapPut('v2', entry).catch(function(){});
   return map;
 }
 async function hmPopulateIndexDropdown() {
@@ -5933,7 +6198,7 @@ async function hmPopulateIndexDropdown() {
     }
   }
   catSel.innerHTML = '<option value="">Select Category…</option>';
-  var catOrder = ['Broad Market','Broad Market - Size','Sectoral','Sectoral - Financial','Sectoral - Healthcare','Thematic','Strategy','Dividend','Fixed Income','Real Estate','Volatility','Others','NPS Equity','NPS Corporate Debt'];
+  var catOrder = ['Broad Market','Broad Market - Size','Sectoral','Sectoral - Financial','Sectoral - Healthcare','Thematic','Strategy','Dividend','Fixed Income','Real Estate','Volatility','Others','Balanced Advantage Funds','NPS Equity','NPS Corporate Debt'];
   catOrder.forEach(function(cat) {
     if (!groups[cat]) return;
     var opt = document.createElement('option');
@@ -5961,10 +6226,10 @@ async function hmPopulateIndexDropdown() {
   }
   // Explicit request path only: populate the fund list for the one
   // category we just honored, then select the requested fund within it.
-  hmUpdateIdxDropdown();
+  await hmUpdateIdxDropdown();
   if (idxSel.querySelector('option[value="' + wantKey + '"]')) idxSel.value = wantKey;
 }
-function hmUpdateIdxDropdown() {
+async function hmUpdateIdxDropdown() {
   var catSel = document.getElementById('hmCatSelect');
   var idxSel = document.getElementById('hmIndexSelect');
   if (!catSel || !idxSel) return;
@@ -5973,15 +6238,17 @@ function hmUpdateIdxDropdown() {
   var keys = Object.keys(dc.dailyMap);
   // Container (CC.catMapGet, via _hmGetCategoryMap) is the ONLY source for
   // category — no live U.categoryForKey() fallback and no cross-check
-  // override. If the in-memory copy isn't warm for this exact key-set yet
-  // (e.g. this ran before hmPopulateIndexDropdown's first await completed),
-  // rebuild/fetch it from the container synchronously-in-effect by reusing
-  // whatever _hmCategoryMapMem last resolved to; a genuinely cold call here
-  // simply shows no funds until hmPopulateIndexDropdown (which always runs
-  // first on tab open) has populated the in-memory copy from the container.
-  var sig = _hmKeysSignature(keys);
-  var catMap = (_hmCategoryMapMem && _hmCategoryMapMem.sig === sig) ? _hmCategoryMapMem.map : null;
-  if (!catMap) { idxSel.innerHTML = '<option value="">Select Index…</option>'; return; }
+  // override. The in-memory copy (_hmCategoryMapMem) is normally warm from
+  // hmPopulateIndexDropdown's call on tab open, but dailyMap's key set can
+  // change after that (a background download/scan finishing while this tab
+  // is already open, or a restore-from-backup) — a mismatched signature
+  // used to make this function bail out with a silently empty "Select
+  // Index…" dropdown and no way to recover short of reopening the tab.
+  // Calling _hmGetCategoryMap here instead of only reading the memo means a
+  // stale/missing signature now rebuilds (or refetches) the map the same
+  // way hmPopulateIndexDropdown does, so picking a category always yields
+  // its funds rather than sometimes silently failing.
+  var catMap = await _hmGetCategoryMap(dc.dailyMap);
   var sd = { dailyMap: dc.dailyMap, indexList: keys.filter(function(k){ return dc.dailyMap[k] && dc.dailyMap[k].length >= 10; }).map(function(k){
     var display = hmDisplayNameForKey(k);
     var normKey = k.replace(/[^a-z0-9]/gi, '').toLowerCase();
@@ -6020,8 +6287,8 @@ function hmUpdateIdxDropdown() {
     idxSel.appendChild(opt);
   });
 }
-function hmOnCatChange() {
-  hmUpdateIdxDropdown();
+async function hmOnCatChange() {
+  await hmUpdateIdxDropdown();
   // Reset hist so draw picks up new index
   window._hmHist = null;
   window._hmHistCode = null;
@@ -7111,7 +7378,13 @@ function openHilegaTab() {
   // this session — see hmMergeNPSIntoDailyMap for why this is needed.
   // _npsLoadCache reads from IndexedDB only (no network fetch), so this
   // is cheap to call on every tab open, not just the first.
-  Promise.resolve(window.hmMergeNPSIntoDailyMap ? window.hmMergeNPSIntoDailyMap() : null).catch(function(){}).then(function(){
+  // Same reasoning applies to the 4 BAF benchmark funds — merged alongside
+  // NPS so they also appear in the Chart tab's Category/Index dropdowns
+  // without requiring Portfolio Snapshot to have scanned first.
+  Promise.all([
+    window.hmMergeNPSIntoDailyMap ? window.hmMergeNPSIntoDailyMap() : null,
+    window.hmMergeBAFIntoDailyMap ? window.hmMergeBAFIntoDailyMap() : null
+  ]).catch(function(){}).then(function(){
   hmPopulateIndexDropdown().then(function(){
   window._hmTfDays = BB.hmTfDays();
   window._hmPeriod = BB.hmPeriod();
@@ -7391,6 +7664,15 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
 // amcFunds: built from Timeline's own DD.NPS._schemeNames (Section 1) —
 // same codes/names, but derived from the single existing table instead of
 // a second hardcoded copy, so it can never drift out of sync with it.
+// Each of the 4 main AMCs (HDFC/ICICI/KOTAK/ABSL) also gets its Balanced
+// Advantage Fund (DD.BAF._funds — Section 1, sourced from LD253A1-1.html)
+// appended to its array. This is a plain benchmark/defensive-hold entry,
+// not a Scheme E/C row — nsFindEAndC() and nsBcRun() both filter strictly
+// on the 'Scheme E'/'Scheme C' substring, so its presence here is inert for
+// the E-vs-C picker logic. It exists so scannerRowFor('<AMC> Balanced
+// Advantage - Growth') can resolve (via hmMergeBAFIntoDailyMap's dailyMap
+// injection) for any future BAF-vs-NPS comparison UI, matching LD253A1-1's
+// "Retreat 100% to BAF as defensive hold" SOP.
 (function() {
   var byCode = (typeof DD !== 'undefined' && DD.NPS && DD.NPS._schemeNames) ? DD.NPS._schemeNames : {};
   var amcCodePrefix = { HDFC: 'SM008', ICICI: 'SM007', KOTAK: 'SM005', ABSL: 'SM010' };
@@ -7401,6 +7683,10 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
     for (var k in amcCodePrefix) { if (code.indexOf(amcCodePrefix[k]) === 0) { amc = k; break; } }
     if (!amc) amc = 'OTHERS';
     amcFunds[amc].push({ name: name, code: code });
+  });
+  var bafFunds = (typeof DD !== 'undefined' && DD.BAF && DD.BAF._funds) ? DD.BAF._funds : {};
+  Object.keys(bafFunds).forEach(function(amc) {
+    if (amcFunds[amc]) amcFunds[amc].push({ name: bafFunds[amc].name, code: bafFunds[amc].code });
   });
   window.amcFunds = amcFunds;
 })();
