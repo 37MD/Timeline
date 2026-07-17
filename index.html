@@ -783,9 +783,9 @@ th.ha-sep,td.ha-sep{border-left:3px solid var(--orange)!important}
 <div id="pt-progress-log" style="display:none;height:20px;overflow:hidden;background:#fff;color:#000;font-family:Consolas,'Courier New',monospace;font-size:9px;line-height:20px;padding:0 8px;border-radius:4px;margin:4px 0;border:1px solid #ccc;white-space:nowrap;text-overflow:ellipsis"></div>
 <!-- ── Portfolio Snapshot Action Buttons ── -->
 <div style="display:flex;gap:3px;margin:8px 0">
-  <button onclick="PSnap.resetPortfolio()" style="background:#666;color:#fff;border:none;padding:6px 4px;cursor:pointer;font-weight:bold;font-size:8px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:32px;white-space:nowrap">RESET</button>
+  <button onclick="PSnap.resetPortfolio()" style="background:#666;color:#fff;border:none;padding:6px 4px;cursor:pointer;font-weight:bold;font-size:8px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:32px;white-space:nowrap">Clear Portfolio List</button>
   <button id="pt-btn-universe" onclick="PSnap.openUniverse()" style="background:#0055aa;color:#fff;border:none;padding:6px 4px;cursor:pointer;font-weight:bold;font-size:8px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:32px;white-space:nowrap">Master List</button>
-  <button id="pt-btn-update" onclick="PSnap.toggleUpdateMode()" style="background:#1a6dd8;color:#fff;border:none;padding:6px 4px;cursor:pointer;font-weight:bold;font-size:8px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:32px;white-space:nowrap">Update</button>
+  <button id="pt-btn-update" onclick="PSnap.toggleUpdateMode()" style="background:#1a6dd8;color:#fff;border:none;padding:6px 4px;cursor:pointer;font-weight:bold;font-size:8px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:32px;white-space:nowrap">Update Portfolio</button>
   <button id="pt-btn-summary" onclick="PSnap.showSummary()" style="background:#1a8a1a;color:#fff;border:none;padding:6px 4px;cursor:pointer;font-weight:bold;font-size:8px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:32px;white-space:nowrap">Summary</button>
 </div>
 
@@ -2450,7 +2450,7 @@ function ldTodayIstStr() {
   return new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
 }
 
-const APP_VERSION = 'v5.5';
+const APP_VERSION = 'v5.6';
 
 // Reads the deep weekly/daily/monthly history straight from IndexedDB —
 // the primary store for this data. The localStorage mirror (BB.deepCacheV4)
@@ -2683,22 +2683,16 @@ async function ldApplyBackupJson(text) {
 }
 
 async function ldImportAllData() {
-  // Prefer the already-linked file (no picker at all) if we have one.
-  try {
-    const handle = await ldLoadHandle();
-    if (handle && typeof window.showSaveFilePicker === 'function') {
-      let perm = await handle.queryPermission({ mode: 'read' });
-      if (perm !== 'granted') perm = await handle.requestPermission({ mode: 'read' });
-      if (perm === 'granted') {
-        const file = await handle.getFile();
-        const text = await file.text();
-        if (!window.confirm(`Restore from "${file.name}"? This will overwrite current saved data (scanner cache, watchlist, paper trade, settings) and reload the app.`)) return;
-        await ldApplyBackupJson(text);
-        return;
-      }
-    }
-  } catch (e) { console.warn('[LD] could not use linked file, falling back to picker', e); }
-
+  // BUG FIX: this used to try a previously-linked file handle FIRST, with
+  // no picker and no visible indication it was happening — the only clue
+  // was the filename inside the confirm() dialog, easy to click through
+  // without reading. If that linked handle pointed to a stale/older file
+  // (e.g. from days/weeks ago), Restore would silently re-apply THAT file
+  // instead of ever letting the person choose — matching exactly the
+  // reported symptom ("clicked restore, picked the last json file, no
+  // change in app": the picker never opened, so nothing you clicked in a
+  // file dialog actually mattered). Restore now ALWAYS opens the real file
+  // picker, so the person can be certain which file is being restored.
   if (typeof window.showOpenFilePicker === 'function') {
     try {
       const [handle] = await window.showOpenFilePicker({
@@ -2710,13 +2704,19 @@ async function ldImportAllData() {
       if (!window.confirm(`Restore from "${file.name}"? This will overwrite current saved data (scanner cache, watchlist, paper trade, settings) and reload the app.`)) return;
       try {
         const perm = await handle.requestPermission({ mode: 'readwrite' });
-        if (perm === 'granted') await ldSaveHandle(handle); // link it for future silent saves too
+        if (perm === 'granted') await ldSaveHandle(handle); // link it for future silent Saves only — never re-read silently by Restore
       } catch (e) { /* read-only is fine, restore still works */ }
       await ldApplyBackupJson(text);
       return;
     } catch (e) {
-      if (e && e.name === 'AbortError') return; // user cancelled
-      console.warn('[LD] File System Access restore failed, falling back', e);
+      if (e && e.name === 'AbortError') return; // user cancelled — no message needed
+      // BUG FIX: previously this just logged a console.warn and silently
+      // fell through with no visible feedback at all — the person saw no
+      // error, no success message, no reload, nothing. Now shows an
+      // explicit on-screen message AND falls through to the classic
+      // <input type=file> picker below as a working alternative.
+      console.warn('[LD] File System Access restore failed, falling back to classic file picker', e);
+      ldShowBackupMsg('⚠ Could not read file directly — trying classic file picker instead…', true);
     }
   }
 
@@ -3086,6 +3086,7 @@ function ptSaveGeminiKeys(){
     gkEl.style.color=(k1&&k2)?'#1a8a1a':(k1||k2)?'#b8860b':'#cc0000';
   }
 }
+window.ptSaveGeminiKeys=ptSaveGeminiKeys;
 function ptUpdateGeminiSaveBtn(){
   var btn=document.getElementById('pt-gk-save');
   if(!btn) return;
@@ -3096,12 +3097,19 @@ function ptUpdateGeminiSaveBtn(){
   // Check if keys are already saved in BB (stored state)
   var saved1=BB.geminiKey1?BB.geminiKey1():'';
   var saved2=BB.geminiKey2?BB.geminiKey2():'';
-  var hasSavedKeys=saved1&&saved2;
+  // Per request: even ONE saved key should show green — a 2nd key is a
+  // nice-to-have (wider cascade coverage), not a requirement to consider
+  // the save state "good".
+  var hasSavedKeys=!!(saved1||saved2);
   var inputsMatchSaved=(v1===saved1||v1==='')&&(v2===saved2||v2==='');
-  if(hasSavedKeys&&inputsMatchSaved){ btn.style.background='#4caf50'; btn.title='Keys saved — click to update'; }
-  else if(v1&&v2){ btn.style.background='#ff9800'; btn.title='Unsaved changes — click to save'; }
+  if(hasSavedKeys&&inputsMatchSaved){
+    btn.style.background='#4caf50';
+    btn.title=(saved1&&saved2)?'Both keys saved — click to update':'1 key saved — click to update (add a 2nd for full cascade coverage)';
+  }
+  else if(v1||v2){ btn.style.background='#ff9800'; btn.title='Unsaved changes — click to save'; }
   else { btn.style.background='#666'; btn.title=''; }
 }
+window.ptUpdateGeminiSaveBtn=ptUpdateGeminiSaveBtn;
 
 // ── NPS → dailyMap injection (shared by Portfolio Snapshot's scan AND the
 // Chart tab) ──
@@ -3577,8 +3585,8 @@ function ptRender(results){
     var nameEsc=r.name.replace(/'/g,"\\'");
     var chartBtn='<button onclick="PSnap.viewHMChart(\''+nameEsc+'\')" style="background:#0055aa;color:#fff;border:none;padding:3px 4px;border-radius:3px;font-size:7px;cursor:pointer;width:100%">View</button>';
     var pfBtn=inPortfolio
-      ?'<button onclick="PSnap.toggleName(\''+nameEsc+'\')" style="background:#cc3344;color:#fff;border:none;padding:3px 4px;border-radius:3px;font-size:7px;cursor:pointer;width:100%">Remove</button>'
-      :'<button onclick="PSnap.toggleName(\''+nameEsc+'\')" style="background:#1a8a1a;color:#fff;border:none;padding:3px 4px;border-radius:3px;font-size:7px;cursor:pointer;width:100%">Add</button>';
+      ?'<button onclick="PSnap.toggleName(\''+nameEsc+'\')" style="background:#cc3344;color:#fff;border:none;padding:3px 4px;border-radius:3px;font-size:7px;cursor:pointer;width:100%">Remove from Portfolio</button>'
+      :'<button onclick="PSnap.toggleName(\''+nameEsc+'\')" style="background:#1a8a1a;color:#fff;border:none;padding:3px 4px;border-radius:3px;font-size:7px;cursor:pointer;width:100%">Add to Portfolio</button>';
     return'<tr data-pt-name="'+r.name.replace(/"/g,'&quot;')+'" style="background:'+(inPortfolio?'#f0f8ff':'#fff')+';border-bottom:1px solid #eee">'+
       '<td class="pt-num-cell" onclick="PSnap.onRowNumClick('+i+')" style="'+numStyle+'">'+(i+1)+'</td>'+
       '<td style="font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 3px;font-size:10px;font-weight:600;color:#000;word-break:break-word;white-space:normal;overflow-wrap:break-word">'+r.name+'</td>'+
@@ -3773,7 +3781,7 @@ function renderUniverseList(list){
     return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:5px 8px;border-bottom:1px solid #eee;'+(inP?'background:#cfe8ff':'')+'">'+
       '<span style="word-break:break-word;flex:1 1 100%;">'+n+'</span>'+
       '<input type="date" value="'+existingDate+'" onchange="PSnap.setUniverseDateDraft(\''+n.replace(/'/g,"\\'")+'\',this.value)" title="Purchase date for this index" style="font-size:9px;padding:3px 4px;border:1px solid #ccc;border-radius:3px;flex:1 1 120px;min-width:0;">'+
-      '<button onclick="PSnap.toggleName(\''+n.replace(/'/g,"\\'")+'\')" style="background:'+(inP?'#cc0000':'#1a8a1a')+';color:#fff;border:none;padding:3px 7px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">'+(inP?'Remove':'Add')+'</button>'+
+      '<button onclick="PSnap.toggleName(\''+n.replace(/'/g,"\\'")+'\')" style="background:'+(inP?'#cc0000':'#1a8a1a')+';color:#fff;border:none;padding:3px 7px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">'+(inP?'Remove from Portfolio':'Add to Portfolio')+'</button>'+
       '<button onclick="PSnap.hideName(\''+n.replace(/'/g,"\\'")+'\')" title="Hide from Portfolio Snapshot (e.g. no MF offers this index)" style="background:#888;color:#fff;border:none;padding:3px 7px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">Hide</button>'+
       '</div>';
   }).join('');
@@ -4454,17 +4462,18 @@ function onTabActivated(){
   // (same one _showAutoAlert / _deepShowProgress use) instead of a separate
   // standalone banner, so all status messages live in a single place.
   var dc=window._deepWeeklyCache;
+  var _ssp=(typeof window._statusStripPush==='function')?window._statusStripPush:function(){};
   if(dc&&dc.lastDate&&dc.dailyMap&&Object.keys(dc.dailyMap).length>10){
     var ld=dc.lastDate;
     var eDate=new Date(parseInt(ld.substring(4,8),10),parseInt(ld.substring(2,4),10)-1,parseInt(ld.substring(0,2),10));
     var diffDays=Math.floor((Date.now()-eDate.getTime())/86400000);
     if(diffDays<=1){
-      _statusStripPush('\u2705 Cache is fresh (updated '+diffDays+' day(s) ago)', 'good');
+      _ssp('\u2705 Cache is fresh (updated '+diffDays+' day(s) ago)', 'good');
     }else{
-      _statusStripPush('\u26A0 Data is '+diffDays+' day(s) old \u2014 click \u26A1 ANALYZE to refresh', 'warn');
+      _ssp('\u26A0 Data is '+diffDays+' day(s) old \u2014 click \u26A1 ANALYZE to refresh', 'warn');
     }
   }else{
-    _statusStripPush('\u26A0 No cached data \u2014 click \u26A1 DOWNLOAD to fetch 2500 days (~10 yrs) for 158 indices', 'error');
+    _ssp('\u26A0 No cached data \u2014 click \u26A1 DOWNLOAD to fetch 2500 days (~10 yrs) for 158 indices', 'error');
   }
   // Update Gemini key status
   var gkEl=psEl('pt-gk-status');
@@ -4986,6 +4995,18 @@ function _statusStripPush(msg, kind) {
   chip.textContent = msg;
   return chip;
 }
+// CONFIRMED BUG FIX: onTabActivated() — declared in a different, earlier
+// IIFE (Section 10.5, the Portfolio Snapshot module) — calls this function
+// directly by its bare name on every single tab activation. Since
+// _statusStripPush is private to THIS closure, that call threw
+// "ReferenceError: _statusStripPush is not defined" every time, which
+// aborted onTabActivated() partway through — before it ever reached the
+// Gemini-key input pre-fill (gk1El.value=BB.geminiKey1()) or the
+// Summary/Monthly-screener re-render calls (showSummary(), etc.) later in
+// the same function. Both keys and Summary data were always being saved
+// and restored correctly underneath — this crash just prevented the UI
+// from ever displaying/re-deriving them again after a reload.
+window._statusStripPush = _statusStripPush;
 
 // Shows download progress inline in the shared status strip, right below
 // the button row. Auto-hides when download completes. Reuses the same
