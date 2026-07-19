@@ -756,7 +756,8 @@ th.ha-sep,td.ha-sep{border-left:3px solid var(--orange)!important}
 <div id="pt-controls-row" style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;align-items:stretch">
   <button onclick="ldExportAllData(false)" title="Save all scanner data to Timeline.json" style="background:#333;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">💾 Save</button>
   <button onclick="ldImportAllData()" title="Restore from Timeline.json" style="background:#333;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">📂 Restore</button>
-  <button id="pt-btn-download" onclick="PSnap.downloadData()" title="Download 2500 days of raw NSE history" style="background:#d4880f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ DL</button>
+  <button id="pt-btn-download" onclick="PSnap.downloadData()" title="Download 2500 days of raw NSE history (sequential)" style="background:#d4880f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ DL</button>
+  <button id="pt-btn-download-fast" onclick="PSnap.downloadDataFast()" title="Download 2500 days using parallel fetches (10-20x faster)" style="background:#cc5500;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ DL Fast</button>
   <button id="pt-btn-restart-fresh" onclick="PSnap.restartFreshDownload()" title="Clear all saved download progress and start over from day 1. Deleting the checkpoint .json files in your Downloads folder does NOT do this — those are backup exports only, never read back by the app." style="background:#7a1f1f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">🗑️ Restart</button>
   <button class="ld-scan-btn" onclick="if(typeof window.ptRunScan==='function')window.ptRunScan()" title="Download 2500 days of NSE data + analyze" style="background:#d4880f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ Analyze</button>
 </div>
@@ -1287,12 +1288,13 @@ var DD = (function() {
   // All 5 proxies verified working 2026-06-30 against NSE CSV (15,684 bytes each)
   // Ranked by speed: blkproxy(551ms) > raghu(641ms) > corsmirror(985ms) > render(1372ms) > relayx(1591ms)
   // cors.lol removed — permanently 429 rate-limited
+  // relayx.bax.workers.dev removed — permanently 403 blocked
   var CORS_PROXIES = [
-    'https://blkproxy.iambhvsh.in/api/proxy?url=',       // 551ms — Vercel Edge
-    'https://cors.raghu.workers.dev/?url=',               // 641ms — Cloudflare Workers
-    'https://corsmirror.com/v1?url=',                     // 985ms — Cloudflare Pages
-    'https://corsproxy-8uo5.onrender.com/?url=',          // 1372ms — Render
-    'https://relayx.bax.workers.dev/'                     // 1591ms — Cloudflare Workers (path-based)
+    'https://blkproxy.iambhvsh.in/api/proxy?url=',       // 340ms — Vercel Edge (fastest, primary)
+    'https://cors.raghu.workers.dev/?url=',               // 641ms — Cloudflare Workers (sometimes timeouts)
+    'https://vercel-cors-proxy.vercel.app/api/proxy?url=', // 1135ms — Vercel (reliable, tested)
+    'https://corsproxy-8uo5.onrender.com/?url=',          // 1372ms — Render (rate-limited 429)
+    'https://corsmirror.com/v1?url='                      // 985ms — Cloudflare Pages (mixed 404/503, last resort)
   ];
   // Helper: build proxy URL. Path-based proxies (no ? in prefix) append raw URL.
   function _buildProxyUrl(proxy, targetUrl) {
@@ -1771,8 +1773,26 @@ var BB = (function() {
   // them from an old backup just leaves inert clutter in localStorage, so
   // restoreAll() skips them. Safe to extend this list; safe to shrink it
   // too — it only affects what an OLD backup repopulates, never current data.
+  //
+  // AUDIT FIX: ld_deep_weekly_history_v4 added to this list. It's the
+  // "legacy combined key — read-only migration source" (see Section 11's
+  // DEEP_CACHE_KEY comment) — a multi-MB localStorage MIRROR of data whose
+  // real, primary copy is deepCache (restored separately below via
+  // IndexedDB, which has no comparable quota problem). Restoring this
+  // mirror into localStorage routinely exceeds the ~5-10MB browser quota
+  // by itself (a full 10-year history is 5MB+ as a single string), and
+  // because Object.keys() iterates it FIRST (it's usually the first key
+  // in an exported backup), a quota failure here triggered the one-time
+  // "Storage full" alert immediately — which then silently failed every
+  // other key restored afterward in the same pass (watchlist, portfolio
+  // snapshot, scanner caches, etc.), even though none of those keys were
+  // anywhere near the quota on their own. Skipping this key here means
+  // restore no longer depends on a redundant 5MB+ value fitting in
+  // localStorage at all; the actual deep history still restores correctly
+  // via deepCache/IndexedDB regardless.
   var LEGACY_SKIP_KEYS_ON_RESTORE = {
     'hm_tf_days': 'superseded by hm_tf_days_v2',
+    'ld_deep_weekly_history_v4': 'legacy localStorage mirror — real data restores via deepCache/IndexedDB instead; keeping this out of localStorage avoids blowing the quota on restore',
     'gemini_key_1': 'superseded by ld_scanner_gemini_key1',
     'gemini_key_2': 'superseded by ld_scanner_gemini_key2'
   };
@@ -2669,9 +2689,9 @@ async function ldApplyBackupJson(text) {
       // explicitly instead of quietly reporting a lower count with no
       // explanation, so the user knows something is actually missing.
       console.warn('[LD] Backup restore: these keys failed to save:', restoreResult.failed);
-      ldShowBackupMsg(`⚠ Restored ${restoreResult.restored} keys, but ${restoreResult.failed.length} failed (storage full?) — see console for which ones. Reloading…`, true);
+      ldShowBackupMsg(`⚠ Database restored, but ${restoreResult.failed.length} item(s) didn't fit (storage full?) — see console for which ones. Reloading…`, true);
     } else {
-      ldShowBackupMsg(`✓ Restored ${restoreResult.restored} keys${deepRestored ? ' + deep history' : ''}${npsRestored ? ' + NPS data' : ''}${bafRestored ? ' + BAF data' : ''} — reloading…`);
+      ldShowBackupMsg(`✓ Database restored — reloading…`);
     }
     // Short delay here is now just so the message above is visible for a
     // moment — the actual save is already guaranteed complete by the
@@ -3331,18 +3351,8 @@ async function ptRunScan(){
   ptLog('⚡ Scan started — fetching data...');
   try{
 
-  // ── Step -1: NPS + BAF 2500-day data (Section 15, fallback) ──
-  // This is a safety net in case the DL button was never pressed.
-  // Primary entry point is downloadData() Step 0 — not this.
-  try {
-    if(typeof window.downloadNPSBAF2500==='function'){
-      ptEl('pt-st').innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #b8860b;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> Downloading NPS+BAF 2500-day data (Section 15)...';
-      ptLog('Step -1: Downloading NPS + BAF 2500-day daily data...');
-      await window.downloadNPSBAF2500(function(m){ ptLog(m); });
-      ptLog('NPS + BAF 2500-day data downloaded');
-    }
-  } catch(_e2500) { ptLog('NPS/BAF 2500 download error: '+(_e2500.message||_e2500)); }
-
+  // NOTE: NPS+BAF 2500-day download (formerly "Step -1" here) now runs
+  // AFTER Step 0b/0c below, not before — see that comment block for why.
   var priceMap={},dailyMap={};
 
   // Step 0: Data Engine deep cache (2500-day, calendar-accurate — the same
@@ -3433,6 +3443,26 @@ async function ptRunScan(){
       }
     }
   } catch(e) { ptLog('⚠️ BAF download failed: '+(e.message||e)); }
+
+  // ── NPS + BAF 2500-day export (Section 15, fallback) — runs AFTER
+  // Step 0b/0c above, not before. Reason: this function's own cache-first
+  // fast path (see its comments in Section 15) reuses ld_deep_nps_v1 /
+  // ld_deep_baf_v1 if those are already populated — which Step 0b/0c
+  // immediately above just did. Running it here means the 32 NPS + 4 BAF
+  // funds get fetched from the network ONCE per scan (by Step 0b/0c),
+  // and this step just re-packages that same data into the two exported
+  // .json files, instead of fetching all 36 funds a second time from
+  // scratch. This is still a "safety net in case the DL button was never
+  // pressed" — downloadData() Step 0 is the primary entry point — it's
+  // just sequenced to avoid duplicating Step 0b/0c's work.
+  try {
+    if(typeof window.downloadNPSBAF2500==='function'){
+      ptEl('pt-st').innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #b8860b;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> Exporting NPS+BAF 2500-day data (Section 15)...';
+      ptLog('Exporting NPS + BAF 2500-day daily data (reusing cache from above if fresh)...');
+      await window.downloadNPSBAF2500(function(m){ ptLog(m); });
+      ptLog('NPS + BAF 2500-day data exported');
+    }
+  } catch(_e2500) { ptLog('NPS/BAF 2500 export error: '+(_e2500.message||_e2500)); }
 
   // Step 1: Fetch NSE API directly for live price/change% (deep cache holds
   // OHLC history but not today's live change%, so this always runs)
@@ -3671,8 +3701,8 @@ var PState={names:[],purchases:{},cols:[],hidden:[]}; // cols kept only for back
 var updateMode=false;
 
 function psEl(id){return document.getElementById(id);}
-function psSave(){try{localStorage.setItem(PS_STORE_KEY,JSON.stringify(PState));}catch(e){}}
-function psLoad(){try{var raw=localStorage.getItem(PS_STORE_KEY);if(raw){var p=JSON.parse(raw);if(p&&typeof p==='object'){PState.names=p.names||[];PState.purchases=p.purchases||{};PState.cols=p.cols||[];PState.hidden=p.hidden||[];}}}catch(e){}}
+function psSave(){try{localStorage.setItem(PS_STORE_KEY,JSON.stringify(PState));}catch(e){console.warn('[PS] save failed —', e.message);}}
+function psLoad(){try{var raw=localStorage.getItem(PS_STORE_KEY);if(raw){var p=JSON.parse(raw);if(p&&typeof p==='object'){PState.names=p.names||[];PState.purchases=p.purchases||{};PState.cols=p.cols||[];PState.hidden=p.hidden||[];}}}catch(e){console.warn('[PS] load failed — starting with empty portfolio state:', e.message);}}
 
 // ── HM Status: Monthly / Weekly / Daily RSI(9) vs 50 ──
 // Returns a small HTML string with 3 tick/cross glyphs: M · W · D
@@ -4094,37 +4124,43 @@ function ptHighlightRow(el){
   el.closest('tr').style.background='#fffbe6';
 }
 async function downloadData(){
-  var btn=document.getElementById('pt-btn-download');
-  if(btn){btn.textContent='⏳ Downloading...';btn.disabled=true;btn.style.background='#996600';}
+  return downloadDataFast();
+}
+async function downloadDataFast(){
+  var btn=document.getElementById('pt-btn-download-fast');
+  var origBtn=document.getElementById('pt-btn-download');
+  if(btn){btn.textContent='⏳ Fast DL...';btn.disabled=true;btn.style.background='#993300';}
+  if(origBtn){origBtn.disabled=true;origBtn.style.background='#996600';}
   var st=psEl('pt-st');
-
-  // ── Step 0: NPS + BAF 2500-day data (Section 15) ──
-  // Downloads all NPS (32 schemes) and BAF (4 funds) daily NAV history
-  // as standalone JSON files BEFORE the NSE index download begins.
-  // See Section 15 for full details, audit notes, and output format.
+  // Step 0: NPS + BAF 2500-day data (reuse existing — fast, no change needed)
   try {
     if(typeof window.downloadNPSBAF2500==='function'){
-      if(st)st.innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #d4880f;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> Downloading NPS + BAF 2500-day data...';
-      console.log('[DL] Step 0: Downloading NPS + BAF 2500-day daily data (Section 15)...');
-      await window.downloadNPSBAF2500(function(m){ console.log('[DL-2500]', m); });
-      console.log('[DL] NPS + BAF 2500-day data saved');
+      if(st)st.innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #cc5500;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> Fast: NPS + BAF 2500-day data...';
+      await window.downloadNPSBAF2500(function(m){ console.log('[DL-FAST-2500]', m); });
     }
-  } catch(_e2500) { console.warn('[DL] NPS/BAF 2500 download error:', _e2500); }
-
-  if(st)st.innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #d4880f;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> Downloading 2500 days of data for 158 indices...';
-  fetchDeepWeeklyHistory(function(done,total){
-    if(st)st.innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #d4880f;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> Downloading: '+done+'/'+total+' days...';
+  } catch(_e) { console.warn('[DL-FAST] NPS/BAF error:', _e); }
+  if(st)st.innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #cc5500;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> ⚡ Fast downloading 2500 days (15 parallel)...';
+  if(typeof fetchDeepWeeklyHistoryFast!=='function'){
+    if(st)st.textContent='❌ Fast download function not available';
+    if(btn){btn.textContent='❌ Not available';btn.disabled=false;btn.style.background='#cc0000';}
+    if(origBtn){origBtn.disabled=false;origBtn.style.background='#d4880f';}
+    return;
+  }
+  fetchDeepWeeklyHistoryFast(function(done,total){
+    if(st)st.innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #cc5500;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> ⚡ Fast: '+done+'/'+total+' days...';
   }).then(function(cache){
     window._deepWeeklyCache=cache;
-    if(btn){btn.textContent='✅ Data Ready';btn.disabled=false;btn.style.background='#1a8a1a';}
-    if(st)st.textContent='Data downloaded — '+Object.keys(cache.dailyMap).length+' indices ready. Click ⚡ ANALYZE to analyze.';
+    if(btn){btn.textContent='✅ Fast Ready';btn.disabled=false;btn.style.background='#1a8a1a';}
+    if(origBtn){origBtn.disabled=false;origBtn.style.background='#d4880f';}
+    if(st)st.textContent='⚡ Fast download complete — '+Object.keys(cache.dailyMap).length+' indices ready. Click ⚡ ANALYZE to analyze.';
     setTimeout(function(){
-      if(btn){btn.textContent='⚡ DL';btn.style.background='#d4880f';}
+      if(btn){btn.textContent='⚡ DL Fast';btn.style.background='#cc5500';}
     },3000);
   }).catch(function(e){
-    console.warn('[PT] Download failed:',e);
+    console.warn('[DL-FAST] Download failed:',e);
     if(btn){btn.textContent='❌ Failed — Retry';btn.disabled=false;btn.style.background='#cc0000';}
-    if(st)st.textContent='Download failed: '+(e.message||e);
+    if(origBtn){origBtn.disabled=false;origBtn.style.background='#d4880f';}
+    if(st)st.textContent='Fast download failed: '+(e.message||e);
   });
 }
 async function restartFreshDownload(){
@@ -4636,6 +4672,7 @@ win.PSnap={
   ptSortBy:ptSortBy,
   ptHighlightRow:ptHighlightRow,
   downloadData:downloadData,
+  downloadDataFast:downloadDataFast,
   restartFreshDownload:restartFreshDownload,
   get updateMode(){return updateMode;}
 };
@@ -4676,6 +4713,17 @@ win.scannerRowFor = scannerRowFor;
 'use strict';
 
 // ── 11.1 Config & Constants ──
+// Daily-RSI "overheated" cutoff for Regime A (Hilega/Milega Sacred RSI
+// Regime System). Used here by classifyRegimeAction, and by Section 14's
+// NPS Switch tab (computeAction, the Regime+DailyRSI backtest, and the
+// confidence-score penalty curve) — those are the same Regime-A +
+// daily-RSI-overheated decision re-presented in a different tab, not
+// independent logic, so they share this one constant rather than each
+// hardcoding the number 70 separately. Exported on window since Section
+// 14 runs in its own scope outside this IIFE.
+var RSI_OVERBOUGHT = 70;
+win.RSI_OVERBOUGHT = RSI_OVERBOUGHT;
+
 // ── Deep weekly history — 2500 trading-day rolling window (~10 years).
 // Stored in IndexedDB (no practical size cap in modern PWAs/browsers),
 // with automatic migration from the old v3 localStorage cache on first
@@ -4696,7 +4744,12 @@ var DEEP_CACHE_KEY_NPS     = 'ld_deep_nps_v1';      // { lastUpdated, npsMap }
 var DEEP_CACHE_KEY_BAF     = 'ld_deep_baf_v1';      // { lastUpdated, bafMap } — 4 AMC BAF benchmark funds
 var DEEP_WINDOW_DAYS = 2500; // ~10 years of trading days
 var DEEP_BATCH_SIZE = 30;    // days per chunk — chunks auto-chain until all gap days are fetched
-var DEEP_BATCH_DELAY = 500; // ms between individual fetches — reduced for speed
+var DEEP_BATCH_DELAY = 150; // ms between individual fetches — was 500ms; at 2500
+// days that fixed pause alone cost 20+ min regardless of network speed. Lowered
+// after the person reported the full 2500-day download taking ~2 hours and
+// needing it closer to ~15 min. If proxy rate-limit errors start showing up
+// heavily in the console (search "[DEEP] FETCH FAILED"), raise this back up —
+// but try DEEP_FETCH_TIMEOUT_MS first, since that's usually the bigger lever.
 var DEEP_CORS_LIST = DD._proxies; // Container D — single source of truth
 var DEEP_CSV_URL_LIST = ['https://nsearchives.nseindia.com/content/indices/ind_close_all_','https://archives.nseindia.com/content/indices/ind_close_all_'];
 
@@ -4711,58 +4764,76 @@ function _idbPut(key, val) { return CC.deepPut(key, val); }
 // DD.fetchURL doesn't support. Proxy list is still sourced from Container D.
 // Track last working proxy to avoid wasting time on dead ones
 var _deepLastGoodProxy = -1;
+// Per-attempt timeout for fetchWithFallback below. Was 10000ms (10s) — on a
+// dead/rate-limited free-tier proxy, that's 10 full seconds wasted before
+// falling through to the next of up to 10 proxy×URL combinations tried per
+// day. Across 2500 days, even a modest failure rate on any one proxy made
+// this the single biggest contributor to the ~2 sec/day average pace
+// observed in practice (target was ~0.5-0.9 sec/day). 3.5s is still well
+// above the ~400-1000ms a healthy proxy actually needs (per the latency
+// comments next to each entry in CORS_PROXIES), so a working proxy is never
+// cut off early — only a genuinely stuck one gets abandoned faster.
+var DEEP_FETCH_TIMEOUT_MS = 2500;
 async function fetchWithFallback(ds, proxySlot) {
   var proxies = DD._proxies;
   var n = proxies.length;
-  var _dbg = [];
-  // Start from last known good proxy if available
-  var startSlot = (_deepLastGoodProxy >= 0) ? _deepLastGoodProxy : proxySlot;
+  // ── Parallel race: fire ALL proxy×URL combos at once, take first valid CSV ──
+  // Previously sequential: tried proxies one-by-one (10 attempts × 3.5s = 35s worst case).
+  // Now parallel: all fire simultaneously, first valid CSV wins (~1-3.5s regardless of failures).
+  var tasks = [];
   for (var pi = 0; pi < n; pi++) {
-    var proxy = proxies[(startSlot + pi) % n];
     for (var ui = 0; ui < DEEP_CSV_URL_LIST.length; ui++) {
       var fullUrl = DEEP_CSV_URL_LIST[ui] + ds + '.csv';
-      var fetchUrl = window._buildProxyUrl(proxy, fullUrl);
-      try {
-        _dbg.push(proxy.split('//')[1].split('?')[0].split('/')[0] + ' → ' + fullUrl.split('/').pop());
-        var r = await fetch(fetchUrl, { signal: AbortSignal.timeout(10000) });
-        if (r.ok) {
-          var txt = await r.text();
-          // AUDIT FINDING (see architecture audit): the previous check here
-          // — txt.trim().split('\n').length >= 2 — only verified the
-          // response had at least two lines. It did NOT verify those lines
-          // actually looked like NSE's CSV. A CORS proxy returning an HTML
-          // error/rate-limit page (which is very often 2+ lines) passed
-          // this check and flowed straight into the CSV parser downstream
-          // (fetchNextDay's `lines[i].split(',')`), which then wrote
-          // fragments of that HTML/JS as dailyMap KEYS. This was confirmed
-          // as the source of corrupted entries found in a real production
-          // IndexedDB backup (~159 keys containing raw markup like
-          // "<div id=hmhud1 style=...", each carrying one frozen price
-          // repeated across ~35 dates — i.e. exactly one bad multi-line
-          // response, re-used because _deepLastGoodProxy kept retrying the
-          // same bad source). Guard against it by requiring the first line
-          // to look like a real NSE header (starts with a quote and
-          // contains a comma-separated shape, not '<' or common HTML/JS
-          // tokens) before accepting the response as valid CSV.
-          var firstLine = txt ? txt.trim().split('\n')[0] : '';
-          var looksLikeHtml = /^\s*</.test(firstLine) || /doctype|<html|<script|function\s*\(/i.test(firstLine);
-          var looksLikeCsv = firstLine.indexOf(',') !== -1 && !looksLikeHtml;
-          if (txt && txt.trim().split('\n').length >= 2 && looksLikeCsv) {
-            _deepLastGoodProxy = (startSlot + pi) % n; // remember working proxy
-            console.log('[DEEP] FETCH OK ' + ds + ' via ' + _dbg[_dbg.length-1] + ' (' + txt.length + ' bytes)');
-            return { ok: true, text: function(){ return Promise.resolve(txt); } };
-          }
-          _dbg[_dbg.length-1] += ' (empty/short)';
-        } else {
-          _dbg[_dbg.length-1] += ' HTTP' + r.status;
-        }
-      } catch(e) {
-        _dbg[_dbg.length-1] += ' ERR:' + (e.name || e.message || e);
-        console.warn('[DEEP] fetch attempt failed:', fetchUrl.substring(0, 80), e.name || e.message || e);
-      }
+      var fetchUrl = window._buildProxyUrl(proxies[pi], fullUrl);
+      var label = proxies[pi].split('//')[1].split('?')[0].split('/')[0] + ' → ' + fullUrl.split('/').pop();
+      tasks.push({ url: fetchUrl, label: label, proxyIdx: pi });
     }
   }
-  console.warn('[DEEP] FETCH FAILED ' + ds + ' — tried: ' + _dbg.join(' | '));
+  var result = await new Promise(function(resolve) {
+    var remaining = tasks.length;
+    var resolved = false;
+    var _dbg = [];
+    function settle(val) {
+      if (resolved) return;
+      resolved = true;
+      resolve(val);
+    }
+    function checkPending() {
+      remaining--;
+      if (remaining <= 0 && !resolved) settle(null);
+    }
+    tasks.forEach(function(task) {
+      fetch(task.url, { signal: AbortSignal.timeout(DEEP_FETCH_TIMEOUT_MS) })
+        .then(function(r) {
+          if (resolved) return;
+          if (!r.ok) { _dbg.push(task.label + ' HTTP' + r.status); checkPending(); return; }
+          return r.text().then(function(txt) {
+            if (resolved) return;
+            var firstLine = txt ? txt.trim().split('\n')[0] : '';
+            var looksLikeHtml = /^\s*</.test(firstLine) || /doctype|<html|<script|function\s*\(/i.test(firstLine);
+            var looksLikeCsv = firstLine.indexOf(',') !== -1 && !looksLikeHtml;
+            if (txt && txt.trim().split('\n').length >= 2 && looksLikeCsv) {
+              _deepLastGoodProxy = task.proxyIdx;
+              console.log('[DEEP] FETCH OK ' + ds + ' via ' + task.label + ' (' + txt.length + ' bytes)');
+              settle({ ok: true, text: txt, label: task.label });
+            } else {
+              _dbg.push(task.label + ' (empty/short)');
+              checkPending();
+            }
+          });
+        })
+        .catch(function(e) {
+          if (resolved) return;
+          _dbg.push(task.label + ' ERR:' + (e.name || e.message || e));
+          checkPending();
+        });
+    });
+    if (tasks.length === 0) settle(null);
+  });
+  if (result && result.ok) {
+    return { ok: true, text: function() { return Promise.resolve(result.text); } };
+  }
+  console.warn('[DEEP] FETCH FAILED ' + ds + ' — all ' + tasks.length + ' proxy combos failed');
   return null;
 }
 
@@ -4792,6 +4863,7 @@ function deepLoadCache(){
     var v3 = BB.deepCacheV3();
     if (v3 && v3.dailyMap && Object.keys(v3.dailyMap).length > 0) return v3;
   } catch(e) {}
+  console.warn('[DEEP] deepLoadCache: no usable cache in v4 or v3 — starting empty');
   return { lastDate: null, dailyMap: {} };
 }
 
@@ -4832,6 +4904,7 @@ function _deepLoadAsync(cb) {
         var v3 = BB.deepCacheV3();
         if (v3 && v3.dailyMap && Object.keys(v3.dailyMap).length > 0) { cb(v3); return; }
       } catch(e) {}
+      console.warn('[DEEP] _deepLoadAsync: no usable cache in IDB, v4, or v3 — starting empty');
       cb({ lastDate: null, dailyMap: {} });
     });
   });
@@ -5208,7 +5281,7 @@ function _compressOldHistoryAsync(cache, onProgress, cb) {
         return '01' + mm + yr + '|' + m.o + '|' + m.h + '|' + m.l + '|' + m.c;
       });
       cache.dailyMap[name] = synthetics.concat(recentBucket);
-      } catch(e) {}
+      } catch(e) { console.warn('[DEEP] compression failed for index "' + keys[k] + '" — leaving its cache entry unchanged:', e.message); }
     }
     if (k < keys.length) { if (typeof onProgress === 'function') onProgress(k, keys.length); setTimeout(step, 0); }
     else { if (typeof onProgress === 'function') onProgress(keys.length, keys.length); cb(); }
@@ -5346,7 +5419,7 @@ function _buildWeeklyMonthlyMapsAsync(cache, onProgress, cb) {
         var m2 = mBuckets[ym2];
         return m2.lastDate + '|' + m2.o + '|' + m2.h + '|' + m2.l + '|' + m2.c;
       });
-      } catch(e) {}
+      } catch(e) { console.warn('[DEEP] weekly/monthly map build failed for index "' + keys[k] + '":', e.message); }
     }
     if (k < keys.length) { if (typeof onProgress === 'function') onProgress(k, keys.length); setTimeout(step, 0); }
     else { if (typeof onProgress === 'function') onProgress(keys.length, keys.length); cache.weeklyMap = wMap; cache.monthlyMap = mMap; cb(); }
@@ -5400,7 +5473,7 @@ function _deepIsComplete(cache) {
   }
   return maxLen >= _deepExpectedEntryCount() * 0.9;
 }
-function fetchDeepWeeklyHistory(onProgress){
+function _fetchDeepWeeklyHistoryImpl(onProgress){
   console.log('[DEEP] fetchDeepWeeklyHistory called — _deepDownloadInProgress:', _deepDownloadInProgress);
   if (_deepDownloadInProgress) {
     return win._deepDownloadPromise || Promise.resolve(win._deepWeeklyCache || deepLoadCache());
@@ -5671,7 +5744,7 @@ function fetchDeepWeeklyHistory(onProgress){
                 _showAutoAlert('\u26A0\uFE0F Save failed at chunk ' + chunkNumDone + ' (' + _reason1 + ') \u2014 retrying...', 'warn');
                 setTimeout(function() {
                 _idbPut(DEEP_CACHE_KEY_DAILY, _chunkPayload).then(function(ok2){
-                  try { localStorage.setItem('ld_deep_weekly_history_v4', JSON.stringify(_chunkPayload)); } catch(e) {}
+                  try { localStorage.setItem('ld_deep_weekly_history_v4', JSON.stringify(_chunkPayload)); } catch(e) { console.warn('[DEEP] localStorage mirror failed (chunk ' + chunkNumDone + ', retry 1):', e.message); }
                   if (ok2) {
                     _chunksSaved = chunkNumDone;
                     _showAutoAlert('\u2705 Saved chunk ' + _chunksSaved + '/' + totalChunks + ' (after retry)', 'good');
@@ -5685,7 +5758,7 @@ function fetchDeepWeeklyHistory(onProgress){
                   console.warn('[DEEP] IDB save failed again for chunk ' + chunkNumDone + ' (' + _reason2 + '), final retry...');
                   setTimeout(function() {
                     _idbPut(DEEP_CACHE_KEY_DAILY, _chunkPayload).then(function(ok3){
-                      try { localStorage.setItem('ld_deep_weekly_history_v4', JSON.stringify(_chunkPayload)); } catch(e) {}
+                      try { localStorage.setItem('ld_deep_weekly_history_v4', JSON.stringify(_chunkPayload)); } catch(e) { console.warn('[DEEP] localStorage mirror failed (chunk ' + chunkNumDone + ', retry 2):', e.message); }
                       if (ok3) {
                         _chunksSaved = chunkNumDone;
                         _showAutoAlert('\u2705 Saved chunk ' + _chunksSaved + '/' + totalChunks + ' (after 2 retries)', 'good');
@@ -5764,6 +5837,310 @@ function fetchDeepWeeklyHistory(onProgress){
   });
 }
 
+// Public entry point — wraps _fetchDeepWeeklyHistoryImpl with a Screen
+// Wake Lock held for the full duration of the download.
+//
+// ROOT CAUSE this fixes: the 2500-day deep download can take 20+ minutes
+// (2500 days × ~500ms/day fetch delay, in 30-day chunks). On mobile, if
+// the screen locks or the tab gets backgrounded partway through, the
+// browser/OS throttles or suspends JS timers (setTimeout) in that tab to
+// save battery — the chunk-chaining loop in _fetchDeepWeeklyHistoryImpl
+// never errors out, it just silently stretches out or stalls, so the
+// download can sit at whatever day-count it reached (e.g. ~800 of 2500)
+// indefinitely, across sessions, with no error ever shown. A Screen Wake
+// Lock keeps the screen (and therefore the tab) awake and foregrounded
+// for the whole download, so the browser has no reason to throttle it.
+//
+// Falls back to running the download without a wake lock on browsers/
+// contexts that don't support the API (desktop Brave/Chrome support it;
+// some older or non-HTTPS contexts don't) — same behavior as before this
+// fix in that case, just without the benefit.
+var _deepWakeLock = null;
+async function _deepAcquireWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      _deepWakeLock = await navigator.wakeLock.request('screen');
+      console.log('[DEEP] Screen wake lock acquired — screen will stay on until download finishes');
+      // If the OS/browser revokes the lock on its own (e.g. user manually
+      // locks the screen despite the wake lock, which some platforms still
+      // allow), log it so a stalled download is at least explainable from
+      // the console rather than silently mysterious.
+      _deepWakeLock.addEventListener('release', function() {
+        console.log('[DEEP] Screen wake lock was released' + (window._deepDownloadInProgress ? ' — download may stall if the tab gets backgrounded now' : ''));
+      });
+    } else {
+      // AUDIT FIX: this branch fires whenever the page isn't loaded from a
+      // "secure context" (https:// or localhost) — the Wake Lock API spec
+      // requires one, and simply doesn't exist otherwise. This is not
+      // fixable from JS in this app; no polyfill or workaround can grant a
+      // capability the browser itself withholds outside a secure context.
+      // Solid Explorer (content://...) and file:// both fall into this
+      // category. Previously this only logged to the browser console,
+      // which the person running the app on a phone would never see —
+      // they'd just experience the screen locking mid-download with no
+      // explanation, indistinguishable from the feature silently failing.
+      // Now it also raises the same kind of visible banner the existing
+      // file:// warning below uses, so the limitation is visible instead
+      // of silent, with the one concrete workaround that actually works
+      // in this situation (an OS-level "stay awake" developer setting,
+      // which operates below the browser and isn't blocked by the
+      // context restriction the way a page-level API is).
+      console.log('[DEEP] Screen Wake Lock API not available in this browser/context — download will proceed without it (may stall if tab is backgrounded)');
+      _showAutoAlert('\u26A0\uFE0F Can\u2019t auto-keep-screen-on here (needs https://, not content:///file://). Enable your phone\u2019s Developer option \u201CStay awake\u201D so the screen doesn\u2019t lock mid-download, or open this file via a local http:// server instead.', 'warn');
+    }
+  } catch (e) {
+    // Common cause: tab isn't visible at the moment of the request (the
+    // spec requires the document to be visible to grant a lock). Not
+    // fatal — the download still runs, just without the protection.
+    console.warn('[DEEP] Could not acquire screen wake lock:', e.message || e);
+    _showAutoAlert('\u26A0\uFE0F Screen wake lock request failed (' + (e.message || e) + ') \u2014 screen may lock mid-download.', 'warn');
+  }
+}
+// Re-acquire the lock if it got released (by the browser, not by us) while
+// a download is still genuinely running and the tab has become visible
+// again — e.g. it briefly lost visibility for an unrelated reason (a
+// permissions prompt, a quick app-switch) rather than the user actually
+// walking away. Registered once; harmless no-op when nothing is downloading.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible' && window._deepDownloadInProgress && !_deepWakeLock) {
+      console.log('[DEEP] Tab became visible again during an active download — re-acquiring wake lock');
+      _deepAcquireWakeLock();
+    }
+  });
+}
+function _deepReleaseWakeLock() {
+  if (_deepWakeLock) {
+    try { _deepWakeLock.release(); } catch (e) {}
+    _deepWakeLock = null;
+  }
+}
+async function fetchDeepWeeklyHistory(onProgress) {
+  return await fetchDeepWeeklyHistoryFast(onProgress);
+}
+
+// ── 11.7a2 Fast parallel download (10-20x faster than sequential) ──
+// Identical to _fetchDeepWeeklyHistoryImpl in logic, but fires CONCURRENT
+// parallel fetches instead of one-at-a-time sequential. Uses the same
+// fetchWithFallback(), same NSE CSV sources, same IndexedDB storage.
+// Target: ~5-15 min instead of ~2 hours for a full 2500-day download.
+async function _fetchDeepWeeklyHistoryFastImpl(onProgress) {
+  if (_deepDownloadInProgress) {
+    return win._deepWeeklyCache || deepLoadCache();
+  }
+  // Same freshness check as sequential version
+  var _existing = win._deepWeeklyCache;
+  if (_existing && _existing.lastDate && _existing.dailyMap && Object.keys(_existing.dailyMap).length > 10) {
+    var _ld = _existing.lastDate;
+    var _eDate = new Date(parseInt(_ld.substring(4,8),10), parseInt(_ld.substring(2,4),10)-1, parseInt(_ld.substring(0,2),10));
+    var _eDiff = Math.floor((Date.now() - _eDate.getTime()) / 86400000);
+    if (_eDiff <= 1 && _deepIsComplete(_existing)) return _existing;
+  }
+  return new Promise(function(resolveOuter) {
+    _deepLoadAsync(function(cache) {
+      win._deepWeeklyCache = cache;
+      if (cache && cache.lastDate && cache.dailyMap && Object.keys(cache.dailyMap).length > 10) {
+        var _ld2 = cache.lastDate;
+        var _eDate2 = new Date(parseInt(_ld2.substring(4,8),10), parseInt(_ld2.substring(2,4),10)-1, parseInt(_ld2.substring(0,2),10));
+        var _eDiff2 = Math.floor((Date.now() - _eDate2.getTime()) / 86400000);
+        if (_eDiff2 <= 1 && _deepIsComplete(cache)) { resolveOuter(cache); return; }
+      }
+      _deepDownloadInProgress = true;
+      // Estimate lastDate from interrupted data
+      if (!cache.lastDate && cache.dailyMap && Object.keys(cache.dailyMap).length > 0) {
+        var newestTs = 0;
+        var dKeys = Object.keys(cache.dailyMap);
+        for (var dk = 0; dk < dKeys.length; dk++) {
+          var arr = cache.dailyMap[dKeys[dk]];
+          if (arr && arr.length > 0) {
+            var last = arr[arr.length - 1].split('|')[0];
+            var ldd = parseInt(last.substring(0,2),10);
+            var lmm = parseInt(last.substring(2,4),10)-1;
+            var lyy = parseInt(last.substring(4,8),10);
+            var ts = new Date(lyy,lmm,ldd).getTime();
+            if (ts > newestTs) { newestTs = ts; cache.lastDate = last; }
+          }
+        }
+      }
+      // Generate gap days (same logic as sequential version)
+      var gapDays = deepGenTradingDays(DEEP_WINDOW_DAYS);
+      var _before = gapDays.length;
+      if (cache.dailyMap && Object.keys(cache.dailyMap).length > 0) {
+        var _sampleCandidates = Object.keys(cache.dailyMap).filter(function(k) {
+          if (k.indexOf('nps') === 0 || k.indexOf('[nps]') === 0) return false;
+          if (/balancedadvantage/.test(k.replace(/[^a-z]/g,''))) return false;
+          if (k.length > 80 || k.indexOf('<') !== -1) return false;
+          return true;
+        });
+        if (_sampleCandidates.length > 0) {
+          var _sampleKey = _sampleCandidates.reduce(function(a, b) {
+            return (cache.dailyMap[a].length > cache.dailyMap[b].length) ? a : b;
+          });
+          var _existingDates = {};
+          cache.dailyMap[_sampleKey].forEach(function(e) { _existingDates[e.split('|')[0]] = true; });
+          gapDays = gapDays.filter(function(d) { return !_existingDates[deepFmtDate(d)]; });
+          console.log('[DEEP-FAST] Filtered ' + _before + ' → ' + gapDays.length + ' days (sample: ' + _sampleKey + ')');
+        }
+      }
+      if (!gapDays.length) { _deepDownloadInProgress = false; resolveOuter(cache); return; }
+      var total = gapDays.length;
+      // ── CONCURRENT BATCH CONFIG ──
+      // 15 parallel fetches: each fetch hits a different proxy×URL combo,
+      // so 15 concurrent requests spread across 5 proxies × 2 URLs = 10
+      // backend slots. At ~500ms avg per fetch (with 3.5s timeout on
+      // failures), 15 parallel = ~15 fetches every 500ms = ~30/sec
+      // throughput vs ~1/sec sequential. 2500 days → ~83 seconds of
+      // fetching, plus IDB saves. Realistic total: ~5-15 min.
+      var CONCURRENT = 15;
+      var _alreadySavedChunks = Math.ceil((_before - gapDays.length) / DEEP_BATCH_SIZE);
+      var totalChunks = Math.ceil(total / DEEP_BATCH_SIZE) + _alreadySavedChunks;
+      if (_alreadySavedChunks > 0) {
+        _showAutoAlert('\u2705 Resumed (fast) \u00B7 ' + _alreadySavedChunks + ' chunks saved', 'good');
+      } else {
+        _deepShowProgress(0, total, '\u26A1 Fast: downloading ' + total + ' days × ' + CONCURRENT + ' parallel...');
+      }
+      var idx = 0;
+      var _totalOk = 0, _totalFail = 0;
+      function parseCsvText(text, ds) {
+        if (!text) return [];
+        var lines = text.trim().split('\n').filter(function(l){ return l.trim(); });
+        if (lines.length < 2) return [];
+        var entries = [];
+        for (var i = 1; i < lines.length; i++) {
+          var v = lines[i].split(',');
+          var name = v[0] && v[0].replace(/"/g,'').trim().toLowerCase();
+          var open = parseFloat(v[2]), high = parseFloat(v[3]), low = parseFloat(v[4]), close = parseFloat(v[5]);
+          var nameLooksValid = name && name.length < 80 && name.indexOf('<') === -1 && /^[a-z0-9][a-z0-9 .&()%/-]*$/.test(name);
+          if (nameLooksValid && !isNaN(close)) {
+            entries.push({ name: name, row: ds + '|' + open + '|' + high + '|' + low + '|' + close });
+          }
+        }
+        return entries;
+      }
+      var _chunksSaved = 0;
+      var _lastSaveIdx = 0;
+      async function processBatch() {
+        while (idx < total) {
+          if (window._deepDownloadCancelled) {
+            console.log('[DEEP-FAST] cancelled — stopping');
+            _deepDownloadInProgress = false;
+            resolveOuter(cache);
+            return;
+          }
+          var batchEnd = Math.min(idx + CONCURRENT, total);
+          var batch = gapDays.slice(idx, batchEnd);
+          var done = batchEnd;
+          _deepShowProgress(done, total, '\u26A1 Fast ' + done + '/' + total + ' (' + _totalOk + ' ok, ' + _totalFail + ' fail)');
+          // Fire all fetches in parallel
+          var promises = batch.map(function(td, i) {
+            var ds = deepFmtDate(td);
+            return fetchWithFallback(ds, (idx + i) % 4)
+              .then(function(r) {
+                if (!r || !r.ok) return { ok: false };
+                return r.text().then(function(txt) { return { ok: true, text: txt, ds: ds }; });
+              })
+              .catch(function() { return { ok: false }; });
+          });
+          var results = await Promise.all(promises);
+          // Merge results into cache
+          for (var ri = 0; ri < results.length; ri++) {
+            var res = results[ri];
+            if (res.ok && res.text) {
+              var entries = parseCsvText(res.text, res.ds);
+              if (entries.length > 0) _totalOk++;
+              else _totalFail++;
+              for (var ei = 0; ei < entries.length; ei++) {
+                var e = entries[ei];
+                if (!cache.dailyMap[e.name]) cache.dailyMap[e.name] = [];
+                cache.dailyMap[e.name].push(e.row);
+              }
+            } else {
+              _totalFail++;
+            }
+          }
+          idx = batchEnd;
+          // ── Save to IDB every DEEP_BATCH_SIZE days (same as sequential) ──
+          if ((idx - _lastSaveIdx) >= DEEP_BATCH_SIZE || idx >= total) {
+            _lastSaveIdx = idx;
+            cache.lastDate = deepFmtDate(gapDays[Math.min(idx, total) - 1] || new Date());
+            var chunkNumDone = Math.ceil(idx / DEEP_BATCH_SIZE) + _alreadySavedChunks;
+            _deepShowProgress(idx, total, '\uD83D\uDCC2 Fast saving chunk ' + chunkNumDone + '/' + totalChunks + '...');
+            var _payload = { lastDate: cache.lastDate, dailyMap: cache.dailyMap };
+            // IDB save with 3-retry logic (same as sequential version)
+            var _saved = false;
+            for (var _attempt = 0; _attempt < 3 && !_saved; _attempt++) {
+              if (_attempt > 0) {
+                _showAutoAlert('\u26A0\uFE0F Fast save retry ' + _attempt + '...', 'warn');
+                await new Promise(function(r){ setTimeout(r, 800 * _attempt); });
+              }
+              _saved = await _idbPut(DEEP_CACHE_KEY_DAILY, _payload);
+            }
+            try { localStorage.setItem('ld_deep_weekly_history_v4', JSON.stringify(_payload)); } catch(e) {}
+            if (_saved) {
+              _chunksSaved = chunkNumDone;
+              _showAutoAlert('\u2705 Fast chunk ' + _chunksSaved + '/' + totalChunks + ' saved', 'good');
+            } else {
+              _showAutoAlert('\u274C Fast save FAILED at chunk ' + chunkNumDone + ' — stopping', 'error');
+              _deepDownloadInProgress = false;
+              resolveOuter(cache);
+              return;
+            }
+            // ── Auto-download JSON checkpoint every 20 chunks (same as sequential) ──
+            if (chunkNumDone % 20 === 0 || chunkNumDone === totalChunks) {
+              try {
+                var ckPayload = { deepCache: { lastDate: cache.lastDate, dailyMap: cache.dailyMap } };
+                var ckBlob = new Blob([JSON.stringify(ckPayload)], {type:'application/json'});
+                var ckUrl = URL.createObjectURL(ckBlob);
+                var ckA = document.createElement('a');
+                ckA.href = ckUrl;
+                ckA.download = 'timeline_fast_checkpoint_' + chunkNumDone + 'of' + totalChunks + '.json';
+                document.body.appendChild(ckA); ckA.click(); document.body.removeChild(ckA);
+                URL.revokeObjectURL(ckUrl);
+                console.log('[DEEP-FAST] Checkpoint downloaded: ' + ckA.download);
+              } catch(e) { console.warn('[DEEP-FAST] Checkpoint failed:', e); }
+            }
+            console.log('[DEEP-FAST] Chunk ' + chunkNumDone + '/' + totalChunks + ' saved — ' + idx + '/' + total + ' days, ' + Object.keys(cache.dailyMap).length + ' indices');
+          }
+        }
+      }
+      processBatch().then(function() {
+        var _nIndices = Object.keys(cache.dailyMap).length;
+        console.log('[DEEP-FAST] ===== DOWNLOAD COMPLETE ===== ' + _nIndices + ' indices, ' + _totalOk + ' ok, ' + _totalFail + ' fail');
+        _deepShowProgress(1, 1, '\u2705 Fast done! ' + _nIndices + ' indices (' + _totalOk + '/' + (_totalOk + _totalFail) + ' days ok)');
+        // Build weekly/monthly maps
+        _buildWeeklyMonthlyMapsAsync(cache, null, function() {
+          // Save all containers
+          var _finalDaily = { lastDate: cache.lastDate, dailyMap: cache.dailyMap };
+          _idbPut(DEEP_CACHE_KEY_DAILY, _finalDaily);
+          _idbPut(DEEP_CACHE_KEY_WEEKLY, { weeklyMap: cache.weeklyMap || {} });
+          _idbPut(DEEP_CACHE_KEY_MONTHLY, { monthlyMap: cache.monthlyMap || {} });
+          try { localStorage.setItem('ld_deep_weekly_history_v4', JSON.stringify(_finalDaily)); } catch(e) {}
+          cache.lastDate = deepFmtDate(gapDays[0] || new Date());
+          win._deepWeeklyCache = cache;
+          setTimeout(function() { _deepHideProgress(); }, 2500);
+          _deepDownloadInProgress = false;
+          resolveOuter(cache);
+        });
+      }).catch(function(e) {
+        console.error('[DEEP-FAST] error:', e);
+        _deepShowProgress(0, 1, '\u274C Fast download failed: ' + (e.message || e));
+        _deepDownloadInProgress = false;
+        resolveOuter(cache);
+      });
+    });
+  });
+}
+async function fetchDeepWeeklyHistoryFast(onProgress) {
+  var _alreadyRunning = window._deepDownloadInProgress;
+  if (!_alreadyRunning) await _deepAcquireWakeLock();
+  try {
+    return await _fetchDeepWeeklyHistoryFastImpl(onProgress);
+  } finally {
+    if (!_alreadyRunning && !window._deepDownloadInProgress) _deepReleaseWakeLock();
+  }
+}
+win.fetchDeepWeeklyHistoryFast = fetchDeepWeeklyHistoryFast;
+
 // ── 11.7b On-demand raw cache download ──
 // Loads whatever is currently in the IndexedDB deep cache and downloads it
 // as JSON, so the cache can be inspected/verified. The header button for
@@ -5806,14 +6183,13 @@ window.ldDownloadRawCache = ldDownloadRawCache;
 
 // ── 11.8 RSI Computation (Wilder) ──
 // Compact Wilder RSI (used by RSI Bias tab for daily + weekly)
+// Delegates to U.calcRSI (Container U, the canonical single source of
+// truth — see Section 11.x banner) instead of re-implementing the same
+// Wilder RSI a second time. Previously this was a byte-for-byte copy of
+// U.calcRSI with only variable names changed; kept as a thin alias so
+// every existing call site (xov/xun/etc.) keeps working unchanged.
 function rsiCalc(c,p){
-  var v=c.filter(function(x){return x!=null&&!isNaN(x)});
-  if(v.length<p+1)return[];
-  var g=0,l=0,i,d,ag,al,o=[];
-  for(i=1;i<=p;i++){d=v[i]-v[i-1];if(d>0)g+=d;else l-=d}
-  ag=g/p;al=l/p;o.push(al===0?100:+(100-100/(1+ag/al)).toFixed(2));
-  for(i=p+1;i<v.length;i++){d=v[i]-v[i-1];ag=(ag*(p-1)+(d>0?d:0))/p;al=(al*(p-1)+(d<0?-d:0))/p;o.push(al===0?100:+(100-100/(1+ag/al)).toFixed(2));}
-  return o;
+  return U.calcRSI(c,p);
 }
 function xov(a,l){return a.length>=2&&a[a.length-2]<l&&a[a.length-1]>=l}
 function xun(a,l){return a.length>=2&&a[a.length-2]>l&&a[a.length-1]<=l}
@@ -5879,17 +6255,17 @@ function wma(arr,n){
 //   toMonthlyCloses, seriesFor, hmStatusFor }
 var EE = (function() {
 
-  // ── RSI (Wilder/RMA) — canonical implementation for this container ──
-  function calcRSI(closes, period) { return rsiCalc(closes, period); }
+  // ── RSI (Wilder/RMA) — delegates to U.calcRSI, the canonical
+  // implementation (Container U). This container previously carried its
+  // own copy of the same formula; now it's a thin alias so there's one
+  // RSI implementation in the whole app to maintain and fix. ──
+  function calcRSI(closes, period) { return U.calcRSI(closes, period); }
 
-  // ── WMA (linear-weighted) ──
-  function calcWMA(data, period) {
-    if (!data || data.length < period) return null;
-    var slice = data.slice(data.length - period);
-    var num = 0, den = 0;
-    for (var i = 0; i < slice.length; i++) { num += slice[i] * (i + 1); den += (i + 1); }
-    return den ? num / den : null;
-  }
+  // ── WMA (linear-weighted) — delegates to U.calcWMA for the same
+  // reason: this used to be a second, independently-written WMA whose
+  // num/den form is mathematically equivalent to U.calcWMA's fixed
+  // period*(period+1)/2 denominator, just expressed differently. ──
+  function calcWMA(data, period) { return U.calcWMA(data, period); }
 
   // ── EMA ──
   function calcEMA(data, period) {
@@ -6230,7 +6606,7 @@ var EE = (function() {
     else if (wRsi >= 40 && wRsi < 50) regime = 'B';
     var action = 'HOLD';
     if (regime === 'A' && dRsi14 >= 40 && dRsi14 <= 50) action = 'BUY';
-    else if (regime === 'A' && dRsi14 > 70) action = 'HOLD';
+    else if (regime === 'A' && dRsi14 > RSI_OVERBOUGHT) action = 'HOLD';
     else if (regime === 'B') action = 'REDUCE';
     else if (regime === 'C') action = 'SELL';
     return { regime: regime, action: action };
@@ -6452,7 +6828,7 @@ win.EE = EE;
 // RSI here) so Scanner's handleScan can also use it as a live, incrementally
 // refreshed source of daily closes — instead of being permanently locked to
 // the static EMBEDDED_HISTORICAL snapshot baked into the file.
-win.fetchDeepWeeklyHistory = fetchDeepWeeklyHistory;
+win.fetchDeepWeeklyHistory = fetchDeepWeeklyHistoryFast;
 win.deepLoadCache = deepLoadCache;
 win.deepSaveCache = deepSaveCache;
 win._deepLoadAsync = _deepLoadAsync;
@@ -6490,7 +6866,7 @@ function _showAutoAlert(msg, type) {
   _statusStripPush(msg, type);
 }
 (function(){
-  try { win._deepWeeklyCache = deepLoadCache(); } catch(e) {}
+  try { win._deepWeeklyCache = deepLoadCache(); } catch(e) { console.warn('[DEEP] initial deepLoadCache() failed on page load — starting with empty cache:', e.message); }
   if (location.protocol === 'file:') {
     window._fileWarnTimer = setTimeout(function(){
       var last = _statusStripHistory[_statusStripHistory.length - 1];
@@ -8419,6 +8795,11 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
 // ptComputeRow() already computed, as an E vs C switch call for the AMC +
 // Tier the user picks.
 
+// RSI_OVERBOUGHT is defined in Section 11 (Data Engine) — see that
+// section's classifyRegimeAction, which uses the identical Regime-A +
+// daily-RSI-overheated concept this tab's computeAction/backtest/penalty
+// logic re-presents.
+
 // amcFunds: built from Timeline's own DD.NPS._schemeNames (Section 1) —
 // same codes/names, but derived from the single existing table instead of
 // a second hardcoded copy, so it can never drift out of sync with it.
@@ -8454,7 +8835,7 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
 // expose this specific Regime+DailyRSI decision tree.
 function computeAction(regime, dRsi) {
   if (regime === "A" && dRsi >= 40 && dRsi <= 50) return { action: "BUY", rec: "STRIKE — Optimal Entry" };
-  if (regime === "A" && dRsi > 70) return { action: "HOLD", rec: "OVERHEATED — Wait for daily dip" };
+  if (regime === "A" && dRsi > RSI_OVERBOUGHT) return { action: "HOLD", rec: "OVERHEATED — Wait for daily dip" };
   if (regime === "A") return { action: "HOLD", rec: "REGIME A — Awaiting daily pullback to 40-50" };
   if (regime === "B") return { action: "REDUCE", rec: "TRAP — Fatigue" };
   return { action: "SELL", rec: "AVOID — Trust Break" };
@@ -8613,7 +8994,7 @@ function nsComputeRecommendation(eRow, cRow) {
       detail: 'Regime A (Weekly RSI ≥ 50, price above 20WMA) with Daily RSI pulled back into the 40–50 optimal-entry zone. Move fresh allocation toward Scheme E; keep a Scheme C base for stability.'
     };
   }
-  if (regime === 'A' && dRsi != null && dRsi > 70) {
+  if (regime === 'A' && dRsi != null && dRsi > RSI_OVERBOUGHT) {
     return {
       title: 'HOLD — Equity Overheated', sub: act.rec,
       allocE: 60, allocC: 40,
@@ -8933,8 +9314,8 @@ function nsBcScore(row) {
   var rsiPenalty = 0;
   if (dRsi != null) {
     if (dRsi >= 40 && dRsi <= 50) rsiPenalty = 0;
-    else if (dRsi > 50 && dRsi <= 70) rsiPenalty = (dRsi - 50) * 0.3;
-    else if (dRsi > 70) rsiPenalty = 6 + (dRsi - 70) * 0.5;
+    else if (dRsi > 50 && dRsi <= RSI_OVERBOUGHT) rsiPenalty = (dRsi - 50) * 0.3;
+    else if (dRsi > RSI_OVERBOUGHT) rsiPenalty = 6 + (dRsi - RSI_OVERBOUGHT) * 0.5;
     else rsiPenalty = (40 - dRsi) * 0.4;
   } else {
     rsiPenalty = 50;
@@ -9591,7 +9972,7 @@ function nsBcRun() {
       var el = document.getElementById(id);
       if (el) state[id] = el.value;
     });
-    try { localStorage.setItem(_TACTICAL_LS_KEY, JSON.stringify(state)); } catch(e) {}
+    try { localStorage.setItem(_TACTICAL_LS_KEY, JSON.stringify(state)); } catch(e) { console.warn('[TACTICAL] save state failed —', e.message); }
   }
 
   function _restoreTacticalState() {
@@ -9605,7 +9986,7 @@ function nsBcRun() {
           el.value = state[id];
         }
       });
-    } catch(e) {}
+    } catch(e) { console.warn('[TACTICAL] restore state failed — form will start blank:', e.message); }
   }
 
   function _buildTacticalDropdowns() {
@@ -9629,10 +10010,18 @@ function nsBcRun() {
       });
     }
 
+    // Shared NPS scheme lookups — declared once, outside both if-blocks
+    // below, since the Target block previously relied on `codes`/`names`
+    // being set as a side effect of the Intermediate block running first
+    // (both are `var`, so function-scoped, but only actually assigned
+    // inside `if (midSel) {...}`). If tactical-mid were ever missing from
+    // the DOM while tactical-tgt was present, codes.forEach() below would
+    // throw. Declaring them here removes that hidden coupling.
+    var names = DD.NPS._schemeNames, codes = DD.NPS._defaultCodes;
+
     // Intermediate: NPS C (Corporate Bonds)
     var midSel = document.getElementById('tactical-mid');
     if (midSel) {
-      var names = DD.NPS._schemeNames, codes = DD.NPS._defaultCodes;
       var g1 = document.createElement('optgroup'); g1.label = 'T1';
       var g2 = document.createElement('optgroup'); g2.label = 'T2';
       codes.forEach(function(c) {
@@ -9849,7 +10238,13 @@ function nsBcRun() {
     var btPeriod = periodSel ? periodSel.value : '3y';
     var stratSel = document.getElementById('tactical-strategy');
     var btMode = stratSel ? stratSel.value : 'sms';
-    var timeframe = btTf || 'weekly';
+    // The weekly/monthly resample block a few lines down is what
+    // guarantees ascending (oldest-first) order for the trade-signal
+    // loop — _filterByPeriod's own output stays in the newest-first
+    // order it received. So any value other than 'weekly'/'monthly'
+    // here (this UI only offers those two) must not be allowed through,
+    // or trades would be generated against backwards-ordered data.
+    var timeframe = (btTf === 'monthly') ? 'monthly' : 'weekly';
 
     var minBars = timeframe === 'monthly' ? 6 : timeframe === 'weekly' ? 10 : 20;
     var filtered = _filterByPeriod(entries, btPeriod);
@@ -9925,11 +10320,19 @@ function nsBcRun() {
       }
       return out;
     }
+    // Geometrically compounds a sequence of trade returns (each trade's
+    // gain/loss is applied to the running balance, not just added up).
+    // Was previously a simple sum of tr.ret — that understates gains and
+    // overstates losses whenever there's more than one trade, since it
+    // ignores that each trade compounds on the previous trade's result
+    // rather than on a fixed starting base. E.g. three consecutive +10%
+    // trades is +33.1% compounded, not +30% (sum). Renamed logic kept
+    // under the same function name so no call site needed to change.
     function _compounded(trades) {
       if (!trades.length) return 0;
-      var sum = 0;
-      for (var j = 0; j < trades.length; j++) sum += trades[j].ret;
-      return sum;
+      var balance = 1;
+      for (var j = 0; j < trades.length; j++) balance *= (1 + trades[j].ret / 100);
+      return (balance - 1) * 100;
     }
 
     // ── Run 8SMA and HM strategies ──
@@ -9951,18 +10354,21 @@ function nsBcRun() {
         navMap[ce.date] = ce.nav;
       }
       // For each pair of consecutive trades, compute parking return:
-      // sellDate of trade[i] → buyDate of trade[i+1]
-      var totalParking = 0;
+      // sellDate of trade[i] → buyDate of trade[i+1]. Compounded (not
+      // summed) for the same reason as _compounded above — this total
+      // is shown right next to the strategy's compounded return, so it
+      // needs the same math to be meaningfully comparable/addable.
+      var parkBalance = 1;
       for (var pi = 0; pi < trades.length - 1; pi++) {
         var sellDate = trades[pi].sellDate;
         var nextBuyDate = trades[pi + 1].buyDate;
         var sellNav = navMap[sellDate];
         var buyNav = navMap[nextBuyDate];
         if (sellNav != null && buyNav != null && sellNav > 0) {
-          totalParking += ((buyNav - sellNav) / sellNav) * 100;
+          parkBalance *= (1 + ((buyNav - sellNav) / sellNav));
         }
       }
-      return totalParking;
+      return (parkBalance - 1) * 100;
     }
 
     // ── Load corporate bond fund and compute parking, then render summary ──
@@ -10050,7 +10456,13 @@ function nsBcRun() {
     var stratSel = document.getElementById('tactical-strategy');
     var mode = stratSel ? stratSel.value : 'sms';
     var btSrc = btDataSel ? btDataSel.value : 'src';
-    var btTf = btTfSel ? btTfSel.value : 'daily';
+    // Fallback matches the dropdown's own default-selected option
+    // ('weekly'). NOT 'daily' — #tactical-bt-tf has no daily option, and
+    // _runBackTest only re-sorts _filterByPeriod's newest-first output
+    // into ascending order when timeframe is 'weekly' or 'monthly'; a
+    // 'daily' value would skip that re-sort and feed the trade-signal
+    // loop backwards (newest-to-oldest), generating nonsensical trades.
+    var btTf = btTfSel ? btTfSel.value : 'weekly';
 
     // Which dropdown to read + which loader to use
     var fundSel;
@@ -10153,10 +10565,27 @@ function nsBcRun() {
 //   - No IndexedDB — this is a standalone export, not a cache
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Session-level guard: both downloadData() (Step 0) and ptRunScan()
+// (Step -1, documented above as "a safety net in case the DL button was
+// never pressed") unconditionally call downloadNPSBAF2500(). If the user
+// clicks the "DL" button and then "Analyze" — an entirely natural
+// workflow, since both buttons sit right next to each other — this would
+// otherwise re-fetch all 36 funds a second time and pop 4 file-download
+// prompts instead of 2. This tracks whether a download already completed
+// in the current page session (resets on reload) so the second call can
+// skip the redundant fetch instead of silently doubling it.
+var _dl2500LastRun = 0;
+var _DL2500_DEDUP_MS = 5 * 60 * 1000; // 5 min — long enough to cover DL-then-Analyze, short enough that a deliberate re-run (e.g. next day, same tab left open) still refreshes
+
 async function downloadNPSBAF2500(logFn) {
+  var _log = logFn || function(m){ console.log('[DL-2500]', m); };
+  if (Date.now() - _dl2500LastRun < _DL2500_DEDUP_MS) {
+    _log('NPS + BAF 2500-day data already downloaded this session — skipping duplicate fetch');
+    return;
+  }
+  _dl2500LastRun = Date.now();
 
   // ── Configuration ──
-  var _log = logFn || function(m){ console.log('[DL-2500]', m); };
   var TARGET = 2500;  // max entries to keep per fund
 
   // ── Helper: trigger browser download of a JS object as .json file ──
@@ -10179,15 +10608,43 @@ async function downloadNPSBAF2500(logFn) {
   // Scheme codes and human-readable names come from DD.NPS._defaultCodes
   // and DD.NPS._schemeNames (defined in Container DD, Section 1).
   // Sequential fetch with 150ms delay to avoid hammering the API.
-  // ═══════════════════════════════════════════════════════════════════
+  //
+  // CACHE-FIRST FAST PATH: ptRunScan() calls this function as "Step -1",
+  // immediately followed by its own Step 0b (fetchDeepNPSHistory), which
+  // fetches these same 32 schemes into the ld_deep_nps_v1 IndexedDB cache
+  // for actual use in the scan. Before this fast path existed, both steps
+  // independently re-fetched all 32 schemes from the network on every
+  // Analyze click with a cold/stale cache — this function's own fetch
+  // result was thrown away except for the exported .json files. If the
+  // cache already has every scheme (i.e. Step 0b, or an earlier run of
+  // this function, already populated it), reuse that instead of hitting
+  // the network a second time; only fall through to a live fetch for
+  // whichever specific schemes are still genuinely missing/short.
   _log('Starting NPS 2500-day download (32 schemes across 8 AMCs)...');
   var npsCodes  = DD.NPS._defaultCodes;   // 32 scheme codes
   var npsNames  = DD.NPS._schemeNames;    // code → human-readable name
   var npsUrl    = DD.NPS._url;            // 'https://npsnav.in/api/historical/'
   var npsResult = {};                     // { "Scheme Name": {code, totalAvailable, entries} }
 
-  for (var ni = 0; ni < npsCodes.length; ni++) {
-    var code = npsCodes[ni];
+  var _npsCachedForExport = await new Promise(function(res) {
+    if (typeof _npsLoadCache === 'function') _npsLoadCache(res); else res({ npsMap: {} });
+  });
+  var _npsCacheMap = (_npsCachedForExport && _npsCachedForExport.npsMap) || {};
+  var npsCodesToFetch = npsCodes.filter(function(code) {
+    var cached = _npsCacheMap[code];
+    if (cached && cached.length > 0) {
+      var name = npsNames[code] || code;
+      npsResult[name] = { code: code, totalAvailable: cached.length, entries: cached.slice(0, TARGET) };
+      return false; // already have it — skip fetching
+    }
+    return true;
+  });
+  if (npsCodesToFetch.length < npsCodes.length) {
+    _log('  ' + (npsCodes.length - npsCodesToFetch.length) + '/' + npsCodes.length + ' schemes already cached (from an earlier scan/download) — reusing instead of re-fetching');
+  }
+
+  for (var ni = 0; ni < npsCodesToFetch.length; ni++) {
+    var code = npsCodesToFetch[ni];
     var name = npsNames[code] || code;
     try {
       var resp = await fetch(npsUrl + code);
@@ -10232,15 +10689,38 @@ async function downloadNPSBAF2500(logFn) {
   // (no CORS proxy needed — server sends its own CORS headers).
   // Fund codes come from DD.BAF._funds (defined in Container DD).
   // Same sequential + 150ms delay pattern as NPS above.
+  //
+  // Same cache-first fast path as PART A above, and for the same reason:
+  // ptRunScan()'s Step 0c (fetchDeepBAFHistory) fetches these same 4
+  // funds into ld_deep_baf_v1 right after this function returns — reuse
+  // that cache instead of re-fetching from the network when it's already
+  // complete.
   // ═══════════════════════════════════════════════════════════════════
   _log('Starting BAF 2500-day download (4 Balanced Advantage Funds)...');
   var bafFunds   = DD.BAF._funds;    // { HDFC: {name, code}, ICICI: ... }
   var bafUrl     = DD.BAF._url;      // 'https://api.mfapi.in/mf/'
   var bafResult  = {};               // { "Fund Name": {amc, code, totalAvailable, entries} }
 
+  var _bafCachedForExport = await new Promise(function(res) {
+    if (typeof _bafLoadCache === 'function') _bafLoadCache(res); else res({ bafMap: {} });
+  });
+  var _bafCacheMap = (_bafCachedForExport && _bafCachedForExport.bafMap) || {};
   var bafKeys = Object.keys(bafFunds);
-  for (var bi = 0; bi < bafKeys.length; bi++) {
-    var amc   = bafKeys[bi];
+  var bafKeysToFetch = bafKeys.filter(function(amc) {
+    var fund = bafFunds[amc];
+    var cached = _bafCacheMap[fund.code];
+    if (cached && cached.length > 0) {
+      bafResult[fund.name] = { amc: amc, code: fund.code, totalAvailable: cached.length, entries: cached.slice(0, TARGET) };
+      return false; // already have it — skip fetching
+    }
+    return true;
+  });
+  if (bafKeysToFetch.length < bafKeys.length) {
+    _log('  ' + (bafKeys.length - bafKeysToFetch.length) + '/' + bafKeys.length + ' funds already cached (from an earlier scan/download) — reusing instead of re-fetching');
+  }
+
+  for (var bi = 0; bi < bafKeysToFetch.length; bi++) {
+    var amc   = bafKeysToFetch[bi];
     var fund  = bafFunds[amc];
     var fname = fund.name;
     var fcode = fund.code;
