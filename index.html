@@ -4141,7 +4141,21 @@ function toggleName(name){
   var i=PState.names.indexOf(name);
   var priceRow=null;
   var scanR=(typeof win.ptGetScanR==='function')?win.ptGetScanR():[];
-  scanR.forEach(function(r){if(r.name===name)priceRow=r;});
+  // Normalized match (same rule renderSummary uses for its own price
+  // lookup: lowercase, strip everything but letters/digits) so a
+  // Title-Case name from Monthly Green/the master list still finds its
+  // price row even when the live NSE feed returned that index in ALL
+  // CAPS. Exact-match alone silently missed this case — the fund still
+  // got added to the portfolio correctly, but its purchase price was
+  // recorded as null (never wrong, just missing) even when a price was
+  // available and would have displayed correctly moments later.
+  var wantNorm=name?name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
+  scanR.forEach(function(r){
+    if(priceRow)return; // first match wins, same as the old exact-match loop
+    if(r.name===name){priceRow=r;return;}
+    var rNorm=r.name?r.name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
+    if(rNorm&&rNorm===wantNorm)priceRow=r;
+  });
   if(i>=0){
     PState.names.splice(i,1);
     delete PState.purchases[name];
@@ -4156,6 +4170,13 @@ function toggleName(name){
   if(typeof win.ptRerender==='function')win.ptRerender();
   var sumWrap=psEl('pt-summary-wrap');
   if(sumWrap&&sumWrap.style.display!=='none'){renderSummary();renderMatchingIndex();updateHeaderStats();}
+  // Keep the Monthly Green>SMA8 / Watch for Bearish Mode tables' own
+  // Add/Remove buttons in sync immediately — these are always visible
+  // (not gated behind the summary/universe panel toggle like the tables
+  // above), so without this a button's label could show the wrong action
+  // until some unrelated event forced a re-render.
+  if(typeof renderMonthlyGreenAboveSMA8==='function')renderMonthlyGreenAboveSMA8();
+  if(typeof renderMonthlyRedAtOrAboveSMA8==='function')renderMonthlyRedAtOrAboveSMA8();
 }
 function has(name){return PState.names.indexOf(name)>=0;}
 
@@ -4804,6 +4825,7 @@ function renderMonthlyGreenAboveSMA8(){
       var lmBg=r.lastMonthGreen?'#1a8a1a':'#cc0000';
       lastMonthCell='<span style="background:'+lmBg+';color:#fff;padding:2px 6px;border-radius:3px;font-size:8px;white-space:nowrap">'+(r.lastMonthPct>=0?'+':'')+r.lastMonthPct.toFixed(1)+'%</span>';
     }
+    var inP=(typeof win.PSnap!=='undefined'&&typeof win.PSnap.has==='function')?win.PSnap.has(r.name):false;
     return '<tr style="border-bottom:1px solid #eee">'+
       '<td style="padding:5px 4px;font-size:9px">'+(i+1)+'</td>'+
       '<td style="font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 8px;font-size:10px;font-weight:600;color:#000;word-break:break-word;white-space:normal">'+r.name+'</td>'+
@@ -4812,7 +4834,7 @@ function renderMonthlyGreenAboveSMA8(){
       '<td style="padding:5px 4px;font-size:9px">'+ptFmtLocal(r.low)+'</td>'+
       '<td style="padding:5px 4px;font-size:9px">'+ptFmtLocal(r.sma8Low)+'</td>'+
       '<td style="padding:5px 4px">'+lastMonthCell+'</td>'+
-      '<td style="padding:5px 4px"><button onclick="PSnap.toggleName(\''+safeName+'\')" style="background:#1a8a1a;color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">Add to Portfolio</button></td>'+
+      '<td style="padding:5px 4px"><button onclick="PSnap.toggleName(\''+safeName+'\')" style="background:'+(inP?'#cc3344':'#1a8a1a')+';color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">'+(inP?'Remove from Portfolio':'Add to Portfolio')+'</button></td>'+
       '</tr>';
   }).join('');
 }
