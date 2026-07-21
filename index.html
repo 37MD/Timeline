@@ -850,9 +850,9 @@ th.ha-sep,td.ha-sep{border-left:3px solid var(--orange)!important}
   <h3 style="color:#0055aa;font-size:12px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">Watch for Bearish Mode</h3>
   <div style="font-size:8px;color:#888;margin-bottom:4px">Current monthly candle is RED (close &lt; open) but its low is still at or above the SMA(8) of monthly lows — support intact for now, but the candle has turned bearish. Scanned across the full universe (NSE + NPS + BAF).</div>
   <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #cc0000;border-radius:4px">
-  <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:480px">
-    <thead><tr style="background:#fdeaea"><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">#</th><th style="font-family:'Segoe UI',Arial,sans-serif;padding:5px 4px;text-align:left;font-size:9px;color:#000;text-transform:uppercase;white-space:nowrap">Index</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Close</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">M. Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">SMA(8) Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">View</th></tr></thead>
-    <tbody id="pt-bear-tb"><tr><td colspan="6" style="text-align:center;color:#666;padding:8px">Run a scan to populate this list</td></tr></tbody>
+  <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:680px">
+    <thead><tr style="background:#fdeaea"><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">#</th><th style="font-family:'Segoe UI',Arial,sans-serif;padding:5px 4px;text-align:left;font-size:9px;color:#000;text-transform:uppercase;white-space:nowrap">Index</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">View</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Close</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">M. Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">SMA(8) Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Last Month Candle</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Add to Portfolio</th></tr></thead>
+    <tbody id="pt-bear-tb"><tr><td colspan="8" style="text-align:center;color:#666;padding:8px">Run a scan to populate this list</td></tr></tbody>
   </table>
   </div>
 </div>
@@ -872,11 +872,11 @@ th.ha-sep,td.ha-sep{border-left:3px solid var(--orange)!important}
 <!-- ── Matching Index table: near-matching or better-scoring indices ── -->
 <div id="pt-matching-wrap" style="display:none;margin:8px 0">
   <h3 style="color:#0055aa;font-size:12px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">Matching Index</h3>
-  <div style="font-size:8px;color:#888;margin-bottom:4px">Indices outside your Portfolio scoring at or above its average (Regime + P&gt;WMA + RS Score + BA Weightage composite).</div>
+  <div style="font-size:8px;color:#888;margin-bottom:4px">Indices outside your Portfolio scoring at or above its average (Regime + P&gt;WMA + RS Score + BA Weightage composite). Same columns as Portfolio Summary.</div>
   <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #cc7a00;border-radius:4px">
-  <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:480px">
-    <thead><tr style="background:#fff3e0"><th style="padding:5px 4px;text-align:left;font-size:7px;color:#a35a00;text-transform:uppercase;white-space:nowrap">#</th><th style="font-family:'Segoe UI',Arial,sans-serif;padding:5px 4px;text-align:left;font-size:9px;color:#000;text-transform:uppercase;white-space:nowrap">Index</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#a35a00;text-transform:uppercase;white-space:nowrap">Price</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#a35a00;text-transform:uppercase;white-space:nowrap">Chg%</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#a35a00;text-transform:uppercase;white-space:nowrap">Score</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#a35a00;text-transform:uppercase;white-space:nowrap">Add to Portfolio</th></tr></thead>
-    <tbody id="pt-matching-tb"><tr><td colspan="6" style="text-align:center;color:#666;padding:8px">Build a Portfolio to see matches</td></tr></tbody>
+  <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:1300px">
+    <thead><tr id="pt-matching-thead" style="background:#fff3e0"></tr></thead>
+    <tbody id="pt-matching-tb"><tr><td colspan="18" style="text-align:center;color:#666;padding:8px">Build a Portfolio to see matches</td></tr></tbody>
   </table>
   </div>
 </div>
@@ -4612,9 +4612,10 @@ function renderSummary(){
     return '<th onclick="ptSortBy(\''+c.key+'\')" style="'+thStyle+';'+extra+'" title="Sort by '+c.label+'">'+c.label+arrow+'</th>';
   }).join('');
   headerHtml+='<th style="'+thStyle+';cursor:default">HM Chart</th>';
+  headerHtml+='<th style="'+thStyle+';cursor:default">Remove from Portfolio</th>';
   theadEl.innerHTML=headerHtml;
   if(!PState.names.length){
-    tbEl.innerHTML='<tr><td colspan="'+(baseCols.length+sortCols.length+1)+'" style="text-align:center;color:#666;padding:8px">No indices in Portfolio yet — use Update Portfolio to add some</td></tr>';
+    tbEl.innerHTML='<tr><td colspan="'+(baseCols.length+sortCols.length+2)+'" style="text-align:center;color:#666;padding:8px">No indices in Portfolio yet — use Update Portfolio to add some</td></tr>';
     return;
   }
   var scanR=(typeof win.ptGetScanR==='function')?win.ptGetScanR():[];
@@ -4637,6 +4638,7 @@ function renderSummary(){
     ALL_COL_KEYS.forEach(function(k){
       cells+='<td style="padding:5px 4px;font-size:9px;white-space:nowrap">'+COL_DEFS[k].render(name)+'</td>';
     });
+    cells+='<td style="padding:5px 4px"><button onclick="event.stopPropagation();PSnap.toggleName(\''+safeName+'\')" style="background:#cc3344;color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">Remove from Portfolio</button></td>';
     return '<tr onclick="ptHighlightRow(this)" style="border-bottom:1px solid #eee;cursor:pointer">'+cells+'</tr>';
   }).join('');
 }
@@ -4684,10 +4686,25 @@ function compositeScoreFor(name){
 function renderMatchingIndex(){
   var wrap=psEl('pt-matching-wrap');
   var tbEl=psEl('pt-matching-tb');
+  var theadEl=psEl('pt-matching-thead');
   if(!wrap||!tbEl)return;
   var allNames=psIndexUniverse().map(function(x){return x.name;});
+  // Header: same column set as Portfolio Summary (Score replaces the
+  // header-button "jump to column" sort headers here, since Matching
+  // Index is ranked by composite Score, not user-chosen column sort) —
+  // #, Index, Price, Chg%, Score, then every COL_DEFS/ALL_COL_KEYS column,
+  // ending in Add to Portfolio instead of Remove.
+  if(theadEl){
+    var thStyleMI='padding:5px 4px;text-align:left;font-size:7px;color:#a35a00;text-transform:uppercase;white-space:nowrap';
+    var headerHtmlMI='<th style="'+thStyleMI+'">#</th><th style="font-family:\'Segoe UI\',Arial,sans-serif;padding:5px 4px;text-align:left;font-size:9px;color:#000;text-transform:uppercase;white-space:nowrap">Index</th>'+
+      '<th style="'+thStyleMI+'">Price</th><th style="'+thStyleMI+'">Chg%</th><th style="'+thStyleMI+'">Score</th>';
+    ALL_COL_KEYS.forEach(function(k){headerHtmlMI+='<th style="'+thStyleMI+'">'+COL_DEFS[k].label+'</th>';});
+    headerHtmlMI+='<th style="'+thStyleMI+'">Add to Portfolio</th>';
+    theadEl.innerHTML=headerHtmlMI;
+  }
+  var totalCols=5+ALL_COL_KEYS.length+1;
   if(!allNames.length||!PState.names.length){
-    tbEl.innerHTML='<tr><td colspan="6" style="text-align:center;color:#666;padding:8px">Build a Portfolio (Update Portfolio) to see matches</td></tr>';
+    tbEl.innerHTML='<tr><td colspan="'+totalCols+'" style="text-align:center;color:#666;padding:8px">Build a Portfolio (Update Portfolio) to see matches</td></tr>';
     return;
   }
   var portfolioAvg=PState.names.reduce(function(s,n){return s+compositeScoreFor(n);},0)/PState.names.length;
@@ -4697,7 +4714,7 @@ function renderMatchingIndex(){
     .sort(function(a,b){return b.score-a.score;})
     .slice(0,15);
   if(!candidates.length){
-    tbEl.innerHTML='<tr><td colspan="6" style="text-align:center;color:#666;padding:8px">No indices currently score as well as your portfolio average</td></tr>';
+    tbEl.innerHTML='<tr><td colspan="'+totalCols+'" style="text-align:center;color:#666;padding:8px">No indices currently score as well as your portfolio average</td></tr>';
     return;
   }
   var scanR=(typeof win.ptGetScanR==='function')?win.ptGetScanR():[];
@@ -4708,14 +4725,17 @@ function renderMatchingIndex(){
     var pr=priceOf[c.name]||{};
     if(pr.price==null){var cn=c.name?c.name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';pr=priceOfNorm[cn]||{};}
     var r=scannerRowFor(c.name);
-    return '<tr style="border-bottom:1px solid #eee">'+
-      '<td style="padding:5px 4px;font-size:9px">'+(i+1)+'</td>'+
-      '<td style="font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 8px;font-size:10px;font-weight:600;color:#000;word-break:break-word;white-space:normal">'+c.name+'</td>'+
+    var safeName=c.name.replace(/'/g,"\\'");
+    var cells='<td style="padding:5px 4px;font-size:9px">'+(i+1)+'</td>'+
+      '<td onclick="PSnap.viewHMChart(\''+safeName+'\')" style="font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 8px;font-size:10px;font-weight:600;color:#0055aa;cursor:pointer;white-space:nowrap;text-decoration:underline" title="'+c.name.replace(/"/g,'&quot;')+'">'+c.name+'</td>'+
       '<td style="padding:5px 4px;font-size:9px">'+ptFmtLocal(pr.price)+'</td>'+
       '<td style="padding:5px 4px;font-size:9px;color:'+((pr.change||0)>=0?'#1a8a1a':'#cc0000')+'">'+(pr.change!=null?(pr.change>=0?'+':'')+pr.change.toFixed(1)+'%':'—')+'</td>'+
-      '<td style="padding:5px 4px;font-size:9px"><span style="background:#1a8a1a;color:#fff;padding:1px 5px;border-radius:3px;font-size:8px">'+c.score.toFixed(0)+'</span> <span style="color:#888;font-size:7px">vs avg '+portfolioAvg.toFixed(0)+'</span>'+(r&&r.regime?' &nbsp;<span style="color:#888">Regime '+r.regime+'</span>':'')+'</td>'+
-      '<td style="padding:5px 4px"><button onclick="PSnap.toggleName(\''+c.name.replace(/'/g,"\\'")+'\')" style="background:#1a8a1a;color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">Add to Portfolio</button></td>'+
-      '</tr>';
+      '<td style="padding:5px 4px;font-size:9px"><span style="background:#1a8a1a;color:#fff;padding:1px 5px;border-radius:3px;font-size:8px">'+c.score.toFixed(0)+'</span> <span style="color:#888;font-size:7px">vs avg '+portfolioAvg.toFixed(0)+'</span>'+(r&&r.regime?' &nbsp;<span style="color:#888">Regime '+r.regime+'</span>':'')+'</td>';
+    ALL_COL_KEYS.forEach(function(k){
+      cells+='<td style="padding:5px 4px;font-size:9px;white-space:nowrap">'+COL_DEFS[k].render(c.name)+'</td>';
+    });
+    cells+='<td style="padding:5px 4px"><button onclick="PSnap.toggleName(\''+safeName+'\')" style="background:#1a8a1a;color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">Add to Portfolio</button></td>';
+    return '<tr style="border-bottom:1px solid #eee">'+cells+'</tr>';
   }).join('');
 }
 
@@ -4792,7 +4812,12 @@ function monthlyRedAtOrAboveSMA8List(){
     var sma8Low=(window.EE&&typeof window.EE.calcSMA==='function')?window.EE.calcSMA(lows,8):null;
     if(sma8Low==null)return;
     if(!(cur.l>=sma8Low))return; // "at or above" per request — >= not strictly >
-    out.push({name:idx.name,close:cur.c,low:cur.l,sma8Low:sma8Low});
+    // "Last Month Candle" column — same computation as monthlyGreenAboveSMA8List
+    // above, added so this table can use the identical column layout.
+    var prev=monthly.length>=2?monthly[monthly.length-2]:null;
+    var lastMonthPct=(prev&&prev.o)?((prev.c-prev.o)/prev.o*100):null;
+    var lastMonthGreen=prev?(prev.c>prev.o):null;
+    out.push({name:idx.name,close:cur.c,low:cur.l,sma8Low:sma8Low,lastMonthPct:lastMonthPct,lastMonthGreen:lastMonthGreen});
   });
   // Smallest margin-above-support first — these are the closest to actually
   // breaking down, so the most urgent watches sort to the top.
@@ -4844,23 +4869,35 @@ function renderMonthlyRedAtOrAboveSMA8(){
   if(!tbEl)return;
   var allRows=(typeof win.ptGetAllComputedRows==='function')?win.ptGetAllComputedRows():[];
   if(!allRows||!allRows.length){
-    tbEl.innerHTML='<tr><td colspan="6" style="text-align:center;color:#666;padding:8px">Run a scan to populate this list</td></tr>';
+    tbEl.innerHTML='<tr><td colspan="8" style="text-align:center;color:#666;padding:8px">Run a scan to populate this list</td></tr>';
     return;
   }
   var list=monthlyRedAtOrAboveSMA8List();
   if(!list.length){
-    tbEl.innerHTML='<tr><td colspan="6" style="text-align:center;color:#666;padding:8px">No funds currently match (monthly red candle still at/above SMA(8) of monthly lows)</td></tr>';
+    tbEl.innerHTML='<tr><td colspan="8" style="text-align:center;color:#666;padding:8px">No funds currently match (monthly red candle still at/above SMA(8) of monthly lows)</td></tr>';
     return;
   }
+  // Same column sequence as renderMonthlyGreenAboveSMA8 — see its comments
+  // for the "Last Month Candle" cell and Add/Remove button logic.
   tbEl.innerHTML=list.map(function(r,i){
     var safeName=r.name.replace(/'/g,"\\'");
+    var lastMonthCell;
+    if(r.lastMonthPct==null){
+      lastMonthCell='<span style="color:#999">—</span>';
+    } else {
+      var lmBg=r.lastMonthGreen?'#1a8a1a':'#cc0000';
+      lastMonthCell='<span style="background:'+lmBg+';color:#fff;padding:2px 6px;border-radius:3px;font-size:8px;white-space:nowrap">'+(r.lastMonthPct>=0?'+':'')+r.lastMonthPct.toFixed(1)+'%</span>';
+    }
+    var inP=(typeof win.PSnap!=='undefined'&&typeof win.PSnap.has==='function')?win.PSnap.has(r.name):false;
     return '<tr style="border-bottom:1px solid #eee">'+
       '<td style="padding:5px 4px;font-size:9px">'+(i+1)+'</td>'+
       '<td style="font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 8px;font-size:10px;font-weight:600;color:#000;word-break:break-word;white-space:normal">'+r.name+'</td>'+
+      '<td style="padding:5px 4px"><button onclick="PSnap.viewHMChart(\''+safeName+'\')" style="background:#0055aa;color:#fff;border:none;padding:3px 7px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">View HM Chart</button></td>'+
       '<td style="padding:5px 4px;font-size:9px;color:#cc0000">'+ptFmtLocal(r.close)+'</td>'+
       '<td style="padding:5px 4px;font-size:9px">'+ptFmtLocal(r.low)+'</td>'+
       '<td style="padding:5px 4px;font-size:9px">'+ptFmtLocal(r.sma8Low)+'</td>'+
-      '<td style="padding:5px 4px"><button onclick="PSnap.viewHMChart(\''+safeName+'\')" style="background:#0055aa;color:#fff;border:none;padding:3px 7px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">View HM Chart</button></td>'+
+      '<td style="padding:5px 4px">'+lastMonthCell+'</td>'+
+      '<td style="padding:5px 4px"><button onclick="PSnap.toggleName(\''+safeName+'\')" style="background:'+(inP?'#cc3344':'#1a8a1a')+';color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">'+(inP?'Remove from Portfolio':'Add to Portfolio')+'</button></td>'+
       '</tr>';
   }).join('');
 }
