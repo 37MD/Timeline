@@ -668,7 +668,8 @@ th.ha-sep,td.ha-sep{border-left:3px solid var(--orange)!important}
         <select id="hmIndexSelect" onchange="hmOnIndexChange()" style="flex:1;min-width:0;padding:4px 4px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;">
           <option value="">Select Index…</option>
         </select>
-        <select id="hmBenchSelect" onchange="drawHilegaMilega()" title="Pane 3 benchmark" style="flex:0 0 100px;min-width:0;padding:4px 4px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;">
+        <select id="hmBenchSelect" onchange="drawHilegaMilega()" title="Pane 3 view" style="flex:0 0 100px;min-width:0;padding:4px 4px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;">
+          <option value="mtf" selected>Dual RSI MTF</option>
           <option value="nifty 50">RS vs Nifty 50</option>
           <option value="nifty 500">RS vs Nifty 500</option>
         </select>
@@ -700,7 +701,7 @@ th.ha-sep,td.ha-sep{border-left:3px solid var(--orange)!important}
     </div>
 
     <!-- ── PANE 1: Price/NAV + SMA(8) low, with HUD ── -->
-    <div id="hmPane1Wrap" style="width:100%;height:30vh;height:30dvh;min-height:140px;flex-shrink:0;position:relative;border-bottom:1px solid var(--border);background:#fff;">
+    <div id="hmPane1Wrap" style="width:100%;height:22vh;height:22dvh;min-height:110px;flex-shrink:0;position:relative;border-bottom:1px solid var(--border);background:#fff;">
       <canvas id="hmPane1Canvas"></canvas>
       <div id="hmHud1" style="display:none;position:absolute;pointer-events:none;background:rgba(255,255,255,0.92);border:1px solid #ccc;border-radius:4px;padding:3px 6px;font-family:monospace;font-size:8px;line-height:1.4;color:#000;box-shadow:1px 1px 6px rgba(0,0,0,0.1);z-index:10;white-space:normal;top:2px;left:2px;max-width:70%;box-sizing:border-box;"></div>
       <div id="hmNoDataBanner" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:#fff;text-align:center;padding:16px;z-index:20;">
@@ -717,7 +718,7 @@ th.ha-sep,td.ha-sep{border-left:3px solid var(--orange)!important}
     </div>
 
     <!-- ── PANE 3: Relative Strength vs benchmark, with HUD ── -->
-    <div id="hmPane3Wrap" style="width:100%;height:19vh;height:19dvh;min-height:90px;flex-shrink:0;position:relative;background:#fff;">
+    <div id="hmPane3Wrap" style="width:100%;height:27vh;height:27dvh;min-height:130px;flex-shrink:0;position:relative;background:#fff;">
       <div style="position:absolute;top:2px;left:2px;font-size:9px;color:#888;z-index:11;background:rgba(255,255,255,0.85);padding:1px 4px;border-radius:3px;" id="hmPane3Label">RS vs Nifty 50</div>
       <canvas id="hmPane3Canvas"></canvas>
       <div id="hmHud3" style="display:none;position:absolute;pointer-events:none;background:rgba(255,255,255,0.92);border:1px solid #ccc;border-radius:4px;padding:3px 6px;font-family:monospace;font-size:8px;line-height:1.4;color:#000;box-shadow:1px 1px 6px rgba(0,0,0,0.1);z-index:10;white-space:normal;top:2px;left:2px;text-align:left;max-width:70%;box-sizing:border-box;"></div>
@@ -2516,7 +2517,7 @@ function ldTodayIstStr() {
   return new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
 }
 
-const APP_VERSION = 'v5.6';
+const APP_VERSION = 'v5.7';
 
 // Reads the deep weekly/daily/monthly history straight from IndexedDB —
 // the primary store for this data. The localStorage mirror (BB.deepCacheV4)
@@ -3634,10 +3635,23 @@ async function ptRunScan(){
     if(typeof window.fetchDeepNPSHistory==='function'){
       ptEl('pt-st').innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #b8860b;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> NPS NAVs...';
       var _npsCacheCheck=await Promise.race([new Promise(function(res){_npsLoadCache(res);}),new Promise(function(_,rej){setTimeout(function(){rej(new Error('NPS cache load timeout'));},10000);})]).catch(function(){return{lastUpdated:null,npsMap:{}};});
-      if(_npsCacheCheck&&_npsCacheCheck.lastUpdated&&_npsCacheCheck.npsMap&&Object.keys(_npsCacheCheck.npsMap).length>0){
+      var _npsDiff=null;
+      if(_npsCacheCheck&&_npsCacheCheck.lastUpdated){
         var _npsLd=_npsCacheCheck.lastUpdated;
         var _npsED=new Date(parseInt(_npsLd.substring(4,8),10),parseInt(_npsLd.substring(2,4),10)-1,parseInt(_npsLd.substring(0,2),10));
-        var _npsDiff=Math.floor((Date.now()-_npsED.getTime())/86400000);
+        _npsDiff=Math.floor((Date.now()-_npsED.getTime())/86400000);
+      }
+      // BUG FIX: this used to treat ANY lastUpdated value as fresh —
+      // _npsDiff was computed and shown in the log line but never actually
+      // compared against a threshold, so a cache from weeks ago still
+      // silently skipped re-fetching forever. Now only skips when the
+      // newest NAV data on record is 0-1 day(s) old (same tolerance the
+      // main NSE deep-cache freshness check already uses) — anything
+      // older genuinely re-attempts the fetch, so a real gap (e.g. NAV
+      // publication catching up after a lag) gets picked up on the very
+      // next scan instead of being stuck until some unrelated event
+      // clears the cache.
+      if(_npsCacheCheck&&_npsDiff!=null&&_npsDiff<=1&&_npsCacheCheck.npsMap&&Object.keys(_npsCacheCheck.npsMap).length>0){
         ptLog('✅ NPS cache is fresh (last updated '+_npsDiff+' day(s) ago) — no download needed');
       }else{
         ptLog('📊 Fetching NPS scheme NAVs...');
@@ -3667,10 +3681,15 @@ async function ptRunScan(){
     if(typeof window.fetchDeepBAFHistory==='function'){
       ptEl('pt-st').innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #b8860b;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> BAF NAVs...';
       var _bafCacheCheck=await Promise.race([new Promise(function(res){_bafLoadCache(res);}),new Promise(function(_,rej){setTimeout(function(){rej(new Error('BAF cache load timeout'));},10000);})]).catch(function(){return{lastUpdated:null,bafMap:{}};});
-      if(_bafCacheCheck&&_bafCacheCheck.lastUpdated&&_bafCacheCheck.bafMap&&Object.keys(_bafCacheCheck.bafMap).length>0){
+      var _bafDiff=null;
+      if(_bafCacheCheck&&_bafCacheCheck.lastUpdated){
         var _bafLd=_bafCacheCheck.lastUpdated;
         var _bafED=new Date(parseInt(_bafLd.substring(4,8),10),parseInt(_bafLd.substring(2,4),10)-1,parseInt(_bafLd.substring(0,2),10));
-        var _bafDiff=Math.floor((Date.now()-_bafED.getTime())/86400000);
+        _bafDiff=Math.floor((Date.now()-_bafED.getTime())/86400000);
+      }
+      // Same fix as the NPS check above — only skip re-fetching when
+      // genuinely 0-1 day(s) old, not merely present.
+      if(_bafCacheCheck&&_bafDiff!=null&&_bafDiff<=1&&_bafCacheCheck.bafMap&&Object.keys(_bafCacheCheck.bafMap).length>0){
         ptLog('✅ BAF cache is fresh (last updated '+_bafDiff+' day(s) ago) — no download needed');
       }else{
         ptLog('📊 Fetching BAF fund NAVs...');
@@ -5421,7 +5440,22 @@ async function fetchDeepBAFHistory(codes, onProgress) {
     if (rows && rows.length > 0) okCount++; else emptyCount++;
     cache.bafMap[code] = _bafMergeScheme(cache.bafMap[code], rows);
   });
-  cache.lastUpdated = deepFmtDate(new Date());
+  // BUG FIX: same issue and same fix as fetchDeepNPSHistory above — see
+  // that comment for the full explanation. Confirmed live: this is why
+  // the Kotak Balanced Advantage chart was stuck showing 20/07/2026 as
+  // its newest point days after that date, with no visible warning that
+  // the cache was actually stale.
+  var _bafNewestDate=null;
+  Object.keys(cache.bafMap).forEach(function(code){
+    (cache.bafMap[code]||[]).forEach(function(r){
+      if(!r||!r.date)return;
+      var p=r.date.split('-');
+      if(p.length!==3)return;
+      var ddmmyyyy=p[0]+p[1]+p[2];
+      if(!_bafNewestDate||ddmmyyyy>_bafNewestDate)_bafNewestDate=ddmmyyyy;
+    });
+  });
+  cache.lastUpdated = _bafNewestDate || deepFmtDate(new Date());
   await _bafSaveCache(cache);
   console.log('[BAF] fetch complete —', okCount, 'funds with data,', emptyCount, 'empty/failed, out of', list.length, 'total');
   return cache;
@@ -5460,7 +5494,30 @@ async function fetchDeepNPSHistory(codes, onProgress) {
     if (rows && rows.length > 0) okCount++; else emptyCount++;
     cache.npsMap[code] = _npsMergeScheme(cache.npsMap[code], rows);
   });
-  cache.lastUpdated = deepFmtDate(new Date());
+  // BUG FIX: this used to stamp lastUpdated with the CURRENT time
+  // (new Date()) — i.e. "when we last tried to fetch" — regardless of
+  // whether mfapi.in actually returned any NAV rows newer than what was
+  // already cached. Since NAV publication naturally lags a few days (and
+  // can occasionally lag further), that meant the very first fetch after
+  // a lag made the cache look artificially "fresh" and the freshness
+  // check in ptRunScan (Step 0b) silently skipped every future re-fetch
+  // attempt for the rest of the day (or longer) — even once mfapi.in
+  // later published the missing days. lastUpdated now reflects the
+  // NEWEST DATE ACTUALLY PRESENT in the merged data, so "N day(s) old"
+  // reported to the person is always genuinely accurate, and a stale
+  // cache correctly keeps trying to catch up on every scan until the
+  // source data itself catches up.
+  var _npsNewestDate=null;
+  Object.keys(cache.npsMap).forEach(function(code){
+    (cache.npsMap[code]||[]).forEach(function(r){ // npsMap rows are newest-first, but scan all to be safe against any future ordering change
+      if(!r||!r.date)return;
+      var p=r.date.split('-'); // DD-MM-YYYY
+      if(p.length!==3)return;
+      var ddmmyyyy=p[0]+p[1]+p[2];
+      if(!_npsNewestDate||ddmmyyyy>_npsNewestDate)_npsNewestDate=ddmmyyyy;
+    });
+  });
+  cache.lastUpdated = _npsNewestDate || deepFmtDate(new Date());
   await _npsSaveCache(cache);
   console.log('[NPS] fetch complete —', okCount, 'schemes with data,', emptyCount, 'empty/failed, out of', list.length, 'total');
   return cache;
@@ -8106,8 +8163,132 @@ async function drawHilegaMilega() {
         function parseEntry(e) {
           var p = e.split('|');
           var ds = p[0];
-          return { nav: parseFloat(p[4]), date: ds.substring(0,2)+'/'+ds.substring(2,4)+'/'+ds.substring(4,8) };
+          // .high/.low added for the SwiftEdge SMA(48) band (Pane 1 overlay) —
+          // purely additive fields; every existing .nav/.date consumer is
+          // unaffected. Falls back to close (p[4]) if a high/low field is
+          // missing/blank, which happens for some older/synthetic rows that
+          // only ever stored a single price (open=high=low=close).
+          var hi = parseFloat(p[2]), lo = parseFloat(p[3]);
+          return { nav: parseFloat(p[4]), date: ds.substring(0,2)+'/'+ds.substring(2,4)+'/'+ds.substring(4,8),
+            high: !isNaN(hi) ? hi : parseFloat(p[4]), low: !isNaN(lo) ? lo : parseFloat(p[4]) };
         }
+
+        // ── BUG FIX: per-fund weekly/monthly RECENT-window coverage check ──
+        // The rebuild above only triggers when the weekly/monthly IDB
+        // containers are completely EMPTY. If they were built earlier and
+        // never refreshed since, they can lag behind daily for the most
+        // recent months even though they're non-empty — so charts showed
+        // weekly/monthly data with a gap versus what daily's full-
+        // resolution recent window actually has, visible as SMA(48)/RSI
+        // lines only starting partway across a Weekly/Monthly 6M-3Y view.
+        //
+        // IMPORTANT: this intentionally only checks the RECENT ~36-month
+        // window, not the full daily history. Daily beyond ~36 months is
+        // compressed to one synthetic entry per calendar month (see
+        // DEEP_KEEP_RAW_MONTHS above) specifically because the DEDICATED
+        // weekly/monthly containers are the authoritative source for
+        // older history — rebuilding weekly from compressed old daily
+        // data would produce at most one weekly bar per month for that
+        // period, which is worse than what the dedicated container
+        // already has. So this only asks: "does weekly cover the recent
+        // full-resolution daily window completely?" — not "does weekly
+        // reach as far back as daily's absolute earliest (compressed)
+        // entry?", which would almost always look like a gap and trigger
+        // needless/harmful rebuilds.
+        await (async function _hmEnsureWeeklyMonthlyCoverage() {
+          try {
+            var covDailyArr = resolveKey(DL_rawDailyMap, key, origName);
+            if (!covDailyArr || covDailyArr.length < 10) return;
+            var covDailySorted = covDailyArr.slice().sort(function(a, b) {
+              var da = a.substring(4, 8) + a.substring(2, 4) + a.substring(0, 2);
+              var db = b.substring(4, 8) + b.substring(2, 4) + b.substring(0, 2);
+              return da < db ? -1 : da > db ? 1 : 0;
+            });
+            // Recent-window floor: ~34 months back (slightly inside the 36
+            // month raw-daily boundary, so this only ever looks at daily
+            // data that's guaranteed full-resolution, never a compressed
+            // synthetic entry).
+            var covRecentFloor = new Date();
+            covRecentFloor.setMonth(covRecentFloor.getMonth() - 34);
+            var covDailyRecentCount = 0, covDailyRecentEarliest = null;
+            for (var covI = 0; covI < covDailySorted.length; covI++) {
+              var covDs = covDailySorted[covI].split('|')[0];
+              var covDt = new Date(+covDs.substring(4,8), +covDs.substring(2,4)-1, +covDs.substring(0,2));
+              if (covDt >= covRecentFloor) {
+                covDailyRecentCount++;
+                if (!covDailyRecentEarliest || covDt < covDailyRecentEarliest) covDailyRecentEarliest = covDt;
+              }
+            }
+            if (covDailyRecentCount < 20) return; // not enough recent raw daily data to compare against
+            var covWeeklyArr = DL_rawWeeklyMap ? resolveKey(DL_rawWeeklyMap, key, origName) : null;
+            var covNeedsRebuild = false;
+            if (!covWeeklyArr || covWeeklyArr.length < 5) {
+              covNeedsRebuild = true;
+            } else {
+              var covWeeklySorted = covWeeklyArr.slice().sort();
+              var covWeeklyEarliest = covWeeklySorted[0].split('|')[0];
+              var covWeeklyEarliestDate = new Date(+covWeeklyEarliest.substring(4,8), +covWeeklyEarliest.substring(2,4)-1, +covWeeklyEarliest.substring(0,2));
+              // Weekly should start within ~2 months of daily's recent-
+              // window earliest date (slack for week-bucket alignment and
+              // the 34 vs 36 month margin above); anything wider means
+              // weekly is missing part of the full-resolution recent
+              // window that daily actually has.
+              if ((covWeeklyEarliestDate.getTime() - covDailyRecentEarliest.getTime()) / 86400000 > 60) covNeedsRebuild = true;
+            }
+            if (!covNeedsRebuild) return;
+            var covNormName = (key || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+            var covSingleFundCache = { dailyMap: {} };
+            covSingleFundCache.dailyMap[covNormName] = covDailyArr;
+            // Properly awaited — _buildWeeklyMonthlyMapsAsync chunks its
+            // work via setTimeout internally, so its callback (not the
+            // call itself) is when results actually exist.
+            await new Promise(function(resolve) {
+              window._buildWeeklyMonthlyMapsAsync(covSingleFundCache, null, resolve);
+            });
+            var covFreshW = covSingleFundCache.weeklyMap && covSingleFundCache.weeklyMap[covNormName];
+            var covFreshM = covSingleFundCache.monthlyMap && covSingleFundCache.monthlyMap[covNormName];
+            // Merge strategy: keep the EXISTING weekly/monthly bars for
+            // anything older than the recent floor (that's the dedicated
+            // container's own older history, still authoritative), and
+            // only splice in the freshly-rebuilt bars for the recent
+            // window — rather than replacing the whole series, which
+            // would discard genuine older weekly/monthly history this
+            // fund's dedicated container had that daily's compressed
+            // portion can no longer reproduce at full resolution.
+            function covMergeRecent(existingArr, freshArr) {
+              if (!freshArr || !freshArr.length) return existingArr || [];
+              var freshEarliestStr = freshArr[0].split('|')[0];
+              var freshEarliestDate = new Date(+freshEarliestStr.substring(4,8), +freshEarliestStr.substring(2,4)-1, +freshEarliestStr.substring(0,2));
+              var keptOld = (existingArr || []).filter(function(e) {
+                var eDs = e.split('|')[0];
+                var eDt = new Date(+eDs.substring(4,8), +eDs.substring(2,4)-1, +eDs.substring(0,2));
+                return eDt < freshEarliestDate;
+              });
+              return keptOld.concat(freshArr);
+            }
+            if (covFreshW && covFreshW.length > 0) {
+              var covMergedW = covMergeRecent(covWeeklyArr, covFreshW);
+              if (!DL_rawWeeklyMap) DL_rawWeeklyMap = {};
+              DL_rawWeeklyMap[covNormName] = covMergedW;
+              window._idbGet(window.DEEP_CACHE_KEY_WEEKLY, function(existingW) {
+                var mergedW = (existingW && existingW.weeklyMap) ? existingW.weeklyMap : {};
+                mergedW[covNormName] = covMergedW;
+                window._idbPut(window.DEEP_CACHE_KEY_WEEKLY, { weeklyMap: mergedW });
+              });
+            }
+            if (covFreshM && covFreshM.length > 0) {
+              var covExistingM = DL_rawMonthlyMap ? resolveKey(DL_rawMonthlyMap, key, origName) : null;
+              var covMergedM = covMergeRecent(covExistingM, covFreshM);
+              if (!DL_rawMonthlyMap) DL_rawMonthlyMap = {};
+              DL_rawMonthlyMap[covNormName] = covMergedM;
+              window._idbGet(window.DEEP_CACHE_KEY_MONTHLY, function(existingM) {
+                var mergedM = (existingM && existingM.monthlyMap) ? existingM.monthlyMap : {};
+                mergedM[covNormName] = covMergedM;
+                window._idbPut(window.DEEP_CACHE_KEY_MONTHLY, { monthlyMap: mergedM });
+              });
+            }
+          } catch (_covErr) { /* non-critical — worst case, weekly/monthly stay as they were */ }
+        })();
 
         // ═══════════════════════════════════════════════════════════════════
         // CONTAINER 3: DAILY_ — DAILY DATA PROCESSING
@@ -8202,9 +8383,9 @@ async function drawHilegaMilega() {
         var _dailyBtn = document.querySelector('#hmBtnRow button[data-period="daily"]');
         var _weeklyBtn = document.querySelector('#hmBtnRow button[data-period="weekly"]');
         var _monthlyBtn = document.querySelector('#hmBtnRow button[data-period="monthly"]');
-        if (_dailyBtn) _dailyBtn.textContent = 'Daily (' + _cntDaily + ')';
-        if (_weeklyBtn) _weeklyBtn.textContent = 'Weekly (' + _cntWeekly + ')';
-        if (_monthlyBtn) _monthlyBtn.textContent = 'Monthly (' + _cntMonthly + ')';
+        if (_dailyBtn) _dailyBtn.textContent = 'DAILY';
+        if (_weeklyBtn) _weeklyBtn.textContent = 'WEEKLY';
+        if (_monthlyBtn) _monthlyBtn.textContent = 'MONTHLY';
 
         hmRefreshPeriodButtonStates(viewData, _cntDaily, _cntWeekly, _cntMonthly);
         hmRefreshTfButtonStates(hmAvailDaysFromHist(viewData));
@@ -8249,6 +8430,8 @@ async function drawHilegaMilega() {
         }
         var navs = viewData.slice(slicedIdx).map(function(d) { return d.nav; });
         var dates = viewData.slice(slicedIdx).map(function(d) { return d.date; });
+        var highs = viewData.slice(slicedIdx).map(function(d) { return d.high != null ? d.high : d.nav; });
+        var lows = viewData.slice(slicedIdx).map(function(d) { return d.low != null ? d.low : d.nav; });
         var n = slicedLen;
         var rSliced = rsi.slice(slicedIdx);
         var wSliced = wma.slice(slicedIdx);
@@ -8283,11 +8466,43 @@ async function drawHilegaMilega() {
         }
         var sma8 = sma(navs, 8);
 
+        // ── SwiftEdge SMA(48) high/low band, for Pane 1 overlay ──
+        // Ported from the uploaded TradingView Pine Script, PART 1
+        // (TrendCraft ICT SwiftEdge). Scope, per request: the SMA(48)
+        // high/low band + green/red/purple trend-regime fill only — not
+        // the BOS/MSS break-of-structure pivot lines, which are a
+        // separate, much more involved piece of that script.
+        //   smaLow  = SMA(48) of the LOW price
+        //   smaHigh = SMA(48) of the HIGH price
+        //   isAboveBoth = close > smaHigh AND close > smaLow  → bullish (green)
+        //   isBelowBoth = close < smaHigh AND close < smaLow  → bearish (red)
+        //   otherwise (price inside the band)                → neutral (purple)
+        // BUG FIX: computed on the FULL unsliced viewData history, then
+        // sliced to the visible window — same fix and same reason as the
+        // Dual RSI MTF pane below: computing SMA(48) directly on the
+        // already-sliced highs/lows forced 48 bars of warmup INSIDE the
+        // visible window, leaving a large gap at the start of short
+        // timeframes (e.g. 3M) even with ~10 years of prior history
+        // available to warm up from.
+        var swiftEdgeFullHighs = viewData.map(function(d) { return d.high != null ? d.high : d.nav; });
+        var swiftEdgeFullLows = viewData.map(function(d) { return d.low != null ? d.low : d.nav; });
+        var swiftEdgeSmaLow = sma(swiftEdgeFullLows, 48).slice(slicedIdx);
+        var swiftEdgeSmaHigh = sma(swiftEdgeFullHighs, 48).slice(slicedIdx);
+        var swiftEdgeRegime = new Array(n).fill(null); // 'up' | 'down' | 'mid' | null (insufficient data)
+        for (var _sei = 0; _sei < n; _sei++) {
+          var _seHi = swiftEdgeSmaHigh[_sei], _seLo = swiftEdgeSmaLow[_sei], _seClose = navs[_sei];
+          if (_seHi == null || _seLo == null || _seClose == null) continue;
+          if (_seClose > _seHi && _seClose > _seLo) swiftEdgeRegime[_sei] = 'up';
+          else if (_seClose < _seHi && _seClose < _seLo) swiftEdgeRegime[_sei] = 'down';
+          else swiftEdgeRegime[_sei] = 'mid';
+        }
+
         // ── RRG Hybrid series for Pane 3 (TradingView-style) ──
         var benchSel = document.getElementById('hmBenchSelect');
-        var benchName = (benchSel && benchSel.value) || 'nifty 50';
+        var benchName = (benchSel && benchSel.value) || 'mtf';
+        var pane3Mode = benchName === 'mtf' ? 'mtf' : 'rs';
         var benchLabelEl = document.getElementById('hmPane3Label');
-        if (benchLabelEl) benchLabelEl.textContent = 'RS vs ' + (benchName === 'nifty 500' ? 'Nifty 500' : 'Nifty 50');
+        if (benchLabelEl) benchLabelEl.textContent = pane3Mode === 'mtf' ? 'Dual RSI 50/8 MTF Timing' : ('RS vs ' + (benchName === 'nifty 500' ? 'Nifty 500' : 'Nifty 50'));
         var rsRatio = new Array(n).fill(null);
         var rsHMA = new Array(n).fill(null);
         var rsi14 = new Array(n).fill(null);
@@ -8298,7 +8513,11 @@ async function drawHilegaMilega() {
         var rrgStatus = new Array(n).fill(null);
         var buySignals = new Array(n).fill(null);
         var exitSignals = new Array(n).fill(null);
-        try {
+        // RS-vs-benchmark computation only needed when the person has Pane 3
+        // set to one of the RS modes — skipped entirely for MTF mode (the
+        // new default) so switching to MTF doesn't pay for work whose
+        // output won't be shown.
+        if (pane3Mode === 'rs') try {
           var benchEntries = EE.dailyEntriesFor(benchName);
           if (window._HM_DEBUG) {
             var _selfCheckKey = key; // e.g. 'nifty500'
@@ -8450,6 +8669,93 @@ async function drawHilegaMilega() {
           }
         } catch (_rsErr) { /* leave series as nulls */ }
 
+        // ── Dual RSI 50/8 MTF Timing (Daily + Weekly) — PART 5 port ──
+        // Ported from the uploaded TradingView Pine Script. Computed on the
+        // FUND'S OWN price series (unlike Pane 3's RS-vs-benchmark mode
+        // above) — this is a timing/momentum view of the fund itself, not
+        // a relative-strength comparison.
+        //   rsi_trend  = RSI(50) on daily closes  — the "trend" line
+        //   rsi_trigger= RSI(8)  on daily closes  — the "trigger" line
+        //   rsi_trend_W= RSI(50) on WEEKLY closes (Pine's request.security
+        //                "W" call) — approximated here via this index's
+        //                own weekly database, matching how Pane 2 already
+        //                sources weekly-period data elsewhere in this
+        //                function, so no new data source is introduced.
+        //   uptrend/downtrend = both daily AND weekly RSI(50) agree
+        //   buy/sell trigger  = RSI(8) crosses RSI(50) (or crosses 50 while
+        //                       already on the trend side), gated by the
+        //                       daily+weekly trend agreement above — exact
+        //                       same condition A/B logic as the script.
+        var mtfRsiTrend = new Array(n).fill(null);
+        var mtfRsiTrigger = new Array(n).fill(null);
+        var mtfUptrend = new Array(n).fill(null);
+        var mtfDowntrend = new Array(n).fill(null);
+        var mtfBuySignals = new Array(n).fill(null);
+        var mtfSellSignals = new Array(n).fill(null);
+        if (pane3Mode === 'mtf') try {
+          // BUG FIX: compute on the FULL unsliced history (viewData), not
+          // the already-sliced navs array — same pattern Pane 2's RSI(9)
+          // already correctly uses (see 'var rsi = EE.calcRSISeries(viewData...'
+          // above). RSI(50) needs 50 bars of warmup; computing it directly
+          // on a short visible window (e.g. 3M \u2248 65 daily bars) left only
+          // ~15 real values and a large blank gap at the start of the pane,
+          // even though ~10 years of prior history existed to warm up from.
+          var mtfFullTrend = EE.calcRSISeries(viewData.map(function(d) { return d.nav; }), 50);
+          var mtfFullTrigger = EE.calcRSISeries(viewData.map(function(d) { return d.nav; }), 8);
+          mtfRsiTrend = mtfFullTrend.slice(slicedIdx);
+          mtfRsiTrigger = mtfFullTrigger.slice(slicedIdx);
+          // Weekly RSI(50): compute on this index's own weekly database
+          // (same DB_weeklyDatabase already loaded for the period selector
+          // above), independent of whichever period Pane 1 is currently
+          // showing — Pine's request.security("W",...) always evaluates on
+          // the weekly timeframe regardless of the chart's own timeframe,
+          // so this mirrors that rather than reusing the Daily-period rsi.
+          var mtfWeeklyEntries = resolveKey(DB_weeklyDatabase, key, origName);
+          var mtfWeeklyRsiTrendFull = null, mtfWeeklyDateList = null;
+          if (mtfWeeklyEntries && mtfWeeklyEntries.length > 55) {
+            var mtfWeeklyParsed = mtfWeeklyEntries.map(parseEntry);
+            mtfWeeklyRsiTrendFull = EE.calcRSISeries(mtfWeeklyParsed.map(function(d) { return d.nav; }), 50);
+            mtfWeeklyDateList = mtfWeeklyParsed.map(function(d) { return d.date.split('/').reverse().join(''); }); // -> YYYYMMDD, ascending assumed same order as mtfWeeklyEntries
+          }
+          // As-of lookup: for each daily bar, find the most recent completed
+          // WEEKLY RSI(50) value as of that date (last weekly bar whose date
+          // <= the daily bar's date) — this is what "current weekly RSI"
+          // means for a bar mid-week, same convention as Pine's HTF security
+          // call (uses the last confirmed HTF value).
+          var mtfMakeYMD = function(ddmmyyyy) { var p = ddmmyyyy.split('/'); return p[2] + p[1] + p[0]; };
+          var mtfWeeklyRsiAsOf = new Array(n).fill(null);
+          if (mtfWeeklyRsiTrendFull && mtfWeeklyDateList) {
+            var mtfWIdx = 0;
+            for (var mwi = 0; mwi < n; mwi++) {
+              var mwYmd = mtfMakeYMD(dates[mwi]);
+              while (mtfWIdx < mtfWeeklyDateList.length - 1 && mtfWeeklyDateList[mtfWIdx + 1] <= mwYmd) mtfWIdx++;
+              if (mtfWeeklyDateList[mtfWIdx] <= mwYmd) mtfWeeklyRsiAsOf[mwi] = mtfWeeklyRsiTrendFull[mtfWIdx];
+            }
+          }
+          var mtfSignalState = 0; // 1 = last was buy, -1 = last was sell, 0 = neutral — same cooldown pattern as the script
+          for (var mi = 1; mi < n; mi++) {
+            var mTrendD = mtfRsiTrend[mi], mTrigD = mtfRsiTrigger[mi];
+            var mTrendDPrev = mtfRsiTrend[mi - 1], mTrigDPrev = mtfRsiTrigger[mi - 1];
+            if (mTrendD == null || mTrigD == null) continue;
+            var mTrendW = mtfWeeklyRsiAsOf[mi];
+            var useMtf = mTrendW != null; // if no weekly data resolves, fall back to daily-only trend agreement (use_mtf effectively off for that bar)
+            var up = useMtf ? (mTrendD > 50 && mTrendW > 50) : (mTrendD > 50);
+            var down = useMtf ? (mTrendD < 50 && mTrendW < 50) : (mTrendD < 50);
+            mtfUptrend[mi] = up; mtfDowntrend[mi] = down;
+            if (mTrendDPrev == null || mTrigDPrev == null) continue;
+            var buyCondA = mTrigDPrev <= mTrendDPrev && mTrigD > mTrendD; // crossover(trigger, trend)
+            var buyCondB = mTrigD > mTrendD && mTrigDPrev <= 50 && mTrigD > 50; // trigger>trend AND crossover(trigger,50)
+            var sellCondA = mTrigDPrev >= mTrendDPrev && mTrigD < mTrendD; // crossunder(trigger, trend)
+            var sellCondB = mTrigD < mTrendD && mTrigDPrev >= 50 && mTrigD < 50; // trigger<trend AND crossunder(trigger,50)
+            var buyRaw = (buyCondA || buyCondB) && up;
+            var sellRaw = (sellCondA || sellCondB) && down;
+            var buyFires = buyRaw && mtfSignalState !== 1;
+            var sellFires = sellRaw && mtfSignalState !== -1;
+            if (buyFires) { mtfBuySignals[mi] = true; mtfSignalState = 1; }
+            if (sellFires) { mtfSellSignals[mi] = true; mtfSignalState = -1; }
+          }
+        } catch (_mtfErr) { /* leave series as nulls */ }
+
         // ── Shared multi-pane canvas draw helper ──
         // paneCfg: { canvasId, hudId, series: [{data, color, width}], yMin, yMax,
         //   hLines: [{val,color,dash}], hudFormat(idx) -> html string,
@@ -8542,19 +8848,57 @@ async function drawHilegaMilega() {
           return chart;
         }
 
-        // ── PANE 1: Price/NAV (green above SMA8, red below) + SMA(8) (black) ──
+        // ── PANE 1: Price/NAV (green above SMA8, red below) + SMA(8) (black) + SwiftEdge SMA(48) band ──
         var pane1Chart = drawPane({
           canvasId: 'hmPane1Canvas', hudId: 'hmHud1',
           series: [
-            { data: sma8, color: '#000000', width: 1.5 }
+            { data: sma8, color: '#000000', width: 1.5 },
+            // Invisible (width 0) — included only so drawPane's automatic
+            // Y-axis range covers the SwiftEdge band too; the band itself
+            // is drawn manually below, behind the SMA8/price lines.
+            { data: swiftEdgeSmaHigh, color: 'transparent', width: 0 },
+            { data: swiftEdgeSmaLow, color: 'transparent', width: 0 }
           ],
           hudFormat: function(idx) {
             var nv = navs[idx], sv = sma8[idx], dt = dates[idx];
             var above = nv != null && sv != null && nv >= sv;
             var pCol = above ? '#1a8a1a' : '#cc0000';
-            return '<b>' + dt + '</b><br><span style="color:' + pCol + '">NAV: ' + (nv != null ? nv.toFixed(2) : '\u2014') + '</span> &nbsp; SMA8: ' + (sv != null ? sv.toFixed(2) : '\u2014');
+            var seR = swiftEdgeRegime[idx];
+            var seLabel = seR === 'up' ? '<span style="color:#1a8a1a">SwiftEdge: Bull</span>' : seR === 'down' ? '<span style="color:#cc0000">SwiftEdge: Bear</span>' : seR === 'mid' ? '<span style="color:#7c3aed">SwiftEdge: Neutral</span>' : '';
+            return '<b>' + dt + '</b><br><span style="color:' + pCol + '">NAV: ' + (nv != null ? nv.toFixed(2) : '\u2014') + '</span> &nbsp; SMA8: ' + (sv != null ? sv.toFixed(2) : '\u2014') + (seLabel ? '<br>' + seLabel : '');
           }
         });
+        // Draw SwiftEdge SMA(48) high/low band FIRST — behind price/SMA8 —
+        // as a filled region between smaHigh and smaLow, colored by regime.
+        if (pane1Chart) {
+          var p1se = pane1Chart, ctx1se = p1se.ctx;
+          for (var sei2 = 1; sei2 < n; sei2++) {
+            if (swiftEdgeSmaHigh[sei2] == null || swiftEdgeSmaLow[sei2] == null ||
+                swiftEdgeSmaHigh[sei2 - 1] == null || swiftEdgeSmaLow[sei2 - 1] == null) continue;
+            var seRegime = swiftEdgeRegime[sei2];
+            var seFillCol = seRegime === 'up' ? 'rgba(26,138,74,0.16)' : seRegime === 'down' ? 'rgba(204,0,0,0.16)' : 'rgba(124,58,237,0.14)';
+            ctx1se.fillStyle = seFillCol;
+            ctx1se.beginPath();
+            ctx1se.moveTo(p1se.toX(sei2 - 1), p1se.toY(swiftEdgeSmaHigh[sei2 - 1]));
+            ctx1se.lineTo(p1se.toX(sei2), p1se.toY(swiftEdgeSmaHigh[sei2]));
+            ctx1se.lineTo(p1se.toX(sei2), p1se.toY(swiftEdgeSmaLow[sei2]));
+            ctx1se.lineTo(p1se.toX(sei2 - 1), p1se.toY(swiftEdgeSmaLow[sei2 - 1]));
+            ctx1se.closePath(); ctx1se.fill();
+          }
+          // Band edges (smaHigh/smaLow outlines), colored per-segment by regime
+          [swiftEdgeSmaHigh, swiftEdgeSmaLow].forEach(function(edgeSeries) {
+            for (var sei3 = 1; sei3 < n; sei3++) {
+              if (edgeSeries[sei3] == null || edgeSeries[sei3 - 1] == null) continue;
+              var seRegime3 = swiftEdgeRegime[sei3];
+              ctx1se.strokeStyle = seRegime3 === 'up' ? '#1a8a4a' : seRegime3 === 'down' ? '#cc0000' : '#7c3aed';
+              ctx1se.lineWidth = 1.2;
+              ctx1se.beginPath();
+              ctx1se.moveTo(p1se.toX(sei3 - 1), p1se.toY(edgeSeries[sei3 - 1]));
+              ctx1se.lineTo(p1se.toX(sei3), p1se.toY(edgeSeries[sei3]));
+              ctx1se.stroke();
+            }
+          });
+        }
         // Draw price line with green (above SMA8) / red (below SMA8) segments
         if (pane1Chart) {
           var p1 = pane1Chart, ctx1 = p1.ctx;
@@ -8588,7 +8932,8 @@ async function drawHilegaMilega() {
           }
         });
 
-        // ── PANE 3: RRG Hybrid (RS Ratio + HMA + Quadrant BG + Signals) ──
+        // ── PANE 3: mode-dependent — RRG Hybrid (RS mode) or Dual RSI MTF (MTF mode, default) ──
+        if (pane3Mode === 'rs') {
         // Compute y-axis range from rsRatio/rsHMA so drawPane can set up
         // coordinate mapping without drawing the lines (they're drawn later
         // with trend-colored segments).
@@ -8685,6 +9030,90 @@ async function drawHilegaMilega() {
           // Restore clean image for crosshair
           try { p3.cleanImg = ctx3.getImageData(0, 0, p3.canvas.width, p3.canvas.height); } catch(_e) {}
           p3.ctx.restore();
+        }
+        } else {
+        // ── Dual RSI 50/8 MTF Timing render (default Pane 3 view) ──
+        // Fixed 0-100 scale (standard RSI range), matching Pane 2's own
+        // fixed scale rather than an auto/percentile range — RSI is always
+        // 0-100 regardless of the underlying price series.
+        var pane3Chart = drawPane({
+          canvasId: 'hmPane3Canvas', hudId: 'hmHud3',
+          series: [],
+          yMin: 0, yMax: 100,
+          hLines: [
+            { val: 50, color: '#000004', dash: [] }
+          ],
+          percentileScale: false,
+          hudFormat: function(idx) {
+            var dt = dates[idx];
+            var upv = mtfUptrend[idx], dnv = mtfDowntrend[idx];
+            var regime = upv ? '<span style="color:#1a8a4a">Uptrend (D+W)</span>' : dnv ? '<span style="color:#cc0000">Downtrend (D+W)</span>' : '<span style="color:#888">Mixed</span>';
+            return '<b>' + dt + '</b>' +
+              '<br>' + regime;
+          }
+        });
+        if (pane3Chart) {
+          var p3m = pane3Chart, ctx3m = p3m.ctx;
+          // Uptrend/downtrend background shading (mirrors bgcolor() calls in the script)
+          for (var mbi = 1; mbi < n; mbi++) {
+            var mx1 = p3m.toX(mbi - 1), mx2 = p3m.toX(mbi);
+            var mBg = mtfUptrend[mbi] ? 'rgba(26,138,74,0.07)' : mtfDowntrend[mbi] ? 'rgba(204,0,0,0.07)' : null;
+            if (mBg) { ctx3m.fillStyle = mBg; ctx3m.fillRect(mx1, p3m.pad.t, mx2 - mx1 + 1, p3m.H - p3m.pad.t - p3m.pad.b); }
+          }
+          // Cloud fill between trigger(8) and trend(50) — green when trigger
+          // above trend, red when below (same visual as the script's
+          // mtf_fill_color)
+          for (var mfi = 1; mfi < n; mfi++) {
+            if (mtfRsiTrend[mfi] == null || mtfRsiTrigger[mfi] == null || mtfRsiTrend[mfi - 1] == null || mtfRsiTrigger[mfi - 1] == null) continue;
+            var mFillCol = mtfRsiTrigger[mfi] > mtfRsiTrend[mfi] ? 'rgba(104,245,109,0.35)' : 'rgba(250,99,99,0.35)';
+            ctx3m.fillStyle = mFillCol;
+            ctx3m.beginPath();
+            ctx3m.moveTo(p3m.toX(mfi - 1), p3m.toY(mtfRsiTrend[mfi - 1]));
+            ctx3m.lineTo(p3m.toX(mfi), p3m.toY(mtfRsiTrend[mfi]));
+            ctx3m.lineTo(p3m.toX(mfi), p3m.toY(mtfRsiTrigger[mfi]));
+            ctx3m.lineTo(p3m.toX(mfi - 1), p3m.toY(mtfRsiTrigger[mfi - 1]));
+            ctx3m.closePath(); ctx3m.fill();
+          }
+          // Trend RSI(50) line — red, per script (color.rgb(252,2,2))
+          ctx3m.strokeStyle = 'rgb(252,2,2)'; ctx3m.lineWidth = 1.3; ctx3m.beginPath();
+          var mTrendStarted = false;
+          for (var mti = 0; mti < n; mti++) {
+            if (mtfRsiTrend[mti] == null) continue;
+            if (!mTrendStarted) { ctx3m.moveTo(p3m.toX(mti), p3m.toY(mtfRsiTrend[mti])); mTrendStarted = true; }
+            else ctx3m.lineTo(p3m.toX(mti), p3m.toY(mtfRsiTrend[mti]));
+          }
+          ctx3m.stroke();
+          // Trigger RSI(8) line — green, per script (color.rgb(4,248,4))
+          ctx3m.strokeStyle = 'rgb(4,248,4)'; ctx3m.lineWidth = 1.3; ctx3m.beginPath();
+          var mTrigStarted = false;
+          for (var mgi = 0; mgi < n; mgi++) {
+            if (mtfRsiTrigger[mgi] == null) continue;
+            if (!mTrigStarted) { ctx3m.moveTo(p3m.toX(mgi), p3m.toY(mtfRsiTrigger[mgi])); mTrigStarted = true; }
+            else ctx3m.lineTo(p3m.toX(mgi), p3m.toY(mtfRsiTrigger[mgi]));
+          }
+          ctx3m.stroke();
+          // Buy/Sell triangle markers, per the 'yes' answer on adding
+          // markers where the MTF signal fires — drawn at the trigger
+          // line's position, matching the script's location.bottom/top
+          // triangleup/triangledown shapes in spirit.
+          for (var mmi = 0; mmi < n; mmi++) {
+            if (mtfBuySignals[mmi] && mtfRsiTrigger[mmi] != null) {
+              var mbx = p3m.toX(mmi), mby = p3m.toY(mtfRsiTrigger[mmi]);
+              ctx3m.fillStyle = '#16a34a';
+              ctx3m.beginPath();
+              ctx3m.moveTo(mbx, mby + 6); ctx3m.lineTo(mbx - 4, mby + 14); ctx3m.lineTo(mbx + 4, mby + 14);
+              ctx3m.closePath(); ctx3m.fill();
+            }
+            if (mtfSellSignals[mmi] && mtfRsiTrigger[mmi] != null) {
+              var msx = p3m.toX(mmi), msy = p3m.toY(mtfRsiTrigger[mmi]);
+              ctx3m.fillStyle = '#ef4444';
+              ctx3m.beginPath();
+              ctx3m.moveTo(msx, msy - 6); ctx3m.lineTo(msx - 4, msy - 14); ctx3m.lineTo(msx + 4, msy - 14);
+              ctx3m.closePath(); ctx3m.fill();
+            }
+          }
+          try { p3m.cleanImg = ctx3m.getImageData(0, 0, p3m.canvas.width, p3m.canvas.height); } catch(_e) {}
+        }
         }
 
         // ── Synced crosshair across all 3 panes on mousemove ──
