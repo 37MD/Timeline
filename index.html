@@ -36,55 +36,72 @@
    Variables, reset, app shell, tabs, tables, charts, responsive
    ================================================================ */
 /* ── 2.1 CSS Variables & Reset ── */
-:root{--bg:#ffffff;--surface:#ffffff;--surface2:#ffffff;--border:#e0e0e0;--border2:#cccccc;--text:#000000;--text-dim:#000000;--text-faint:#000000;--orange:#d4880f;--orange-dim:#ffffff;--green:#1a8a4a;--green-dim:#d4f0e0;--red:#cc3344;--red-dim:#f0d4d8;--amber:#b8860b;--amber-dim:#f0e8c8;--blue:#3a7abf;--blue-dim:#d4e4f4;--mono:'Segoe UI Mono','Courier New',monospace;--sans:'Segoe UI',Arial,sans-serif}
+:root{
+  --bg:#f7f8fb;--surface:#ffffff;--surface2:#f2f3f8;
+  --border:#e8eaf0;--border2:#dde0ea;
+  --text:#151726;--text-dim:#5b5f76;--text-faint:#9aa0b4;
+  --accent:#4f5fe0;--accent-dim:#eceeff;--accent-hover:#3f4dc7;
+  --orange:#4f5fe0;--orange-dim:#eceeff;
+  --green:#1a9d63;--green-dim:#e2f7ec;
+  --red:#e0455f;--red-dim:#fdeaee;
+  --amber:#c9891a;--amber-dim:#fbf1de;
+  --blue:#4f5fe0;--blue-dim:#eceeff;
+  --mono:'Segoe UI Mono','Courier New',monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',Roboto,Arial,sans-serif;
+  --radius-sm:8px;--radius:14px;--radius-lg:20px;
+  --shadow-sm:0 1px 3px rgba(21,23,38,0.06),0 1px 2px rgba(21,23,38,0.04);
+  --shadow:0 4px 14px rgba(21,23,38,0.08),0 1px 3px rgba(21,23,38,0.05);
+  --shadow-lg:0 12px 32px rgba(21,23,38,0.12),0 2px 6px rgba(21,23,38,0.06);
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 #root{position:relative;z-index:1}
 /* ── 2.2 App Shell: Header, Live Dot ── */
-.app-header{background:var(--surface);border-bottom:1px solid var(--border2);padding:10px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px)}
+.app-header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px)}
 .brand{display:flex;align-items:center;gap:12px}
-.brand-icon{width:36px;height:36px;background:var(--orange);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px;font-weight:600;color:#000;clip-path:polygon(10% 0%,90% 0%,100% 10%,100% 90%,90% 100%,10% 100%,0% 90%,0% 10%)}
-.brand-text h1{font-size:18px;font-weight:800;color:var(--text);line-height:1}
-.brand-text p{font-size:11px;color:var(--text-dim);font-family:var(--mono);margin-top:2px}
+.brand-icon{width:38px;height:38px;background:var(--accent);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-size:13px;font-weight:700;color:#fff;box-shadow:var(--shadow-sm)}
+.brand-text h1{font-size:18px;font-weight:700;color:var(--text);line-height:1;letter-spacing:-0.01em}
+.brand-text p{font-size:11px;color:var(--text-dim);font-family:var(--sans);margin-top:3px}
 .header-right{display:flex;align-items:center;gap:16px}
-.live-dot{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--text-dim)}
+.live-dot{display:flex;align-items:center;gap:6px;font-family:var(--sans);font-size:11px;color:var(--text-dim)}
 .live-dot::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--text-faint)}
 .live-dot.active::before{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.5s infinite}
-.ld-backup-btn{display:flex;align-items:center;gap:4px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text);background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;cursor:pointer;white-space:nowrap}
-.ld-backup-btn:active{opacity:.65}
-.ld-scan-btn{display:flex;align-items:center;gap:4px;font-family:var(--mono);font-size:12px;font-weight:700;color:#000;background:var(--orange);border:1px solid var(--orange);border-radius:6px;padding:7px 16px;cursor:pointer;white-space:nowrap;margin-left:auto}
-.ld-scan-btn:active{opacity:.65}
-.ld-backup-msg{font-family:var(--mono);font-size:10px;color:var(--green);opacity:0;transition:opacity .3s;white-space:nowrap}
+.ld-backup-btn{display:flex;align-items:center;gap:4px;font-family:var(--sans);font-size:11px;font-weight:600;color:var(--text);background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:7px 12px;cursor:pointer;white-space:nowrap;box-shadow:var(--shadow-sm);transition:transform .1s,box-shadow .15s}
+.ld-backup-btn:active{transform:scale(.97);box-shadow:none}
+.ld-scan-btn{display:flex;align-items:center;gap:4px;font-family:var(--sans);font-size:12px;font-weight:600;color:#fff;background:var(--accent);border:none;border-radius:var(--radius-sm);padding:8px 18px;cursor:pointer;white-space:nowrap;margin-left:auto;box-shadow:var(--shadow-sm);transition:transform .1s,background .15s}
+.ld-scan-btn:active{transform:scale(.97);background:var(--accent-hover)}
+.ld-backup-msg{font-family:var(--sans);font-size:10px;color:var(--green);opacity:0;transition:opacity .3s;white-space:nowrap}
 /* Slim toolbar row for Save/Restore — kept separate from .app-header so the
    title never overlaps these buttons on narrow phone screens. */
-.ld-toolbar{display:flex;align-items:center;gap:10px;background:var(--surface2);border-bottom:1px solid var(--border2);padding:8px 12px;position:sticky;top:0;z-index:99}
+.ld-toolbar{display:flex;align-items:center;gap:10px;background:var(--surface2);border-bottom:1px solid var(--border);padding:8px 12px;position:sticky;top:0;z-index:99}
 .ld-toolbar .ld-backup-btn{padding:7px 14px;font-size:12px;min-height:32px}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 /* ── 2.3 Layout ── */
 .main-wrap{max-width:1500px;margin:0 auto;padding:10px 20px}
 /* ── 2.4 Controls Bar & Buttons ── */
-.controls-bar{background:var(--surface);border:1px solid var(--border2);padding:10px 14px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-.controls-left{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.btn-scan{background:var(--orange);color:#000;font-family:var(--mono);font-size:12px;font-weight:600;padding:9px 22px;border:none;cursor:pointer;letter-spacing:1px;text-transform:uppercase;clip-path:polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%)}
-.btn-scan:hover{background:#ffb87d;transform:translateY(-1px)}
-.btn-stop{background:transparent;color:var(--red);font-family:var(--mono);font-size:12px;font-weight:600;padding:9px 22px;border:1px solid var(--red);cursor:pointer;letter-spacing:1px;text-transform:uppercase}
+.controls-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.controls-left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn-scan{background:var(--accent);color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;padding:10px 22px;border:none;cursor:pointer;letter-spacing:0.2px;border-radius:var(--radius-sm);box-shadow:var(--shadow-sm);transition:transform .1s,background .15s}
+.btn-scan:hover{background:var(--accent-hover);transform:translateY(-1px)}
+.btn-stop{background:var(--red-dim);color:var(--red);font-family:var(--sans);font-size:13px;font-weight:600;padding:10px 22px;border:1px solid transparent;cursor:pointer;letter-spacing:0.2px;border-radius:var(--radius-sm);transition:transform .1s}
+.btn-stop:hover{transform:translateY(-1px)}
 .filter-group{display:flex;align-items:center;gap:8px}
-.filter-label{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase}
-.filter-select{background:var(--surface2);color:var(--text);border:1px solid var(--border2);font-family:var(--mono);font-size:12px;padding:6px 10px;cursor:pointer;outline:none;appearance:none;padding-right:28px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23000000'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
-.filter-select:focus{border-color:var(--orange)}
+.filter-label{font-family:var(--sans);font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:0.3px}
+.filter-select{background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:var(--radius-sm);font-family:var(--sans);font-size:12px;padding:7px 10px;cursor:pointer;outline:none;appearance:none;padding-right:28px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23151726'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+.filter-select:focus{border-color:var(--accent)}
 /* ── 2.4a Progress Bar ── */
-.progress-wrap{background:var(--surface);border:1px solid var(--border2);padding:10px 18px;border-top:none;margin-top:-20px;margin-bottom:20px}
+.progress-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:12px 18px;margin-top:-10px;margin-bottom:20px}
 .progress-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.progress-label{font-family:var(--mono);font-size:11px;color:var(--text-dim)}
-.progress-pct{font-family:var(--mono);font-size:11px;color:var(--orange);font-weight:600}
-.progress-track{height:3px;background:var(--border2);width:100%}
-.progress-fill{height:100%;background:linear-gradient(90deg,var(--orange),#ffcc66);transition:width .3s ease;box-shadow:0 0 8px var(--orange)}
+.progress-label{font-family:var(--sans);font-size:11px;color:var(--text-dim)}
+.progress-pct{font-family:var(--sans);font-size:11px;color:var(--accent);font-weight:600}
+.progress-track{height:5px;background:var(--surface2);width:100%;border-radius:99px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),#7b86ea);transition:width .3s ease;border-radius:99px}
 /* ── 2.5 Scanner Table & Freeze Columns ── */
-.table-wrap{border:1px solid var(--border2);overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 160px);background:var(--surface);position:relative}
+.table-wrap{border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-sm);overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 160px);background:var(--surface);position:relative}
 table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
 /* ── Freeze: sticky headers — Scanner only ── */
-#tab-scanner thead th{padding:11px 12px;font-family:var(--mono);font-size:10px;font-weight:600;color:#000;letter-spacing:1.2px;text-transform:uppercase;border-right:1px solid var(--border);border-bottom:1px solid var(--border2);white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0;z-index:3;background:var(--surface2)}
-#tab-scanner thead tr.group-header th{padding:6px 12px;font-size:9px;letter-spacing:1.5px;color:var(--text);background:var(--surface);border-bottom:2px solid var(--border2);cursor:default;top:0;z-index:4}
+#tab-scanner thead th{padding:11px 12px;font-family:var(--mono);font-size:10px;font-weight:600;color:var(--text-dim);letter-spacing:0.8px;text-transform:uppercase;border-right:1px solid var(--border);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0;z-index:3;background:var(--surface2)}
+#tab-scanner thead tr.group-header th{padding:6px 12px;font-size:9px;letter-spacing:1px;color:var(--text);background:var(--surface);border-bottom:2px solid var(--border);cursor:default;top:0;z-index:4}
 #tab-scanner thead tr.group-header th:first-child,
 #tab-scanner thead tr.group-header th:nth-child(2){z-index:6}
 #tab-scanner thead tr:not(.group-header) th{top:26px!important}
@@ -211,19 +228,24 @@ th.ha-sep,td.ha-sep{border-left:3px solid var(--orange)!important}
 @media(max-width:600px){#pt-wrap td,#rsi-wrap td{font-size:9px!important;padding:4px 6px!important}}
 @media(max-width:480px){#pt-wrap td,#rsi-wrap td{font-size:8px!important}}
 
-/* ── 2.11 Tab Navigation ── */
-.app-tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border2);padding:0 0 0 24px;min-height:42px;position:relative;z-index:200}
-.app-tabs-btns{display:flex;flex-wrap:wrap;gap:0;flex:1;align-content:flex-start}
-.app-tabs-right{display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;border-left:1px solid var(--border2);padding:4px 12px;min-width:72px}
-.app-tabs-right #runAllStatus{font-family:var(--mono);font-size:9px;color:var(--orange);white-space:nowrap}
-#runAllBtn{background:var(--orange);color:#000;font-family:var(--mono);font-size:16px;font-weight:800;padding:8px 12px;border:none;cursor:pointer;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;border-radius:4px;width:100%;text-align:center}
-.tab-btn{font-family:var(--mono);font-size:16px;font-weight:800;padding:10px 20px;border:none;background:transparent;color:#000000;cursor:pointer;letter-spacing:1px;text-transform:uppercase;border-bottom:2px solid transparent;transition:all .15s}
-.tab-btn:hover{color:var(--text);background:var(--surface2)}
-.tab-btn.active{color:var(--orange);border-bottom-color:var(--orange);background:var(--orange-dim)}
-.tab-panel{display:none}
+/* ── 2.11 Bottom Tab Navigation (TradingView-style) ── */
+body{}
+.bottom-nav{display:flex;position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -2px 12px rgba(21,23,38,0.06);z-index:500;padding:4px 4px calc(4px + env(safe-area-inset-bottom,0px))}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-family:var(--sans);font-size:10px;font-weight:600;padding:6px 4px;border:none;background:transparent;color:var(--text-faint);cursor:pointer;border-radius:var(--radius-sm);transition:color .15s}
+.tab-btn .bn-icon{font-size:19px;line-height:1;filter:grayscale(1) opacity(0.55)}
+.tab-btn .bn-label{letter-spacing:0}
+.tab-btn:hover{color:var(--text-dim)}
+.tab-btn.active{color:var(--accent)}
+.tab-btn.active .bn-icon{filter:none}
+.tab-panel{display:none;padding-bottom:calc(58px + env(safe-area-inset-bottom,0px))}
 .tab-panel.active{display:block}
-@media(max-width:700px){.app-tabs{padding:0 0 0 4px}.tab-btn{font-size:13px;font-weight:800;padding:6px 8px;letter-spacing:0.3px}.app-tabs-right{min-width:56px;padding:2px 6px}#runAllBtn{font-size:16px;font-weight:800;padding:6px 6px}}
-@media(max-width:480px){.tab-btn{font-size:12px;font-weight:800;padding:4px 5px;letter-spacing:0}.app-tabs-right{min-width:48px}#runAllBtn{font-size:16px;font-weight:800;padding:4px 4px}#runAllStatus{display:none}}
+#tab-hilega.tab-panel{padding-bottom:0}
+
+/* ── 2.11a Chart Tab: Selectors & Timeframe Pills ── */
+.hm-select{min-width:0;padding:7px 8px;font-size:11px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface);color:var(--text);cursor:pointer}
+.hm-select:focus{border-color:var(--accent);outline:none}
+.hm-tf-btn{background:transparent;border:none;color:var(--text-dim);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 9px;cursor:pointer;border-radius:6px;white-space:nowrap;transition:background .15s,color .15s}
+.hm-tf-btn.active{background:var(--accent);color:#fff}
 
 /* ── 2.12 Market Breadth Scanner (scoped with .breadth-panel) ── */
 .breadth-panel{--bp-bg:#ffffff;--bp-bg2:#ffffff;--bp-bg3:#ffffff;--bp-border:#e0e0e0;--bp-border2:#cccccc;--bp-bull:#2e7d32;--bp-bull2:#1b5e20;--bp-bear:#c62828;--bp-bear2:#b71c1c;--bp-side:#e65100;--bp-side2:#bf360c;--bp-large:#1565c0;--bp-mid:#7b1fa2;--bp-small:#d84315;--bp-text:#000000;--bp-muted:#000000;--bp-accent:#000000;font-family:'Segoe UI',Arial,sans-serif;background:var(--bp-bg);color:var(--bp-text);min-height:100vh;overflow-x:hidden;border:3px solid var(--bp-border);border-radius:4px;margin:4px;padding-top:10px}
@@ -636,19 +658,29 @@ th.ha-sep,td.ha-sep{border-left:3px solid var(--orange)!important}
 <!-- ════════════════════════════════════════════ -->
 <!--  3. HTML: TAB PAGE STRUCTURE              -->
 <!-- ════════════════════════════════════════════ -->
-<!-- ── 3.1 Tab Navigation ── -->
-<div class="app-tabs">
-  <div class="app-tabs-btns">
-    <button class="tab-btn active" onclick="switchTab('pt')">💹 Portfolio Snapshot</button>
-    <button class="tab-btn" onclick="switchTab('hilega')">📈 Chart</button>
-    <button class="tab-btn" onclick="switchTab('npsswitch')" title="Suggests Equity/Corporate Bond switch % for a chosen AMC + Tier, using the same Regime A/B/C + RSI logic as Portfolio Snapshot">⚖️ NPS Switch</button>
-    <button class="tab-btn" onclick="switchTab('tactical')" title="Tactical Transfer Strategy — Source → Intermediate → Target transfer planner">🔄 Timeline</button>
-  </div>
-  <div class="app-tabs-right">
-    <span id="runAllStatus"></span>
-    <span style="font-size:13px;font-weight:700;color:#333;margin-right:6px;font-family:monospace;" id="appVersionBadge">Timeline</span>
-  </div>
+<!-- ── 3.1 Bottom Tab Navigation (TradingView-style) ── -->
+<!-- appVersionBadge/runAllStatus moved into the header area via CSS
+     ::after-free placement below; kept as hidden elements here so any
+     JS that still writes to their innerHTML (runAllScans progress, etc.)
+     keeps working without changes. -->
+<div style="display:none">
+  <span id="runAllStatus"></span>
+  <span id="appVersionBadge">Timeline</span>
 </div>
+<nav class="bottom-nav">
+  <button class="tab-btn active" onclick="switchTab('pt')">
+    <span class="bn-icon">💹</span><span class="bn-label">Portfolio</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('hilega')">
+    <span class="bn-icon">📈</span><span class="bn-label">Chart</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('npsswitch')" title="Suggests Equity/Corporate Bond switch % for a chosen AMC + Tier, using the same Regime A/B/C + RSI logic as Portfolio Snapshot">
+    <span class="bn-icon">⚖️</span><span class="bn-label">NPS Switch</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('tactical')" title="Tactical Transfer Strategy — Source → Intermediate → Target transfer planner">
+    <span class="bn-icon">🔄</span><span class="bn-label">Timeline</span>
+  </button>
+</nav>
 
 <!-- ── 3.2 [Timeline Scanner tab removed — UI + React mount retired; shared engine kept in Section 4 script] ── -->
 
@@ -658,40 +690,40 @@ th.ha-sep,td.ha-sep{border-left:3px solid var(--orange)!important}
   <div id="ov" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.4);align-items:center;justify-content:center;">
     <div id="ovTxt" style="background:#fff;padding:16px 28px;border-radius:8px;font-size:14px;font-weight:700;color:#000;box-shadow:0 4px 24px rgba(0,0,0,0.18);">LOADING…</div>
   </div>
-  <div style="display:flex;flex-direction:column;height:100vh;height:100dvh;background:#fff;">
+  <div style="display:flex;flex-direction:column;height:calc(100vh - 58px);height:calc(100dvh - 58px);background:#fff;">
     <!-- ── Controls (index picker, RSI/WMA/EMA lengths, period/timeframe, date range) ── -->
-    <div style="flex-shrink:0;padding:4px 8px 3px;display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);background:var(--surface);">
+    <div style="flex-shrink:0;padding:8px 10px 6px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--border);background:var(--surface);">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;">
-        <select id="hmCatSelect" onchange="hmOnCatChange()" style="flex:0 0 100px;min-width:0;padding:4px 4px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;">
+        <select id="hmCatSelect" onchange="hmOnCatChange()" class="hm-select" style="flex:0 0 100px;">
           <option value="">Category…</option>
         </select>
-        <select id="hmIndexSelect" onchange="hmOnIndexChange()" style="flex:1;min-width:0;padding:4px 4px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;">
+        <select id="hmIndexSelect" onchange="hmOnIndexChange()" class="hm-select" style="flex:1;">
           <option value="">Select Index…</option>
         </select>
-        <select id="hmBenchSelect" onchange="drawHilegaMilega()" title="Pane 3 view" style="flex:0 0 100px;min-width:0;padding:4px 4px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;">
+        <select id="hmBenchSelect" onchange="drawHilegaMilega()" title="Pane 3 view" class="hm-select" style="flex:0 0 108px;">
           <option value="mtf" selected>Dual RSI MTF</option>
           <option value="nifty 50">RS vs Nifty 50</option>
           <option value="nifty 500">RS vs Nifty 500</option>
         </select>
       </div>
-      <div id="hmBtnRow" style="display:flex;justify-content:center;gap:0;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 4px;flex-shrink:0;overflow-x:auto;">
-        <button class="hm-tf-btn hm-period-btn active" data-period="daily" onclick="setHmPeriod(this,'daily')" style="background:transparent;border:none;color:#888;font-family:var(--mono);font-size:11px;padding:3px 7px;cursor:pointer;border-radius:4px;font-weight:700;white-space:nowrap;border-right:1px solid var(--border);">DAILY</button>
-        <button class="hm-tf-btn hm-period-btn" data-period="weekly" onclick="setHmPeriod(this,'weekly')" style="background:transparent;border:none;color:#888;font-family:var(--mono);font-size:11px;padding:3px 7px;cursor:pointer;border-radius:4px;font-weight:700;white-space:nowrap;border-right:1px solid var(--border);">WEEKLY</button>
-        <button class="hm-tf-btn hm-period-btn" data-period="monthly" onclick="setHmPeriod(this,'monthly')" style="background:transparent;border:none;color:#888;font-family:var(--mono);font-size:11px;padding:3px 7px;cursor:pointer;border-radius:4px;font-weight:700;white-space:nowrap;border-right:1px solid var(--border);">MONTHLY</button>
-        <button class="hm-tf-btn" data-days="90" onclick="setHmTf(this,90)" style="background:transparent;border:none;color:#888;font-family:var(--mono);font-size:11px;padding:3px 7px;cursor:pointer;border-radius:4px;white-space:nowrap;">3M</button>
-        <button class="hm-tf-btn" data-days="180" onclick="setHmTf(this,180)" style="background:transparent;border:none;color:#888;font-family:var(--mono);font-size:11px;padding:3px 7px;cursor:pointer;border-radius:4px;white-space:nowrap;">6M</button>
-        <button class="hm-tf-btn" data-days="365" onclick="setHmTf(this,365)" style="background:transparent;border:none;color:#888;font-family:var(--mono);font-size:11px;padding:3px 7px;cursor:pointer;border-radius:4px;white-space:nowrap;">1Y</button>
-        <button class="hm-tf-btn" data-days="730" onclick="setHmTf(this,730)" style="background:transparent;border:none;color:#888;font-family:var(--mono);font-size:11px;padding:3px 7px;cursor:pointer;border-radius:4px;white-space:nowrap;">2Y</button>
-        <button class="hm-tf-btn" data-days="1095" onclick="setHmTf(this,1095)" style="background:transparent;border:none;color:#888;font-family:var(--mono);font-size:11px;padding:3px 7px;cursor:pointer;border-radius:4px;white-space:nowrap;">3Y</button>
-        <button class="hm-tf-btn" data-days="1825" onclick="setHmTf(this,1825)" style="background:transparent;border:none;color:#888;font-family:var(--mono);font-size:11px;padding:3px 7px;cursor:pointer;border-radius:4px;white-space:nowrap;">5Y</button>
-        <button class="hm-tf-btn" data-days="3650" onclick="setHmTf(this,3650)" style="background:transparent;border:none;color:#888;font-family:var(--mono);font-size:11px;padding:3px 7px;cursor:pointer;border-radius:4px;white-space:nowrap;">10Y</button>
+      <div id="hmBtnRow" style="display:flex;justify-content:center;gap:2px;background:var(--surface2);border-radius:var(--radius-sm);padding:3px;flex-shrink:0;overflow-x:auto;">
+        <button class="hm-tf-btn hm-period-btn active" data-period="daily" onclick="setHmPeriod(this,'daily')">DAILY</button>
+        <button class="hm-tf-btn hm-period-btn" data-period="weekly" onclick="setHmPeriod(this,'weekly')">WEEKLY</button>
+        <button class="hm-tf-btn hm-period-btn" data-period="monthly" onclick="setHmPeriod(this,'monthly')">MONTHLY</button>
+        <button class="hm-tf-btn" data-days="90" onclick="setHmTf(this,90)">3M</button>
+        <button class="hm-tf-btn" data-days="180" onclick="setHmTf(this,180)">6M</button>
+        <button class="hm-tf-btn" data-days="365" onclick="setHmTf(this,365)">1Y</button>
+        <button class="hm-tf-btn" data-days="730" onclick="setHmTf(this,730)">2Y</button>
+        <button class="hm-tf-btn" data-days="1095" onclick="setHmTf(this,1095)">3Y</button>
+        <button class="hm-tf-btn" data-days="1825" onclick="setHmTf(this,1825)">5Y</button>
+        <button class="hm-tf-btn" data-days="3650" onclick="setHmTf(this,3650)">10Y</button>
       </div>
       <div id="hmBtnHint" style="display:none;font-size:9px;color:#aaa;text-align:center;margin-top:-2px;"></div>
       <!-- ── Date-range return calculator (hmSetDefaultDates/hmCalcDateRange, Section 13.3) ── -->
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <input type="date" id="hmDateFrom" onchange="hmCalcDateRange()" style="flex:1;min-width:0;padding:4px 4px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
-        <span style="font-size:10px;color:#888;">to</span>
-        <input type="date" id="hmDateTo" onchange="hmCalcDateRange()" style="flex:1;min-width:0;padding:4px 4px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+        <input type="date" id="hmDateFrom" onchange="hmCalcDateRange()" style="flex:1;min-width:0;padding:6px 8px;font-size:10px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface);color:var(--text);">
+        <span style="font-size:10px;color:var(--text-faint);">to</span>
+        <input type="date" id="hmDateTo" onchange="hmCalcDateRange()" style="flex:1;min-width:0;padding:6px 8px;font-size:10px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface);color:var(--text);">
       </div>
       <div id="hmRangeResult" style="display:none;flex-wrap:wrap;align-items:center;gap:8px;font-size:10px;font-family:var(--mono);">
         <span>NAV: <strong id="hmRangeNavA">-</strong> → <strong id="hmRangeNavB">-</strong></span>
@@ -703,45 +735,48 @@ th.ha-sep,td.ha-sep{border-left:3px solid var(--orange)!important}
     <!-- ── PANE 1: Price/NAV + SMA(8) low, with HUD ── -->
     <div id="hmPane1Wrap" style="width:100%;height:22vh;height:22dvh;min-height:110px;flex-shrink:0;position:relative;border-bottom:1px solid var(--border);background:#fff;">
       <canvas id="hmPane1Canvas"></canvas>
-      <div id="hmHud1" style="display:none;position:absolute;pointer-events:none;background:rgba(255,255,255,0.92);border:1px solid #ccc;border-radius:4px;padding:3px 6px;font-family:monospace;font-size:8px;line-height:1.4;color:#000;box-shadow:1px 1px 6px rgba(0,0,0,0.1);z-index:10;white-space:normal;top:2px;left:2px;max-width:70%;box-sizing:border-box;"></div>
-      <div id="hmNoDataBanner" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:10px;background:#fff;text-align:center;padding:16px;z-index:20;">
-        <div id="hmNoDataMsg" style="font-size:13px;color:#888;font-family:var(--mono);max-width:280px;white-space:pre-line;">No scanner data yet</div>
-        <button onclick="switchTab('pt')" style="background:var(--green);color:#fff;border:none;border-radius:4px;padding:6px 14px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;">Go to Portfolio Snapshot →</button>
+      <div id="hmHud1" style="display:none;position:absolute;pointer-events:none;background:rgba(255,255,255,0.94);backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:10px;padding:5px 9px;font-family:var(--sans);font-size:9px;line-height:1.5;color:var(--text);box-shadow:var(--shadow-sm);z-index:10;white-space:normal;top:6px;left:6px;max-width:70%;box-sizing:border-box;"></div>
+      <div id="hmNoDataBanner" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:#fff;text-align:center;padding:16px;z-index:20;">
+        <div id="hmNoDataMsg" style="font-size:13px;color:var(--text-dim);font-family:var(--sans);max-width:280px;white-space:pre-line;">No scanner data yet</div>
+        <button onclick="switchTab('pt')" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 18px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-sm);">Go to Portfolio Snapshot →</button>
       </div>
     </div>
 
     <!-- ── PANE 2: Hilega-Milega (RSI/WMA/EMA), with HUD ── -->
     <div id="hmPane2Wrap" style="width:100%;height:26vh;height:26dvh;min-height:120px;flex-shrink:0;position:relative;border-bottom:1px solid var(--border);background:#fff;">
-      <div style="position:absolute;top:2px;left:2px;font-size:9px;color:#888;z-index:11;background:rgba(255,255,255,0.85);padding:1px 4px;border-radius:3px;">Hilega-Milega</div>
+      <div style="position:absolute;top:6px;right:6px;font-size:9px;font-weight:600;color:var(--text-dim);z-index:11;background:rgba(255,255,255,0.85);padding:3px 8px;border-radius:99px;box-shadow:var(--shadow-sm);">Hilega-Milega</div>
       <canvas id="hmPane2Canvas"></canvas>
-      <div id="hmHud2" style="display:none;position:absolute;pointer-events:none;background:rgba(255,255,255,0.92);border:1px solid #ccc;border-radius:4px;padding:3px 6px;font-family:monospace;font-size:8px;line-height:1.4;color:#000;box-shadow:1px 1px 6px rgba(0,0,0,0.1);z-index:10;white-space:normal;top:2px;left:2px;text-align:left;max-width:70%;box-sizing:border-box;"></div>
+      <div id="hmHud2" style="display:none;position:absolute;pointer-events:none;background:rgba(255,255,255,0.94);backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:10px;padding:5px 9px;font-family:var(--sans);font-size:9px;line-height:1.5;color:var(--text);box-shadow:var(--shadow-sm);z-index:10;white-space:normal;top:6px;left:6px;text-align:left;max-width:70%;box-sizing:border-box;"></div>
     </div>
 
     <!-- ── PANE 3: Relative Strength vs benchmark, with HUD ── -->
     <div id="hmPane3Wrap" style="width:100%;height:27vh;height:27dvh;min-height:130px;flex-shrink:0;position:relative;background:#fff;">
-      <div style="position:absolute;top:2px;left:2px;font-size:9px;color:#888;z-index:11;background:rgba(255,255,255,0.85);padding:1px 4px;border-radius:3px;" id="hmPane3Label">RS vs Nifty 50</div>
+      <div style="position:absolute;top:6px;right:6px;font-size:9px;font-weight:600;color:var(--text-dim);z-index:11;background:rgba(255,255,255,0.85);padding:3px 8px;border-radius:99px;box-shadow:var(--shadow-sm);" id="hmPane3Label">RS vs Nifty 50</div>
       <canvas id="hmPane3Canvas"></canvas>
-      <div id="hmHud3" style="display:none;position:absolute;pointer-events:none;background:rgba(255,255,255,0.92);border:1px solid #ccc;border-radius:4px;padding:3px 6px;font-family:monospace;font-size:8px;line-height:1.4;color:#000;box-shadow:1px 1px 6px rgba(0,0,0,0.1);z-index:10;white-space:normal;top:2px;left:2px;text-align:left;max-width:70%;box-sizing:border-box;"></div>
+      <div id="hmHud3" style="display:none;position:absolute;pointer-events:none;background:rgba(255,255,255,0.94);backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:10px;padding:5px 9px;font-family:var(--sans);font-size:9px;line-height:1.5;color:var(--text);box-shadow:var(--shadow-sm);z-index:10;white-space:normal;top:6px;left:6px;text-align:left;max-width:70%;box-sizing:border-box;"></div>
     </div>
 
-    <!-- ── Legend footer ── -->
-    <div style="flex-shrink:0;padding:4px 8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;background:var(--surface);border-top:1px solid var(--border);">
-      <div style="display:flex;gap:10px;font-size:10px;flex-wrap:wrap;">
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#1d4ed8;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:#888;">NAV</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#f59e0b;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:#888;">SMA8</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#000;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:#888;">RSI</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#e11d48;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:#888;">WMA</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#16a34a;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:#888;">EMA</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#3b82f6;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:#888;">RS Ratio</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#9ca3af;border-radius:1px;display:inline-block;border-top:1px dashed #9ca3af;"></span><span style="font-size:9px;color:#888;">HMA(100)</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:8px;height:8px;background:#16a34a;display:inline-block;clip-path:polygon(50% 0%,0% 100%,100% 100%);"></span><span style="font-size:9px;color:#888;">Buy</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:8px;height:8px;background:#ef4444;display:inline-block;clip-path:polygon(50% 100%,0% 0%,100% 0%);"></span><span style="font-size:9px;color:#888;">Exit</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:10px;height:8px;background:rgba(48,173,52,0.3);border:1px solid #16a34a;border-radius:2px;display:inline-block;"></span><span style="font-size:9px;color:#888;">Leading</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:10px;height:8px;background:rgba(234,179,8,0.3);border:1px solid #eab308;border-radius:2px;display:inline-block;"></span><span style="font-size:9px;color:#888;">Weakening</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:10px;height:8px;background:rgba(59,130,246,0.3);border:1px solid #3b82f6;border-radius:2px;display:inline-block;"></span><span style="font-size:9px;color:#888;">Improving</span></span>
-        <span style="display:flex;align-items:center;gap:3px;"><span style="width:10px;height:8px;background:rgba(239,68,68,0.3);border:1px solid #ef4444;border-radius:2px;display:inline-block;"></span><span style="font-size:9px;color:#888;">Lagging</span></span>
+    <!-- ── Legend footer (collapsed by default — tap to expand, TradingView-style) ── -->
+    <div style="flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;cursor:pointer;" onclick="var l=document.getElementById('hmLegendBody');var open=l.style.display!=='none';l.style.display=open?'none':'flex';document.getElementById('hmLegendChevron').textContent=open?'▾':'▴';">
+        <span style="font-size:10px;font-weight:600;color:var(--text-dim);display:flex;align-items:center;gap:4px;">Legend <span id="hmLegendChevron" style="font-size:9px;color:var(--text-faint);">▾</span></span>
+        <span style="font-size:9px;color:var(--text-faint);" id="hmFundLabel">—</span>
       </div>
-      <div style="display:none;font-size:9px;color:#888;" id="hmFundLabel">—</div>
+      <div id="hmLegendBody" style="display:none;flex-wrap:wrap;gap:10px;padding:0 10px 8px;">
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#1d4ed8;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">NAV</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#f59e0b;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">SMA8</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#000;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">RSI</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#e11d48;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">WMA</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#16a34a;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">EMA</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#3b82f6;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">RS Ratio</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#9ca3af;border-radius:1px;display:inline-block;border-top:1px dashed #9ca3af;"></span><span style="font-size:9px;color:var(--text-faint);">HMA(100)</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:8px;height:8px;background:#16a34a;display:inline-block;clip-path:polygon(50% 0%,0% 100%,100% 100%);"></span><span style="font-size:9px;color:var(--text-faint);">Buy</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:8px;height:8px;background:#ef4444;display:inline-block;clip-path:polygon(50% 100%,0% 0%,100% 0%);"></span><span style="font-size:9px;color:var(--text-faint);">Exit</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:10px;height:8px;background:rgba(48,173,52,0.3);border:1px solid #16a34a;border-radius:2px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">Leading</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:10px;height:8px;background:rgba(234,179,8,0.3);border:1px solid #eab308;border-radius:2px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">Weakening</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:10px;height:8px;background:rgba(59,130,246,0.3);border:1px solid #3b82f6;border-radius:2px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">Improving</span></span>
+        <span style="display:flex;align-items:center;gap:3px;"><span style="width:10px;height:8px;background:rgba(239,68,68,0.3);border:1px solid #ef4444;border-radius:2px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">Lagging</span></span>
+      </div>
     </div>
   </div>
 </div>
@@ -7824,19 +7859,17 @@ function hmHighlightTfButton(days) {
     var btns = document.querySelectorAll('#hmBtnRow .hm-tf-btn:not(.hm-period-btn)');
     var best = null, bestDiff = Infinity;
     btns.forEach(function(b) {
-      b.classList.remove('active'); b.style.background = 'transparent'; b.style.color = '#888';
+      b.classList.remove('active');
       var bd = parseInt(b.dataset.days, 10);
       var diff = Math.abs(bd - days);
       if (diff < bestDiff) { bestDiff = diff; best = b; }
     });
-    if (best) { best.classList.add('active'); best.style.background = '#d4880f'; best.style.color = '#000'; }
+    if (best) { best.classList.add('active'); }
 }
 function hmHighlightPeriodButton(period) {
     document.querySelectorAll('#hmBtnRow .hm-period-btn').forEach(function(b) {
       var match = b.dataset.period === period;
       b.classList.toggle('active', match);
-      b.style.background = match ? '#d4880f' : 'transparent';
-      b.style.color = match ? '#000' : '#888';
     });
 }
 // Total day-span actually available for the selected index's full daily
