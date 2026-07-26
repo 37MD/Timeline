@@ -242,10 +242,29 @@ body{}
 #tab-hilega.tab-panel{padding-bottom:0}
 
 /* ── 2.11a Chart Tab: Selectors & Timeframe Pills ── */
-.hm-select{min-width:0;padding:7px 8px;font-size:11px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface);color:var(--text);cursor:pointer}
+.hm-select{min-width:0;padding:7px 8px;font-size:11px;font-family:var(--sans);border-radius:var(--radius-sm);border:1px solid var(--border2);background:var(--surface);color:var(--text);cursor:pointer;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
 .hm-select:focus{border-color:var(--accent);outline:none}
 .hm-tf-btn{background:transparent;border:none;color:var(--text-dim);font-family:var(--sans);font-size:11px;font-weight:600;padding:6px 9px;cursor:pointer;border-radius:6px;white-space:nowrap;transition:background .15s,color .15s}
 .hm-tf-btn.active{background:var(--accent);color:#fff}
+
+/* ── 2.11b Freeze-pane utility for wide, horizontally-scrolling tables ──
+   Applied to any <table class="freeze-col1"> that has a name/index column
+   as its first <th>/<td> in every row: that first column stays pinned to
+   the left edge (position:sticky) while the rest of the row's columns
+   scroll underneath it horizontally, so the name is always visible no
+   matter how far right the person has scrolled. Used by the Portfolio
+   Summary table, the Explore tab's two screener tables, the Watch tab's
+   bearish table, and the Portfolio Summary dashboard's Holdings table —
+   every table in the app wide enough to need horizontal scroll on a
+   phone screen. Background colors are set per-table below (inline, on
+   the <th>/<td> itself) to match each table's existing header/row
+   striping, since a single utility background wouldn't fit them all;
+   this class only supplies the sticky positioning + separator shadow. */
+.freeze-col1 th:first-child,.freeze-col1 td:first-child{
+  position:sticky;left:0;z-index:2;
+  box-shadow:2px 0 4px -2px rgba(0,0,0,0.15);
+}
+.freeze-col1 thead th:first-child{z-index:3}
 
 /* ── 2.12 Market Breadth Scanner (scoped with .breadth-panel) ── */
 .breadth-panel{--bp-bg:#ffffff;--bp-bg2:#ffffff;--bp-bg3:#ffffff;--bp-border:#e0e0e0;--bp-border2:#cccccc;--bp-bull:#2e7d32;--bp-bull2:#1b5e20;--bp-bear:#c62828;--bp-bear2:#b71c1c;--bp-side:#e65100;--bp-side2:#bf360c;--bp-large:#1565c0;--bp-mid:#7b1fa2;--bp-small:#d84315;--bp-text:#000000;--bp-muted:#000000;--bp-accent:#000000;font-family:'Segoe UI',Arial,sans-serif;background:var(--bp-bg);color:var(--bp-text);min-height:100vh;overflow-x:hidden;border:3px solid var(--bp-border);border-radius:4px;margin:4px;padding-top:10px}
@@ -595,21 +614,21 @@ body{}
 /* ── Paper Trade Mobile ── */
 @media(max-width:600px){
   #tab-pt #pt-wrap{padding:6px}
-  #tab-pt h2{font-size:15px;letter-spacing:2px}
-  #tab-pt p{font-size:10px}
+  #tab-pt h2,#tab-explore h2,#tab-watch h2{font-size:15px;letter-spacing:2px}
+  #tab-pt p,#tab-explore p,#tab-watch p{font-size:10px}
   #tab-pt .summary-grid{grid-template-columns:repeat(2,1fr);gap:4px}
   #tab-pt .summary-grid > div{padding:6px 3px}
   #tab-pt .summary-grid > div div:first-child{font-size:6px}
   #tab-pt .summary-grid > div div:last-child{font-size:13px}
-  #tab-pt table{min-width:360px;font-size:8px}
-  #tab-pt table th{padding:3px 2px;font-size:6px}
-  #tab-pt table td{padding:3px 2px;font-size:8px}
+  #tab-pt table,#tab-explore table,#tab-watch table{min-width:360px;font-size:8px}
+  #tab-pt table th,#tab-explore table th,#tab-watch table th{padding:3px 2px;font-size:6px}
+  #tab-pt table td,#tab-explore table td,#tab-watch table td{padding:3px 2px;font-size:8px}
 }
 @media(max-width:480px){
   #tab-pt #pt-wrap{padding:4px}
-  #tab-pt h2{font-size:13px;letter-spacing:1px}
-  #tab-pt p{font-size:9px}
-  #tab-pt table{min-width:300px}
+  #tab-pt h2,#tab-explore h2,#tab-watch h2{font-size:13px;letter-spacing:1px}
+  #tab-pt p,#tab-explore p,#tab-watch p{font-size:9px}
+  #tab-pt table,#tab-explore table,#tab-watch table{min-width:300px}
 }
 /* ── RSI Buy/Sell Signal Mobile ── */
 @media(max-width:600px){
@@ -637,8 +656,8 @@ body{}
   .ba-grid-hdr,.ba-grid-bench,.ba-grid-row,.ba-grid-avg-row{min-width:280px}
   .ba-grid-hdr-period,.ba-grid-bench-cell,.ba-grid-cell{min-width:40px;padding:2px 1px;font-size:7px}
   .ba-cell-ret{font-size:8px}
-  #tab-pt table{min-width:260px}
-  #tab-pt h2{font-size:11px}
+  #tab-pt table,#tab-explore table,#tab-watch table{min-width:260px}
+  #tab-pt h2,#tab-explore h2,#tab-watch h2{font-size:11px}
   #tab-rsi h2{font-size:11px}
   .rs-sum-card{min-width:70px;padding:6px 6px}
   .rs-sum-val{font-size:16px}
@@ -668,17 +687,26 @@ body{}
   <span id="appVersionBadge">Timeline</span>
 </div>
 <nav class="bottom-nav">
-  <button class="tab-btn active" onclick="switchTab('pt')">
+  <button class="tab-btn active" data-tab="pt" onclick="switchTab('pt')">
     <span class="bn-icon">💹</span><span class="bn-label">Portfolio</span>
   </button>
-  <button class="tab-btn" onclick="switchTab('hilega')">
-    <span class="bn-icon">📈</span><span class="bn-label">Chart</span>
+  <button class="tab-btn" data-tab="explore" onclick="switchTab('explore')" title="Monthly Green &gt; SMA(8) Low screener and Matching Index — opportunities outside your current Portfolio">
+    <span class="bn-icon">🔎</span><span class="bn-label">Explore</span>
   </button>
-  <button class="tab-btn" onclick="switchTab('npsswitch')" title="Suggests Equity/Corporate Bond switch % for a chosen AMC + Tier, using the same Regime A/B/C + RSI logic as Portfolio Snapshot">
+  <button class="tab-btn" data-tab="hilega" onclick="switchTab('hilega')">
+    <span class="bn-icon">📈</span><span class="bn-label">Charts</span>
+  </button>
+  <button class="tab-btn" data-tab="tactical" onclick="switchTab('tactical')" title="Tactical Transfer Strategy — Source → Intermediate → Target transfer planner">
+    <span class="bn-icon">🔄</span><span class="bn-label">Timeline</span>
+  </button>
+  <button class="tab-btn" data-tab="watch" onclick="switchTab('watch')" title="Watch for Bearish Mode — funds whose monthly candle just turned red but support is still intact">
+    <span class="bn-icon">👁️</span><span class="bn-label">Watch</span>
+  </button>
+  <button class="tab-btn" data-tab="npsswitch" onclick="switchTab('npsswitch')" title="Suggests Equity/Corporate Bond switch % for a chosen AMC + Tier, using the same Regime A/B/C + RSI logic as Portfolio Snapshot">
     <span class="bn-icon">⚖️</span><span class="bn-label">NPS Switch</span>
   </button>
-  <button class="tab-btn" onclick="switchTab('tactical')" title="Tactical Transfer Strategy — Source → Intermediate → Target transfer planner">
-    <span class="bn-icon">🔄</span><span class="bn-label">Timeline</span>
+  <button class="tab-btn" data-tab="setup" onclick="switchTab('setup')" title="Master List, data download/backup, and Gemini API keys — rare setup/maintenance actions">
+    <span class="bn-icon">⚙️</span><span class="bn-label">Setup</span>
   </button>
 </nav>
 
@@ -693,14 +721,14 @@ body{}
   <div style="display:flex;flex-direction:column;height:calc(100vh - 58px);height:calc(100dvh - 58px);background:#fff;">
     <!-- ── Controls (index picker, RSI/WMA/EMA lengths, period/timeframe, date range) ── -->
     <div style="flex-shrink:0;padding:8px 10px 6px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--border);background:var(--surface);">
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;">
-        <select id="hmCatSelect" onchange="hmOnCatChange()" class="hm-select" style="flex:0 0 100px;">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;padding-right:56px;">
+        <select id="hmCatSelect" onchange="hmOnCatChange()" class="hm-select" style="flex:0 0 72px;">
           <option value="">Category…</option>
         </select>
-        <select id="hmIndexSelect" onchange="hmOnIndexChange()" class="hm-select" style="flex:1;">
+        <select id="hmIndexSelect" onchange="hmOnIndexChange()" class="hm-select" style="flex:1;min-width:0;">
           <option value="">Select Index…</option>
         </select>
-        <select id="hmBenchSelect" onchange="drawHilegaMilega()" title="Pane 3 view" class="hm-select" style="flex:0 0 108px;">
+        <select id="hmBenchSelect" onchange="drawHilegaMilega()" title="Pane 3 view" class="hm-select" style="flex:0 0 84px;">
           <option value="mtf" selected>Dual RSI MTF</option>
           <option value="nifty 50">RS vs Nifty 50</option>
           <option value="nifty 500">RS vs Nifty 500</option>
@@ -787,25 +815,6 @@ body{}
 
 <h2 style="font-family:'Segoe UI',Arial,sans-serif;font-size:18px;font-weight:900;letter-spacing:3px;color:#000;margin:0 0 6px 0;text-transform:uppercase">Portfolio Snapshot</h2>
 
-<!-- ── Scanner Controls (replicated from Scanner tab) ── -->
-<input type="file" id="ld-restore-input" accept="application/json,.json" style="display:none" onchange="ldOnRestoreFileChosen(event)">
-<div id="pt-controls-row" style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;align-items:stretch">
-  <button onclick="ldExportAllData(false)" title="Save all scanner data to Timeline.json" style="background:#333;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">💾 Save</button>
-  <button onclick="ldImportAllData()" title="Restore: auto-checks your linked Timeline.json first, otherwise asks you to pick a file" style="background:#333;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">📂 Restore</button>
-  <button id="pt-btn-download-fast" onclick="PSnap.downloadDataFast()" title="Download 2500 days using parallel fetches (10-20x faster)" style="background:#cc5500;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ DL Fast</button>
-  <button id="pt-btn-restart-fresh" onclick="PSnap.restartFreshDownload()" title="Clear all saved download progress and start over from day 1. Deleting the checkpoint .json files in your Downloads folder does NOT do this — those are backup exports only, never read back by the app." style="background:#7a1f1f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">🗑️ Restart</button>
-  <button class="ld-scan-btn" onclick="if(typeof window.ptRunScan==='function')window.ptRunScan()" title="Download 2500 days of NSE data + analyze" style="background:#d4880f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ Analyze</button>
-</div>
-<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;align-items:center">
-  <div style="background:#f5f5f5;border:1px solid #ddd;padding:4px 8px;border-radius:4px;font-size:9px">
-    <span style="font-weight:700;color:#333">Gemini Keys</span>
-    <input id="pt-gk1" type="password" placeholder="Key 1" style="width:90px;padding:2px 4px;font-size:9px;border:1px solid #ccc;border-radius:2px;margin-left:4px" oninput="ptUpdateGeminiSaveBtn()" onchange="BB.geminiKey1(this.value);ptUpdateGeminiSaveBtn()">
-    <input id="pt-gk2" type="password" placeholder="Key 2" style="width:90px;padding:2px 4px;font-size:9px;border:1px solid #ccc;border-radius:2px;margin-left:2px" oninput="ptUpdateGeminiSaveBtn()" onchange="BB.geminiKey2(this.value);ptUpdateGeminiSaveBtn()">
-    <button id="pt-gk-save" onclick="ptSaveGeminiKeys()" style="background:#666;color:#fff;border:none;padding:3px 10px;font-size:9px;font-weight:700;border-radius:2px;margin-left:4px;cursor:pointer">Save</button>
-    <span id="pt-gk-status" style="font-size:8px;color:#1a8a1a;margin-left:4px"></span>
-  </div>
-</div>
-
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:8px 0">
   <div style="background:#f5f5f5;border:1px solid #ddd;padding:8px 4px;text-align:center;border-radius:4px"><div style="font-size:7px;color:#b8860b;text-transform:uppercase">Portfolio Value</div><div id="pt-pv" style="font-size:15px;font-weight:bold;color:#1a8a1a;margin-top:2px">—</div></div>
   <div style="background:#f5f5f5;border:1px solid #ddd;padding:8px 4px;text-align:center;border-radius:4px"><div style="font-size:7px;color:#b8860b;text-transform:uppercase">P&amp;L</div><div id="pt-tp" style="font-size:15px;font-weight:bold;color:#1a8a1a;margin-top:2px">—</div></div>
@@ -818,10 +827,12 @@ body{}
 </div>
 <!-- ── Progress Status (single line, scan / download activity) ── -->
 <div id="pt-progress-log" style="display:none;height:20px;overflow:hidden;background:#fff;color:#000;font-family:Consolas,'Courier New',monospace;font-size:9px;line-height:20px;padding:0 8px;border-radius:4px;margin:4px 0;border:1px solid #ccc;white-space:nowrap;text-overflow:ellipsis"></div>
-<!-- ── Portfolio Snapshot Action Buttons ── -->
+<!-- ── Portfolio Snapshot Action Buttons ──
+     Master List moved to the Setup tab (rare/maintenance activity, per
+     request) — Clear/Update/Summary stay here since they're everyday
+     actions on the portfolio itself. -->
 <div style="display:flex;gap:3px;margin:8px 0">
   <button onclick="PSnap.resetPortfolio()" style="background:#666;color:#fff;border:none;padding:6px 4px;cursor:pointer;font-weight:bold;font-size:8px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:32px;white-space:nowrap">Clear Portfolio List</button>
-  <button id="pt-btn-universe" onclick="PSnap.openUniverse()" style="background:#0055aa;color:#fff;border:none;padding:6px 4px;cursor:pointer;font-weight:bold;font-size:8px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:32px;white-space:nowrap">Master List</button>
   <button id="pt-btn-update" onclick="PSnap.toggleUpdateMode()" style="background:#1a6dd8;color:#fff;border:none;padding:6px 4px;cursor:pointer;font-weight:bold;font-size:8px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:32px;white-space:nowrap">Update Portfolio</button>
   <button id="pt-btn-summary" onclick="PSnap.showSummary()" style="background:#1a8a1a;color:#fff;border:none;padding:6px 4px;cursor:pointer;font-weight:bold;font-size:8px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:32px;white-space:nowrap">Summary</button>
 </div>
@@ -829,17 +840,13 @@ body{}
 <!-- ── Market Summary Boxes (replicated from Scanner tab) ── -->
 <div id="pt-stat-row" style="display:grid;grid-template-columns:0.7fr 1fr 1fr 1fr;gap:8px;margin:8px 0"></div>
 
+<input type="file" id="ld-restore-input" accept="application/json,.json" style="display:none" onchange="ldOnRestoreFileChosen(event)">
 
-<!-- Index Universe panel (lists all NSE indices from the app's own master dataset — independent of Scanner tab) -->
-<div id="pt-universe-panel" style="display:none;margin:8px 0;border:1px solid #0055aa;border-radius:4px;background:#fff">
-  <div style="display:flex;justify-content:space-between;align-items:center;background:#0055aa;color:#fff;padding:6px 8px;border-radius:4px 4px 0 0">
-    <span style="font-size:10px;font-weight:bold;text-transform:uppercase">Master List</span>
-    <button onclick="PSnap.closeUniverse()" style="background:none;border:none;color:#fff;font-size:14px;cursor:pointer;line-height:1;padding:0 4px">×</button>
-  </div>
-  <div id="pt-universe-list" style="max-height:260px;overflow-y:auto;-webkit-overflow-scrolling:touch;font-size:9px"></div>
-</div>
-
-<div id="pt-main-table-wrap" style="overflow-x:hidden;margin:6px 0;border:1px solid #ddd;border-radius:4px">
+<!-- ── Basic index table: kept in the DOM (hidden) purely so "Update
+     Portfolio" mode's row-# click-to-add/remove keeps working; per spec
+     the Portfolio tab only ever *displays* the Portfolio Summary table
+     below. showSummary()/hideSummary() still toggle this internally. ── -->
+<div id="pt-main-table-wrap" style="display:none;overflow-x:hidden;margin:6px 0;border:1px solid #ddd;border-radius:4px">
 <table style="width:100%;border-collapse:collapse;font-size:9px;table-layout:fixed">
   <thead><tr id="pt-thead-row" style="background:#f5f5f5">
     <th style="width:8%;padding:5px 2px;text-align:left;font-size:7px;color:#b8860b;text-transform:uppercase;white-space:nowrap" title="Click a row's # to add/remove it from the Portfolio list (Update Portfolio mode)">#</th>
@@ -852,73 +859,284 @@ body{}
 </table>
 </div>
 
+<!-- ── Portfolio Summary (the only table shown on this tab) ──
+     Two views, switchable via the toggle below:
+       (a) "Dashboard" — full mumbaiwater.in-style replica: hero card,
+           Quick Overview 6-card grid, searchable/sortable Holdings table,
+           Storage Analysis charts (bar + donut), per-holding detail
+           cards, and an Important Updates feed. White/soft-blue
+           background. DEFAULT view.
+       (b) "Table" — the original dense Portfolio Summary table with all
+           columns (Confluence/Regime/P>WMA/... /HM Chart).
+     Both views read the exact same Portfolio Summary data — nothing here
+     changes what data feeds the summary, only how it's displayed. ── -->
+<div id="pt-summary-wrap" style="margin:8px 0">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">
+    <h3 style="color:#0055aa;font-size:12px;margin:0">Portfolio Summary</h3>
+    <div id="pt-sum-view-toggle" style="display:flex;background:#f0f0f0;border-radius:14px;padding:2px;gap:2px">
+      <button id="pt-sum-view-btn-dash" onclick="PSnap.setSummaryView('dashboard')" style="border:none;background:#0c1929;color:#fff;padding:5px 10px;border-radius:12px;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap">Dashboard</button>
+      <button id="pt-sum-view-btn-table" onclick="PSnap.setSummaryView('table')" style="border:none;background:transparent;color:#666;padding:5px 10px;border-radius:12px;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap">Table</button>
+    </div>
+  </div>
+
+  <!-- ── (a) Dashboard view — full mumbaiwater.in-style replica, DEFAULT ── -->
+  <div id="pt-sum-dashboard-view">
+
+    <!-- 1. HERO: huge % + status pill + 3 key stats + updated timestamp -->
+    <div style="background:linear-gradient(180deg,#eef6fb 0%,#ffffff 55%);border:1px solid #e2ecf2;border-radius:14px;padding:22px 14px 18px;text-align:center">
+      <div id="pt-dash-hero" style="line-height:1">
+        <span id="pt-dash-hero-num" style="font-size:52px;font-weight:800;color:#0c1929;letter-spacing:-1px">—</span><span style="font-size:22px;color:#aab4bd;font-weight:600">%</span>
+      </div>
+      <div style="font-size:12px;color:#7a8894;margin-top:4px">of Portfolio Regime A + P&gt;WMA</div>
+
+      <div id="pt-dash-pill" style="display:inline-flex;align-items:center;gap:6px;background:#e9f9ef;color:#1a8a4a;border:1px solid #cdeedb;border-radius:20px;padding:7px 16px;margin:14px 0 8px;font-size:12px;font-weight:700">
+        <span id="pt-dash-pill-icon">✓</span><span id="pt-dash-pill-text">Loading Portfolio…</span>
+      </div>
+      <div id="pt-dash-subtext" style="font-size:11px;color:#8a95a0;margin-bottom:14px">—</div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:6px 0 10px">
+        <div>
+          <div id="pt-dash-stat1" style="font-size:19px;font-weight:800;color:#0c7abf">—</div>
+          <div style="font-size:9px;color:#8a95a0;margin-top:2px">Portfolio Value</div>
+        </div>
+        <div>
+          <div id="pt-dash-stat2" style="font-size:19px;font-weight:800;color:#0c1929">—</div>
+          <div style="font-size:9px;color:#8a95a0;margin-top:2px">Total P&amp;L</div>
+        </div>
+        <div>
+          <div id="pt-dash-stat3" style="font-size:19px;font-weight:800;color:#2a5adf">—</div>
+          <div style="font-size:9px;color:#8a95a0;margin-top:2px">Holdings</div>
+        </div>
+      </div>
+
+      <div id="pt-dash-updated" style="font-size:9px;color:#a3adb6">Updated: —</div>
+    </div>
+
+    <!-- 2. QUICK OVERVIEW — 6-card grid (Today's Chg, Portfolio Return-to-date,
+         Best Holding, Worst Holding, Return Trend, Total Portfolio Value) -->
+    <div style="display:flex;align-items:center;gap:8px;margin:18px 0 2px">
+      <span style="background:#e8ecfb;color:#2a5adf;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px">▦</span>
+      <h4 style="font-size:14px;font-weight:800;color:#0c1929;margin:0">Quick Overview</h4>
+    </div>
+    <div style="font-size:10px;color:#8a95a0;margin:0 0 8px 30px">Key portfolio statistics at a glance</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="background:#f7f9fb;border-radius:10px;padding:10px 12px">
+        <div style="background:#e3f6fb;color:#0c93c2;width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;margin-bottom:6px">◔</div>
+        <div style="font-size:9px;color:#8a95a0">Today's Move</div>
+        <div id="pt-dash-qo1-val" style="font-size:15px;font-weight:800;color:#0c1929;margin-top:2px">—</div>
+        <div style="font-size:8px;color:#aab4bd;margin-top:2px">Across all holdings, today</div>
+      </div>
+      <div style="background:#f7f9fb;border-radius:10px;padding:10px 12px">
+        <div style="background:#e3f6fb;color:#0c93c2;width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;margin-bottom:6px">◈</div>
+        <div style="font-size:9px;color:#8a95a0">Overall Return</div>
+        <div id="pt-dash-qo2-val" style="font-size:15px;font-weight:800;color:#0c1929;margin-top:2px">—</div>
+        <div style="font-size:8px;color:#aab4bd;margin-top:2px">Since purchase, all holdings</div>
+      </div>
+      <div style="background:#f7f9fb;border-radius:10px;padding:10px 12px">
+        <div style="background:#e6f9ee;color:#1a8a4a;width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;margin-bottom:6px">↗</div>
+        <div style="font-size:9px;color:#8a95a0">Best Holding</div>
+        <div id="pt-dash-qo3-val" style="font-size:14px;font-weight:800;color:#0c1929;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+        <div id="pt-dash-qo3-sub" style="font-size:8px;color:#aab4bd;margin-top:2px">—</div>
+      </div>
+      <div style="background:#f7f9fb;border-radius:10px;padding:10px 12px">
+        <div style="background:#fdeee6;color:#cc5a1a;width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;margin-bottom:6px">↘</div>
+        <div style="font-size:9px;color:#8a95a0">Worst Holding</div>
+        <div id="pt-dash-qo4-val" style="font-size:14px;font-weight:800;color:#0c1929;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+        <div id="pt-dash-qo4-sub" style="font-size:8px;color:#aab4bd;margin-top:2px">—</div>
+      </div>
+      <div style="background:#f7f9fb;border-radius:10px;padding:10px 12px">
+        <div style="background:#e6f9ee;color:#1a8a4a;width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;margin-bottom:6px">↗</div>
+        <div style="font-size:9px;color:#8a95a0">Return Trend</div>
+        <div id="pt-dash-qo5-val" style="font-size:15px;font-weight:800;color:#0c1929;margin-top:2px">—</div>
+        <div id="pt-dash-qo5-sub" style="font-size:8px;color:#aab4bd;margin-top:2px">—</div>
+      </div>
+      <div style="background:#f7f9fb;border-radius:10px;padding:10px 12px">
+        <div style="background:#e8ecfb;color:#2a5adf;width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;margin-bottom:6px">▤</div>
+        <div style="font-size:9px;color:#8a95a0">Total Value</div>
+        <div id="pt-dash-qo6-val" style="font-size:15px;font-weight:800;color:#0c1929;margin-top:2px">—</div>
+        <div style="font-size:8px;color:#aab4bd;margin-top:2px">Available in Portfolio</div>
+      </div>
+    </div>
+
+    <!-- 3. HOLDINGS TABLE — searchable + sortable, storage-bar-style Return% column -->
+    <div style="display:flex;align-items:center;gap:8px;margin:20px 0 2px">
+      <span style="background:#e3f6fb;color:#0c93c2;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px">▥</span>
+      <h4 style="font-size:14px;font-weight:800;color:#0c1929;margin:0">Holding Levels</h4>
+    </div>
+    <div style="font-size:10px;color:#8a95a0;margin:0 0 8px 30px" id="pt-dash-holdings-sub">Current status for all holdings in your Portfolio</div>
+    <div style="background:#f7f9fb;border-radius:12px;padding:10px">
+      <input id="pt-dash-search" type="text" placeholder="Search holding..." oninput="PSnap.dashFilterHoldings(this.value)" style="width:100%;box-sizing:border-box;border:1px solid #e2e6ea;border-radius:8px;padding:8px 10px;font-size:11px;background:#fff;margin-bottom:8px">
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:460px">
+        <thead><tr style="color:#8a95a0;background:#f7f9fb">
+          <th onclick="PSnap.dashSortBy('name')" style="text-align:left;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;position:sticky;left:0;z-index:3;background:#f7f9fb;min-width:110px;max-width:110px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">Holding</th>
+          <th onclick="PSnap.dashSortBy('return')" style="text-align:left;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Return</th>
+          <th onclick="PSnap.dashSortBy('price')" style="text-align:right;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Current</th>
+          <th onclick="PSnap.dashSortBy('purchase')" style="text-align:right;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Purchase</th>
+        </tr></thead>
+        <tbody id="pt-dash-holdings-tb"><tr><td colspan="4" style="text-align:center;color:#999;padding:10px">No holdings yet</td></tr></tbody>
+      </table>
+      </div>
+    </div>
+
+    <!-- 4. STORAGE ANALYSIS-equivalent — Return bar chart (per holding) + Regime donut -->
+    <div style="display:flex;align-items:center;gap:8px;margin:20px 0 2px">
+      <span style="background:#e3f6fb;color:#0c93c2;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px">▨</span>
+      <h4 style="font-size:14px;font-weight:800;color:#0c1929;margin:0">Portfolio Analysis</h4>
+    </div>
+    <div style="font-size:10px;color:#8a95a0;margin:0 0 8px 30px">Visual breakdown of returns and Regime composition</div>
+    <div style="background:#f7f9fb;border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:800;color:#0c1929;margin-bottom:2px">Returns by Holding</div>
+      <div style="font-size:9px;color:#8a95a0;margin-bottom:10px">Current return % vs purchase price, per holding</div>
+      <div id="pt-dash-bar-chart"></div>
+    </div>
+    <div style="background:#f7f9fb;border-radius:12px;padding:14px">
+      <div style="font-size:12px;font-weight:800;color:#0c1929;margin-bottom:2px">Regime Distribution</div>
+      <div style="font-size:9px;color:#8a95a0;margin-bottom:10px">Share of holdings in each Regime</div>
+      <div id="pt-dash-donut-chart" style="display:flex;justify-content:center"></div>
+      <div id="pt-dash-donut-legend" style="text-align:center;font-size:10px;margin-top:8px;line-height:1.8"></div>
+    </div>
+
+    <!-- 5. PER-HOLDING DETAIL CARDS — expandable, mirrors "Mumbai Reservoirs" -->
+    <div style="display:flex;align-items:center;gap:8px;margin:20px 0 2px">
+      <span style="background:#e3f6fb;color:#0c93c2;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px">◍</span>
+      <h4 style="font-size:14px;font-weight:800;color:#0c1929;margin:0">Portfolio Holdings</h4>
+    </div>
+    <div style="font-size:10px;color:#8a95a0;margin:0 0 8px 30px">Detailed status of each holding with Regime, Signal, and HM Status</div>
+    <div id="pt-dash-holdings-detail"></div>
+
+    <!-- 6. IMPORTANT UPDATES feed — notable events derived from the data -->
+    <div style="display:flex;align-items:center;gap:8px;margin:20px 0 2px">
+      <span style="background:#fdeee6;color:#cc5a1a;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px">⚠</span>
+      <h4 style="font-size:14px;font-weight:800;color:#0c1929;margin:0">Important Updates</h4>
+    </div>
+    <div style="font-size:10px;color:#8a95a0;margin:0 0 8px 30px">Notable Regime, HM Status, and Signal changes across your Portfolio</div>
+    <div id="pt-dash-updates"></div>
+
+  </div>
+
+  <!-- ── (b) Table view — original dense Portfolio Summary table ── -->
+  <div id="pt-sum-table-view" style="display:none">
+    <div style="font-size:8px;color:#888;margin-bottom:4px">Confluence / Regime / P&gt;WMA / BA Weightage / RS 1M / RS 2M / RS 3M / RS Score / Signal / HM Status / Returns / HM Chart — all shown below. Tap a header button above to jump to a column.</div>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #1a8a1a;border-radius:4px">
+    <table class="freeze-col1" style="width:100%;border-collapse:collapse;font-size:9px;min-width:1300px">
+      <thead><tr id="pt-sum-thead" style="background:#eaffea"></tr></thead>
+      <tbody id="pt-sum-tb"><tr><td style="text-align:center;color:#666;padding:8px">No indices in Portfolio yet — use Update Portfolio to add some</td></tr></tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+</div><!-- #pt-wrap -->
+</div><!-- #tab-pt -->
+
+<!-- ── Explore tab: opportunities outside the current Portfolio ──
+     Monthly Green > SMA(8) Low screener + Matching Index. Moved out of
+     the Portfolio tab per spec (Portfolio tab now shows only the
+     Portfolio Summary table). Both tables/renderers are unchanged —
+     renderMonthlyGreenAboveSMA8()/renderMatchingIndex() still populate
+     #pt-mgs8-tb/#pt-matching-tb exactly as before; only their container
+     moved to this new tab. ── -->
+<div id="tab-explore" class="tab-panel">
+<div style="font-family:'Segoe UI',Arial,sans-serif;font-size:12px;max-width:100%;padding:10px;background:#fff;color:#111;min-height:100vh">
+
+<h2 style="font-family:'Segoe UI',Arial,sans-serif;font-size:18px;font-weight:900;letter-spacing:3px;color:#000;margin:0 0 6px 0;text-transform:uppercase">Explore</h2>
+
 <!-- ── Monthly Green > SMA(8) Low screener table ──
      New feature: scans the entire universe (NSE + NPS + BAF, same set as
      ptAllComputedRows / the "175 indices" scan) for funds whose CURRENT
      monthly candle is green (close > open) AND that candle's low is above
-     the SMA(8) of the monthly candles' lows. Placed directly above the
-     Portfolio Summary table per request. Populated by
+     the SMA(8) of the monthly candles' lows. Populated by
      renderMonthlyGreenAboveSMA8(), called from the same places
      renderSummary()/renderMatchingIndex() are (showSummary/onScanComplete),
      so it's always in sync with the latest scan.
-     "Last Month Candle" column (added per follow-up request): the PREVIOUS
-     completed month's own candle — green/red background with its %change,
-     no separate numeric column. -->
+     "Last Month Candle" column: the PREVIOUS completed month's own
+     candle — green/red background with its %change, no separate numeric
+     column. -->
 <div id="pt-mgs8-wrap" style="margin:8px 0">
-  <h3 style="color:#0055aa;font-size:12px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">Monthly Green &gt; SMA(8) Low</h3>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">
+    <h3 style="color:#0055aa;font-size:12px;margin:0">Monthly Green &gt; SMA(8) Low</h3>
+    <div style="display:flex;background:#f0f0f0;border-radius:14px;padding:2px;gap:2px">
+      <button id="pt-mgs8-view-btn-dash" onclick="PSnap.setMgs8View('dashboard')" style="border:none;background:#0c1929;color:#fff;padding:5px 10px;border-radius:12px;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap">Dashboard</button>
+      <button id="pt-mgs8-view-btn-table" onclick="PSnap.setMgs8View('table')" style="border:none;background:transparent;color:#666;padding:5px 10px;border-radius:12px;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap">Table</button>
+    </div>
+  </div>
   <div style="font-size:8px;color:#888;margin-bottom:4px">Current monthly candle is green (close &gt; open) AND its low is above the SMA(8) of monthly lows — scanned across the full universe (NSE + NPS + BAF).</div>
+
+  <!-- ── Dashboard view (DEFAULT) — analysis restricted to funds whose
+       LAST MONTH candle (the prior completed month, not the in-progress
+       one) was green, per request. The Table view below is unfiltered
+       (shows every Green>SMA8 fund regardless of last month's color), so
+       this dashboard is a stricter, higher-conviction subset of it. ── -->
+  <div id="pt-mgs8-dashboard-view"></div>
+
+  <div id="pt-mgs8-table-view" style="display:none">
   <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #1a6b8a;border-radius:4px">
   <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:680px">
-    <thead><tr style="background:#e6f4fa"><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">#</th><th style="font-family:'Segoe UI',Arial,sans-serif;padding:5px 4px;text-align:left;font-size:9px;color:#000;text-transform:uppercase;white-space:nowrap">Index</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">View</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">Close</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">M. Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">SMA(8) Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">Last Month Candle</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">Add to Portfolio</th></tr></thead>
+    <thead><tr style="background:#e6f4fa"><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap;position:sticky;left:0;z-index:3;background:#e6f4fa;width:26px;min-width:26px;max-width:26px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)">#</th><th style="font-family:'Segoe UI',Arial,sans-serif;padding:5px 4px;text-align:left;font-size:9px;color:#000;text-transform:uppercase;white-space:nowrap;position:sticky;left:26px;z-index:3;background:#e6f4fa;min-width:118px;max-width:118px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)">Index</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">View</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">Close</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">M. Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">SMA(8) Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">Last Month Candle</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#0a5a75;text-transform:uppercase;white-space:nowrap">Add to Portfolio</th></tr></thead>
     <tbody id="pt-mgs8-tb"><tr><td colspan="8" style="text-align:center;color:#666;padding:8px">Run a scan to populate this list</td></tr></tbody>
   </table>
   </div>
-</div>
-
-<!-- ── "Watch for Bearish Mode" screener table (new) ──
-     Companion to the screener above: funds whose CURRENT monthly candle is
-     RED (close < open) but whose low is STILL at-or-above the SMA(8) of
-     monthly lows — support hasn't broken yet, but the candle has turned
-     bearish. An early-warning list, not a "already broken down" list.
-     Populated by renderMonthlyRedAtOrAboveSMA8(), same trigger points as
-     the Green>SMA8 table above. -->
-<div id="pt-bear-wrap" style="margin:8px 0">
-  <h3 style="color:#0055aa;font-size:12px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">Watch for Bearish Mode</h3>
-  <div style="font-size:8px;color:#888;margin-bottom:4px">Current monthly candle is RED (close &lt; open) but its low is still at or above the SMA(8) of monthly lows — support intact for now, but the candle has turned bearish. Scanned across the full universe (NSE + NPS + BAF).</div>
-  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #cc0000;border-radius:4px">
-  <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:680px">
-    <thead><tr style="background:#fdeaea"><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">#</th><th style="font-family:'Segoe UI',Arial,sans-serif;padding:5px 4px;text-align:left;font-size:9px;color:#000;text-transform:uppercase;white-space:nowrap">Index</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">View</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Close</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">M. Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">SMA(8) Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Last Month Candle</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Add to Portfolio</th></tr></thead>
-    <tbody id="pt-bear-tb"><tr><td colspan="8" style="text-align:center;color:#666;padding:8px">Run a scan to populate this list</td></tr></tbody>
-  </table>
-  </div>
-</div>
-
-<!-- ── Portfolio Summary table (shown via "Portfolio Summary" button) ── -->
-<div id="pt-summary-wrap" style="display:none;margin:8px 0">
-  <h3 style="color:#0055aa;font-size:12px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">Portfolio Summary</h3>
-  <div style="font-size:8px;color:#888;margin-bottom:4px">Confluence / Regime / P&gt;WMA / BA Weightage / RS 1M / RS 2M / RS 3M / RS Score / Signal / HM Status / Returns / HM Chart — all shown below. Tap a header button above to jump to a column.</div>
-  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #1a8a1a;border-radius:4px">
-  <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:1300px">
-    <thead><tr id="pt-sum-thead" style="background:#eaffea"></tr></thead>
-    <tbody id="pt-sum-tb"><tr><td style="text-align:center;color:#666;padding:8px">No indices in Portfolio yet — use Update Portfolio to add some</td></tr></tbody>
-  </table>
   </div>
 </div>
 
 <!-- ── Matching Index table: near-matching or better-scoring indices ── -->
-<div id="pt-matching-wrap" style="display:none;margin:8px 0">
-  <h3 style="color:#0055aa;font-size:12px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">Matching Index</h3>
+<div id="pt-matching-wrap" style="margin:8px 0">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">
+    <h3 style="color:#0055aa;font-size:12px;margin:0">Matching Index</h3>
+    <div style="display:flex;background:#f0f0f0;border-radius:14px;padding:2px;gap:2px">
+      <button id="pt-matching-view-btn-dash" onclick="PSnap.setMatchingView('dashboard')" style="border:none;background:#0c1929;color:#fff;padding:5px 10px;border-radius:12px;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap">Dashboard</button>
+      <button id="pt-matching-view-btn-table" onclick="PSnap.setMatchingView('table')" style="border:none;background:transparent;color:#666;padding:5px 10px;border-radius:12px;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap">Table</button>
+    </div>
+  </div>
   <div style="font-size:8px;color:#888;margin-bottom:4px">Indices outside your Portfolio scoring at or above its average (Regime + P&gt;WMA + RS Score + BA Weightage composite). Same columns as Portfolio Summary.</div>
+
+  <!-- ── Dashboard view (DEFAULT) — analysis restricted to funds whose HM
+       Status shows all 3 green ticks (Monthly + Weekly + Daily RSI(9) all
+       above 50), per request. The Table view below is unfiltered (shows
+       every Matching Index candidate regardless of HM Status), so this
+       dashboard is a stricter, higher-conviction subset of it. ── -->
+  <div id="pt-matching-dashboard-view"></div>
+
+  <div id="pt-matching-table-view" style="display:none">
   <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #cc7a00;border-radius:4px">
   <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:1300px">
     <thead><tr id="pt-matching-thead" style="background:#fff3e0"></tr></thead>
     <tbody id="pt-matching-tb"><tr><td colspan="18" style="text-align:center;color:#666;padding:8px">Build a Portfolio to see matches</td></tr></tbody>
   </table>
   </div>
+  </div>
 </div>
 
-</div><!-- #pt-wrap -->
-</div><!-- #tab-pt -->
+</div>
+</div><!-- #tab-explore -->
+
+<!-- ── Watch tab: "Watch for Bearish Mode" screener ──
+     Companion to the Explore screener: funds whose CURRENT monthly candle
+     is RED (close < open) but whose low is STILL at-or-above the SMA(8)
+     of monthly lows — support hasn't broken yet, but the candle has
+     turned bearish. An early-warning list, not a "already broken down"
+     list. Populated by renderMonthlyRedAtOrAboveSMA8(), same trigger
+     points as the Green>SMA8 table (showSummary/onScanComplete). Moved
+     out of the Portfolio tab into its own tab per spec. ── -->
+<div id="tab-watch" class="tab-panel">
+<div style="font-family:'Segoe UI',Arial,sans-serif;font-size:12px;max-width:100%;padding:10px;background:#fff;color:#111;min-height:100vh">
+
+<h2 style="font-family:'Segoe UI',Arial,sans-serif;font-size:18px;font-weight:900;letter-spacing:3px;color:#000;margin:0 0 6px 0;text-transform:uppercase">Watch</h2>
+
+<div id="pt-bear-wrap" style="margin:8px 0">
+  <h3 style="color:#0055aa;font-size:12px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">Watch for Bearish Mode</h3>
+  <div style="font-size:8px;color:#888;margin-bottom:4px">Current monthly candle is RED (close &lt; open) but its low is still at or above the SMA(8) of monthly lows — support intact for now, but the candle has turned bearish. Scanned across the full universe (NSE + NPS + BAF).</div>
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #cc0000;border-radius:4px">
+  <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:680px">
+    <thead><tr style="background:#fdeaea"><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap;position:sticky;left:0;z-index:3;background:#fdeaea;width:26px;min-width:26px;max-width:26px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)">#</th><th style="font-family:'Segoe UI',Arial,sans-serif;padding:5px 4px;text-align:left;font-size:9px;color:#000;text-transform:uppercase;white-space:nowrap;position:sticky;left:26px;z-index:3;background:#fdeaea;min-width:118px;max-width:118px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)">Index</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">View</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Close</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">M. Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">SMA(8) Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Last Month Candle</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Add to Portfolio</th></tr></thead>
+    <tbody id="pt-bear-tb"><tr><td colspan="8" style="text-align:center;color:#666;padding:8px">Run a scan to populate this list</td></tr></tbody>
+  </table>
+  </div>
+</div>
+
+</div>
+</div><!-- #tab-watch -->
 
 
 <!-- ================================================================
@@ -2906,6 +3124,13 @@ async function ldApplyBackupJson(text) {
       }
       if (_activeTabId === 'tab-pt' && typeof window.onPTTabActivated === 'function') {
         window.onPTTabActivated();
+      } else if (_activeTabId === 'tab-explore' && typeof window.onPTTabActivated === 'function') {
+        window.onPTTabActivated();
+        if (typeof renderMonthlyGreenAboveSMA8 === 'function') renderMonthlyGreenAboveSMA8();
+        if (typeof renderMatchingIndex === 'function') renderMatchingIndex();
+      } else if (_activeTabId === 'tab-watch' && typeof window.onPTTabActivated === 'function') {
+        window.onPTTabActivated();
+        if (typeof renderMonthlyRedAtOrAboveSMA8 === 'function') renderMonthlyRedAtOrAboveSMA8();
       } else if (_activeTabId === 'tab-hilega' && typeof openHilegaTab === 'function') {
         openHilegaTab();
       } else if (_activeTabId === 'tab-npsswitch' && typeof window.onNpsSwitchTabActivated === 'function') {
@@ -3231,11 +3456,23 @@ window.addEventListener('appinstalled', () => {
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  var btn=document.querySelector('.tab-btn[onclick*="' + name + '"]');
+  var btn=document.querySelector('.tab-btn[data-tab="' + name + '"]');
   if(btn)btn.classList.add('active');
   var panel=document.getElementById('tab-' + name);
   if(panel)panel.classList.add('active');
   if (name === 'pt' && typeof window.onPTTabActivated === 'function') { window.onPTTabActivated(); }
+  if (name === 'explore' && typeof window.onPTTabActivated === 'function') {
+    // Explore lives outside #tab-pt now, but its two tables (Monthly
+    // Green>SMA8, Matching Index) are populated by the same Portfolio
+    // Snapshot data engine — refresh on activation so it's never stale.
+    window.onPTTabActivated();
+    if (typeof renderMonthlyGreenAboveSMA8 === 'function') renderMonthlyGreenAboveSMA8();
+    if (typeof renderMatchingIndex === 'function') renderMatchingIndex();
+  }
+  if (name === 'watch' && typeof window.onPTTabActivated === 'function') {
+    window.onPTTabActivated();
+    if (typeof renderMonthlyRedAtOrAboveSMA8 === 'function') renderMonthlyRedAtOrAboveSMA8();
+  }
   if (name === 'hilega' && typeof openHilegaTab === 'function') { openHilegaTab(); }
   if (name === 'npsswitch' && typeof window.onNpsSwitchTabActivated === 'function') { window.onNpsSwitchTabActivated(); }
   if (name === 'tactical' && typeof window.onTacticalTabActivated === 'function') { window.onTacticalTabActivated(); }
@@ -4445,9 +4682,24 @@ function viewHMChart(name){
   win._hmTfDays=1095;
   win._hmReturnToPT=true;
   win._hmPendingChartRequest=key; // one-shot: consumed by hmPopulateIndexDropdown's next render
-  // Remember which table the person is looking at right now, so Back can
-  // return them to it specifically instead of the default main table.
+  // Remember exactly where the person tapped "View HM Chart" from, so Back
+  // can return them there precisely instead of always landing on the
+  // Portfolio tab. This link is reachable from Portfolio, Explore, and
+  // Watch (all three "View"/"View HM Chart" buttons route through this
+  // same function) — so we detect whichever tab panel is actually active
+  // right now rather than assuming it's always Portfolio.
+  var activePanel=document.querySelector('.tab-panel.active');
+  win._hmReturnToTab=(activePanel&&activePanel.id==='tab-explore')?'explore':(activePanel&&activePanel.id==='tab-watch')?'watch':'pt';
+  // Remember which of Portfolio's own internal views (main/summary/
+  // universe) was showing, so Back restores that too — only meaningful
+  // when the origin tab was Portfolio itself.
   win._hmReturnToPTView=ptCurrentView();
+  // Also remember exactly how far down that view was scrolled, so Back
+  // restores the precise reading position — not just the right tab/view.
+  // window scroll is what actually moves in this single-page layout (the
+  // tab panels aren't independently-scrolling containers), so that's what
+  // we capture and restore.
+  win._hmReturnToPTScrollY=window.scrollY||document.documentElement.scrollTop||0;
   showBackButton();
   if(typeof win.switchTab==='function')win.switchTab('hilega');
 }
@@ -4461,19 +4713,36 @@ function showBackButton(){
     b.onclick=function(){
       win._hmReturnToPT=false;
       b.style.display='none';
-      if(typeof win.switchTab==='function')win.switchTab('pt');
-      // Restore whichever table (main / Master List / Portfolio Summary)
-      // was showing before "View HM Chart" navigated away, so Back lands
-      // exactly where the person left off instead of always resetting to
-      // the default main table. Applied AFTER switchTab('pt') — which
-      // fires onPTTabActivated()/onTabActivated() and, as part of its
-      // normal per-activation refresh, unconditionally shows/hides the
-      // Summary view based on portfolio contents — so this runs last and
-      // isn't immediately overwritten by that refresh.
+      // Return to whichever tab "View HM Chart" was actually tapped from
+      // (Portfolio, Explore, or Watch) — one-shot, default to Portfolio if
+      // for some reason it wasn't recorded (e.g. Back tapped twice).
+      var _tab=win._hmReturnToTab||'pt';
+      win._hmReturnToTab=null;
+      if(typeof win.switchTab==='function')win.switchTab(_tab);
+      // Restore whichever of Portfolio's own internal views (main / Master
+      // List / Portfolio Summary) was showing, so Back lands exactly where
+      // the person left off instead of always resetting to the default
+      // main table. Only meaningful when the origin tab was Portfolio
+      // itself — Explore/Watch don't have this sub-view concept. Applied
+      // AFTER switchTab() — which fires onPTTabActivated()/onTabActivated()
+      // and, as part of its normal per-activation refresh, unconditionally
+      // shows/hides the Summary view based on portfolio contents — so this
+      // runs last and isn't immediately overwritten by that refresh.
       var _view=win._hmReturnToPTView;
       win._hmReturnToPTView=null; // one-shot, same pattern as _hmPendingChartRequest
-      if(_view&&typeof win.PSnap!=='undefined'&&typeof win.PSnap.restoreView==='function'){
+      if(_tab==='pt'&&_view&&typeof win.PSnap!=='undefined'&&typeof win.PSnap.restoreView==='function'){
         win.PSnap.restoreView(_view);
+      }
+      // Restore the exact scroll position the person was at before they
+      // tapped "View HM Chart"/"View", one-shot just like the view itself.
+      // Runs on a short delay so it lands after that tab's own
+      // re-render/reflow (dashboard sections, tables, etc.) has finished
+      // resizing the page — restoring scroll before that would land on the
+      // wrong spot once content above it finishes laying out.
+      var _scrollY=win._hmReturnToPTScrollY;
+      win._hmReturnToPTScrollY=null;
+      if(_scrollY!=null){
+        setTimeout(function(){window.scrollTo(0,_scrollY);},50);
       }
     };
     document.body.appendChild(b);
@@ -4620,27 +4889,29 @@ async function restartFreshDownload(){
   if(st)st.textContent='Progress cleared. Starting fresh download…';
   downloadData();
 }
+// NOTE: pt-matching-wrap (Explore tab) and pt-bear-wrap (Watch tab) now
+// live outside #tab-pt, in their own always-visible tabs — they're no
+// longer toggled by show/hideSummary. Their render*() calls stay here so
+// they keep refreshing in sync with every Portfolio Summary update.
 function showSummary(){
   var wrap=psEl('pt-summary-wrap');
   if(wrap)wrap.style.display='block';
-  var mwrap=psEl('pt-matching-wrap');
-  if(mwrap)mwrap.style.display='block';
   var univ=psEl('pt-universe-panel');
   if(univ)univ.style.display='none'; // hide universe list while summary is shown
   var mainTableWrap=psEl('pt-main-table-wrap');
   if(mainTableWrap)mainTableWrap.style.display='none'; // hide basic index table while summary is shown
   renderSummary();
+  renderDashboardView();
   renderMatchingIndex();
   renderMonthlyGreenAboveSMA8();
   renderMonthlyRedAtOrAboveSMA8();
   updateHeaderStats();
+  renderDashboardView(); // re-run after updateHeaderStats() so P&L/Return/Value figures are current
   if(wrap)wrap.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function hideSummary(){
   var wrap=psEl('pt-summary-wrap');
   if(wrap)wrap.style.display='none';
-  var mwrap=psEl('pt-matching-wrap');
-  if(mwrap)mwrap.style.display='none';
   var mainTableWrap=psEl('pt-main-table-wrap');
   if(mainTableWrap)mainTableWrap.style.display='block';
 }
@@ -4697,6 +4968,280 @@ function renderSummary(){
   }).join('');
 }
 
+// Builds the full mumbaiwater.in-style dashboard from the SAME Portfolio
+// Summary rows renderSummary() uses — regime/pwma/signal/hmstatus per
+// holding, plus the header P&L/Return/Value stats already computed by
+// updateHeaderStats(). Sections: (1) hero, (2) Quick Overview 6-card grid,
+// (3) searchable/sortable Holdings table, (4) bar+donut Portfolio
+// Analysis charts, (5) per-holding detail cards, (6) Important Updates.
+var _ptDashRows=[]; // cached rows from the last render, used by dashFilterHoldings/dashSortBy
+var _ptDashSearchTerm='';
+var _ptDashSortKey='return',_ptDashSortDir=-1;
+function renderDashboardView(){
+  var heroNum=psEl('pt-dash-hero-num'),pillIcon=psEl('pt-dash-pill-icon'),pillText=psEl('pt-dash-pill-text'),
+      subtext=psEl('pt-dash-subtext'),stat1=psEl('pt-dash-stat1'),stat2=psEl('pt-dash-stat2'),stat3=psEl('pt-dash-stat3'),
+      updated=psEl('pt-dash-updated');
+  if(!heroNum)return;
+  if(!PState.names.length){
+    heroNum.textContent='—';
+    if(pillIcon)pillIcon.textContent='ℹ️';
+    if(pillText)pillText.textContent='No Portfolio yet';
+    if(subtext)subtext.textContent='Use Update Portfolio to add holdings.';
+    [stat1,stat2,stat3].forEach(function(el){if(el)el.textContent='—';});
+    if(updated)updated.textContent='Updated: —';
+    ['pt-dash-qo1-val','pt-dash-qo2-val','pt-dash-qo3-val','pt-dash-qo4-val','pt-dash-qo5-val','pt-dash-qo6-val'].forEach(function(id){var el=psEl(id);if(el)el.textContent='—';});
+    var qo3s=psEl('pt-dash-qo3-sub'),qo4s=psEl('pt-dash-qo4-sub'),qo5s=psEl('pt-dash-qo5-sub');
+    [qo3s,qo4s,qo5s].forEach(function(el){if(el)el.textContent='—';});
+    var htb=psEl('pt-dash-holdings-tb');if(htb)htb.innerHTML='<tr><td colspan="4" style="text-align:center;color:#999;padding:10px">No holdings yet</td></tr>';
+    var bc=psEl('pt-dash-bar-chart');if(bc)bc.innerHTML='<div style="text-align:center;color:#999;font-size:10px;padding:10px 0">No holdings yet</div>';
+    var dc=psEl('pt-dash-donut-chart');if(dc)dc.innerHTML='';
+    var dl=psEl('pt-dash-donut-legend');if(dl)dl.innerHTML='';
+    var det=psEl('pt-dash-holdings-detail');if(det)det.innerHTML='';
+    var upd=psEl('pt-dash-updates');if(upd)upd.innerHTML='<div style="font-size:10px;color:#999;padding:8px 0">No updates yet — add holdings to your Portfolio.</div>';
+    _ptDashRows=[];
+    return;
+  }
+  var names=PState.names.slice();
+  var regimeACount=0,regimeBCount=0,regimeCCount=0,pwmaYesCount=0,hmAllGreenCount=0,leaderCount=0,retSum=0,retCount=0,todaySum=0,todayCount=0;
+  var scanR=(typeof win.ptGetScanR==='function')?win.ptGetScanR():[];
+  var priceOf={};scanR.forEach(function(r){var k=r.name?r.name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';priceOf[k]={price:r.price,change:r.change};});
+  var rows=names.map(function(name){
+    var r=scannerRowFor(name);
+    var regime=r&&r.regime?r.regime:null;
+    var pwmaYes=!!(r&&r.price!=null&&r.wma20Price!=null&&r.price>r.wma20Price);
+    var d=rsDetailFor(name);
+    var signal=d&&d.signal?d.signal:null;
+    if(regime==='A')regimeACount++;else if(regime==='B')regimeBCount++;else if(regime)regimeCCount++;
+    if(pwmaYes)pwmaYesCount++;
+    var allGreen=hmAllGreen(name);
+    if(allGreen)hmAllGreenCount++;
+    if(signal==='LEADER')leaderCount++;
+    var norm=name?name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
+    var pr=priceOf[norm]||{};
+    var cur=pr.price;
+    var pur=PState.purchases[name];
+    var retPct=null;
+    if(pur&&pur.price!=null&&cur!=null&&pur.price){retPct=(cur-pur.price)/pur.price*100;retSum+=retPct;retCount++;}
+    if(pr.change!=null){todaySum+=pr.change;todayCount++;}
+    return {name:name,regime:regime,pwmaYes:pwmaYes,signal:signal,retPct:retPct,cur:cur,change:pr.change,purPrice:pur?pur.price:null,hmAllGreen:allGreen};
+  });
+  _ptDashRows=rows;
+  var total=names.length;
+
+  // ── 1. HERO ──
+  var scorePct=total?((regimeACount+pwmaYesCount)/(2*total)*100):0;
+  heroNum.textContent=scorePct.toFixed(1);
+  var good=scorePct>=66,ok=scorePct>=40;
+  if(pillIcon)pillIcon.textContent=good?'✓':ok?'●':'⚠';
+  var pillWrap=psEl('pt-dash-pill');
+  if(pillWrap){
+    pillWrap.style.background=good?'#e9f9ef':ok?'#fff7e0':'#fdeaea';
+    pillWrap.style.color=good?'#1a8a4a':ok?'#a3720a':'#a30a0a';
+    pillWrap.style.borderColor=good?'#cdeedb':ok?'#f2e2ae':'#f2cccc';
+  }
+  if(pillText)pillText.textContent=good?'Portfolio Positioning is Strong':ok?'Portfolio Positioning is Mixed':'Portfolio Positioning is Weak';
+  if(subtext)subtext.textContent=regimeACount+' of '+total+' holdings in Regime A, '+pwmaYesCount+' of '+total+' above their WMA(20).';
+  var pvEl=psEl('pt-pv'),tpEl=psEl('pt-tp'),trEl=psEl('pt-tr');
+  if(stat1)stat1.textContent=pvEl&&pvEl.textContent!=='—'?pvEl.textContent:'—';
+  if(stat2){stat2.textContent=tpEl&&tpEl.textContent!=='—'?tpEl.textContent:'—';stat2.style.color=(tpEl&&tpEl.style.color)?tpEl.style.color:'#0c1929';}
+  if(stat3)stat3.textContent=String(total);
+  if(updated){
+    var now=new Date();
+    var pad=function(n){return n<10?'0'+n:''+n;};
+    updated.textContent='Updated: '+now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+' at '+pad(now.getHours())+':'+pad(now.getMinutes());
+  }
+
+  // ── 2. QUICK OVERVIEW (6 cards) ──
+  var qo1=psEl('pt-dash-qo1-val'); // Today's Move — average change % across holdings
+  if(qo1){
+    if(todayCount){var avgToday=todaySum/todayCount;qo1.textContent=(avgToday>=0?'+':'')+avgToday.toFixed(2)+'%';qo1.style.color=avgToday>=0?'#1a8a4a':'#cc0000';}
+    else qo1.textContent='—';
+  }
+  var qo2=psEl('pt-dash-qo2-val'); // Overall Return — same avgRet as before
+  var avgRet=retCount?(retSum/retCount):null;
+  if(qo2){qo2.textContent=avgRet!=null?(avgRet>=0?'+':'')+avgRet.toFixed(2)+'%':'—';qo2.style.color=avgRet!=null?(avgRet>=0?'#1a8a4a':'#cc0000'):'#0c1929';}
+  var withRet=rows.filter(function(r){return r.retPct!=null;});
+  var best=withRet.length?withRet.reduce(function(a,b){return b.retPct>a.retPct?b:a;}):null;
+  var worst=withRet.length?withRet.reduce(function(a,b){return b.retPct<a.retPct?b:a;}):null;
+  var qo3=psEl('pt-dash-qo3-val'),qo3s=psEl('pt-dash-qo3-sub');
+  if(qo3){qo3.textContent=best?best.name:'—';}
+  if(qo3s){qo3s.textContent=best?((best.retPct>=0?'+':'')+best.retPct.toFixed(2)+'%'):'No purchases tagged yet';}
+  var qo4=psEl('pt-dash-qo4-val'),qo4s=psEl('pt-dash-qo4-sub');
+  if(qo4){qo4.textContent=worst?worst.name:'—';}
+  if(qo4s){qo4s.textContent=worst?((worst.retPct>=0?'+':'')+worst.retPct.toFixed(2)+'%'):'No purchases tagged yet';}
+  var qo5=psEl('pt-dash-qo5-val'),qo5s=psEl('pt-dash-qo5-sub');
+  if(qo5){qo5.textContent=avgRet==null?'—':(avgRet>=0?'Rising':'Falling');qo5.style.color=avgRet==null?'#0c1929':(avgRet>=0?'#1a8a4a':'#cc0000');}
+  if(qo5s){qo5s.textContent=retCount+' of '+total+' holdings with a tagged purchase';}
+  var qo6=psEl('pt-dash-qo6-val');
+  if(qo6){qo6.textContent=pvEl&&pvEl.textContent!=='—'?pvEl.textContent:'—';}
+
+  // ── 3. HOLDINGS TABLE (searchable/sortable) ──
+  var hsub=psEl('pt-dash-holdings-sub');
+  if(hsub)hsub.textContent='Current status for all '+total+' holding'+(total===1?'':'s')+' in your Portfolio';
+  dashRenderHoldingsTable();
+
+  // ── 4. PORTFOLIO ANALYSIS (bar chart + donut) ──
+  var barEl=psEl('pt-dash-bar-chart');
+  if(barEl){
+    var maxAbs=Math.max(1,Math.max.apply(null,rows.map(function(r){return r.retPct!=null?Math.abs(r.retPct):0;})));
+    barEl.innerHTML=rows.map(function(rw){
+      var pct=rw.retPct;
+      var widthPct=pct==null?0:Math.min(100,Math.abs(pct)/maxAbs*100);
+      var barColor=pct==null?'#dfe4e8':(pct>=0?'#1a8a4a':'#cc4a1a');
+      var label=pct==null?'—':(pct>=0?'+':'')+pct.toFixed(1)+'%';
+      var safeName=rw.name.length>16?rw.name.slice(0,15)+'…':rw.name;
+      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'+
+        '<div style="width:78px;flex-shrink:0;font-size:9px;color:#556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+rw.name.replace(/"/g,'&quot;')+'">'+safeName+'</div>'+
+        '<div style="flex:1;background:#e9edf0;border-radius:4px;height:10px;position:relative;overflow:hidden">'+
+        '<div style="width:'+widthPct.toFixed(1)+'%;background:'+barColor+';height:100%;border-radius:4px"></div></div>'+
+        '<div style="width:52px;flex-shrink:0;text-align:right;font-size:9px;font-weight:700;color:'+(pct==null?'#999':(pct>=0?'#1a8a4a':'#cc4a1a'))+'">'+label+'</div>'+
+        '</div>';
+    }).join('');
+  }
+  var donutEl=psEl('pt-dash-donut-chart'),legendEl=psEl('pt-dash-donut-legend');
+  if(donutEl){
+    var segs=[{label:'Regime A',count:regimeACount,color:'#1a8a4a'},{label:'Regime B',count:regimeBCount,color:'#d4880f'},{label:'Regime C / —',count:total-regimeACount-regimeBCount,color:'#cc4a4a'}].filter(function(s){return s.count>0;});
+    donutEl.innerHTML=dashBuildDonutSvg(segs,total);
+    legendEl.innerHTML=segs.map(function(s){return '<span style="display:inline-block;margin:0 8px"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+s.color+';margin-right:4px"></span>'+s.label+' ('+(total?(s.count/total*100).toFixed(1):'0.0')+'%)</span>';}).join('');
+  }
+
+  // ── 5. PER-HOLDING DETAIL CARDS ──
+  var detailEl=psEl('pt-dash-holdings-detail');
+  if(detailEl){
+    detailEl.innerHTML=rows.map(function(rw,i){
+      var regimeColor=rw.regime==='A'?'#1a8a4a':rw.regime==='B'?'#b8860b':rw.regime?'#cc0000':'#aab4bd';
+      var retColor=rw.retPct==null?'#aab4bd':(rw.retPct>=0?'#1a8a4a':'#cc0000');
+      var retTxt=rw.retPct==null?'—':(rw.retPct>=0?'+':'')+rw.retPct.toFixed(2)+'%';
+      var changeTxt=rw.change==null?'—':(rw.change>=0?'+':'')+rw.change.toFixed(2)+'%';
+      var changeColor=rw.change==null?'#aab4bd':(rw.change>=0?'#1a8a4a':'#cc0000');
+      var safeName=rw.name.replace(/'/g,"\\'");
+      var barPct=rw.retPct==null?0:Math.max(0,Math.min(100,50+rw.retPct));
+      var cardId='pt-dash-card-'+i;
+      return '<div style="background:#fff;border:1px solid #eef1f3;border-radius:12px;padding:14px;margin-bottom:10px">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">'+
+        '<div><div style="font-size:13px;font-weight:800;color:#0c1929">'+rw.name+'</div>'+
+        '<span style="display:inline-block;margin-top:4px;background:#eef2fb;color:'+regimeColor+';font-size:9px;font-weight:700;padding:2px 8px;border-radius:9px">'+(rw.regime?('Regime '+rw.regime):'Regime —')+'</span></div>'+
+        '<div style="background:'+(rw.change!=null&&rw.change>=0?'#e9f9ef':'#fdeaea')+';color:'+changeColor+';font-size:10px;font-weight:700;padding:4px 8px;border-radius:8px;white-space:nowrap">'+(rw.change!=null&&rw.change>=0?'▲ ':rw.change!=null?'▼ ':'')+changeTxt+'</div>'+
+        '</div>'+
+        '<div style="font-size:26px;font-weight:800;color:#0c1929;margin-top:10px">'+retTxt+'</div>'+
+        '<div style="background:linear-gradient(90deg,'+(rw.retPct!=null&&rw.retPct<0?'#cc4a1a,#e08a4a':'#2a5adf,#1a8a4a')+');height:8px;border-radius:4px;margin-top:6px;width:'+barPct.toFixed(1)+'%;max-width:100%"></div>'+
+        '<div style="background:#e9edf0;height:8px;border-radius:4px;margin-top:-8px"></div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px">'+
+        '<div style="background:#f7f9fb;border-radius:8px;padding:8px 10px"><div style="font-size:8px;color:#8a95a0">Current Price</div><div style="font-size:12px;font-weight:700;color:#0c1929">'+ptFmtLocal(rw.cur)+'</div></div>'+
+        '<div style="background:#f7f9fb;border-radius:8px;padding:8px 10px"><div style="font-size:8px;color:#8a95a0">Purchase Price</div><div style="font-size:12px;font-weight:700;color:#0c1929">'+ptFmtLocal(rw.purPrice)+'</div></div>'+
+        '<div style="background:#f7f9fb;border-radius:8px;padding:8px 10px"><div style="font-size:8px;color:#8a95a0">Signal</div><div style="font-size:12px;font-weight:700;color:#0c1929">'+(rw.signal||'—')+'</div></div>'+
+        '<div style="background:'+(rw.hmAllGreen?'#e9f9ef':'#f7f9fb')+';border-radius:8px;padding:8px 10px"><div style="font-size:8px;color:#8a95a0">HM Status</div><div style="font-size:12px;font-weight:700;color:'+(rw.hmAllGreen?'#1a8a4a':'#0c1929')+'">'+hmStatusCell(rw.name)+'</div></div>'+
+        '</div>'+
+        '<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<button onclick="PSnap.viewHMChart(\''+safeName+'\')" style="flex:1;background:#0055aa;color:#fff;border:none;padding:7px;border-radius:7px;font-size:9px;font-weight:700;cursor:pointer">View HM Chart</button>'+
+        '<button onclick="event.stopPropagation();PSnap.toggleName(\''+safeName+'\')" style="flex:1;background:#fdeaea;color:#cc3344;border:none;padding:7px;border-radius:7px;font-size:9px;font-weight:700;cursor:pointer">Remove</button>'+
+        '</div>'+
+        '</div>';
+    }).join('');
+  }
+
+  // ── 6. IMPORTANT UPDATES — notable, derivable-from-data events ──
+  var updEl=psEl('pt-dash-updates');
+  if(updEl){
+    var notices=[];
+    rows.forEach(function(rw){
+      if(rw.hmAllGreen)notices.push({icon:'✓',color:'#1a8a4a',text:rw.name+' is HM All-Green (Monthly + Weekly + Daily RSI all above 50).'});
+      if(rw.signal==='LEADER')notices.push({icon:'★',color:'#2a5adf',text:rw.name+' is currently ranked as a Signal LEADER.'});
+      if(rw.signal==='LAGGARD')notices.push({icon:'⚠',color:'#cc4a1a',text:rw.name+' is currently ranked as a Signal LAGGARD.'});
+      if(rw.retPct!=null&&rw.retPct<=-10)notices.push({icon:'▼',color:'#cc0000',text:rw.name+' is down '+Math.abs(rw.retPct).toFixed(1)+'% from your purchase price.'});
+      if(rw.retPct!=null&&rw.retPct>=20)notices.push({icon:'▲',color:'#1a8a4a',text:rw.name+' is up '+rw.retPct.toFixed(1)+'% from your purchase price.'});
+    });
+    if(!notices.length)notices.push({icon:'ℹ',color:'#0c93c2',text:'No notable Regime, Signal, or HM Status changes right now — Portfolio looks steady.'});
+    updEl.innerHTML=notices.map(function(n){
+      return '<div style="border-left:3px solid '+n.color+';background:#f7f9fb;border-radius:0 10px 10px 0;padding:10px 12px;margin-bottom:8px;display:flex;align-items:flex-start;gap:8px">'+
+        '<span style="background:#fff;color:'+n.color+';width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;margin-top:1px">'+n.icon+'</span>'+
+        '<span style="font-size:10px;color:#2a3540;line-height:1.5">'+n.text+'</span>'+
+        '</div>';
+    }).join('');
+  }
+}
+// Builds a simple SVG donut chart from {label,count,color} segments.
+function dashBuildDonutSvg(segs,total){
+  if(!total)return '';
+  var r=52,cx=60,cy=60,circumf=2*Math.PI*r;
+  var offset=0,paths='';
+  segs.forEach(function(s){
+    var frac=s.count/total;
+    var dash=frac*circumf;
+    paths+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+s.color+'" stroke-width="16" '+
+      'stroke-dasharray="'+dash.toFixed(2)+' '+(circumf-dash).toFixed(2)+'" stroke-dashoffset="'+(-offset).toFixed(2)+'" transform="rotate(-90 '+cx+' '+cy+')"/>';
+    offset+=dash;
+  });
+  return '<svg width="120" height="120" viewBox="0 0 120 120">'+paths+'<circle cx="'+cx+'" cy="'+cy+'" r="'+(r-8)+'" fill="#f7f9fb"/></svg>';
+}
+// Renders the searchable/sortable Holdings table from _ptDashRows, applying
+// _ptDashSearchTerm and _ptDashSortKey/_ptDashSortDir.
+function dashRenderHoldingsTable(){
+  var tb=psEl('pt-dash-holdings-tb');
+  if(!tb)return;
+  var rows=_ptDashRows.slice();
+  if(_ptDashSearchTerm){
+    var term=_ptDashSearchTerm.toLowerCase();
+    rows=rows.filter(function(r){return r.name.toLowerCase().indexOf(term)>=0;});
+  }
+  rows.sort(function(a,b){
+    var va,vb;
+    if(_ptDashSortKey==='name'){va=a.name.toLowerCase();vb=b.name.toLowerCase();}
+    else if(_ptDashSortKey==='price'){va=a.cur;vb=b.cur;}
+    else if(_ptDashSortKey==='purchase'){va=a.purPrice;vb=b.purPrice;}
+    else {va=a.retPct;vb=b.retPct;}
+    if(va==null&&vb==null)return 0;
+    if(va==null)return 1;
+    if(vb==null)return -1;
+    if(va<vb)return -1*_ptDashSortDir;
+    if(va>vb)return 1*_ptDashSortDir;
+    return 0;
+  });
+  if(!rows.length){
+    tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:#999;padding:10px">No holdings match your search</td></tr>';
+    return;
+  }
+  tb.innerHTML=rows.map(function(rw){
+    var retColor=rw.retPct==null?'#aab4bd':(rw.retPct>=0?'#1a8a4a':'#cc0000');
+    var retTxt=rw.retPct==null?'—':(rw.retPct>=0?'+':'')+rw.retPct.toFixed(2)+'%';
+    var barPct=rw.retPct==null?0:Math.min(100,Math.abs(rw.retPct)*2);
+    var barColor=rw.retPct==null?'#dfe4e8':(rw.retPct>=0?'#1a8a4a':'#cc4a1a');
+    var safeName=rw.name.replace(/'/g,"\\'");
+    return '<tr onclick="PSnap.viewHMChart(\''+safeName+'\')" style="border-bottom:1px solid #eef1f3;cursor:pointer">'+
+      '<td style="position:sticky;left:0;z-index:1;background:#fff;padding:6px;font-size:10px;font-weight:700;color:#0c1929;white-space:nowrap;min-width:110px;max-width:110px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">'+rw.name+'</td>'+
+      '<td style="padding:6px"><div style="display:flex;align-items:center;gap:6px"><div style="width:44px;background:#e9edf0;border-radius:3px;height:6px;overflow:hidden"><div style="width:'+barPct.toFixed(1)+'%;background:'+barColor+';height:100%"></div></div><span style="font-size:9px;font-weight:700;color:'+retColor+';white-space:nowrap">'+retTxt+'</span></div></td>'+
+      '<td style="padding:6px;text-align:right;font-size:9px;color:#0c1929;white-space:nowrap">'+ptFmtLocal(rw.cur)+'</td>'+
+      '<td style="padding:6px;text-align:right;font-size:9px;color:#8a95a0;white-space:nowrap">'+ptFmtLocal(rw.purPrice)+'</td>'+
+      '</tr>';
+  }).join('');
+}
+function dashFilterHoldings(term){
+  _ptDashSearchTerm=term||'';
+  dashRenderHoldingsTable();
+}
+function dashSortBy(key){
+  if(_ptDashSortKey===key){_ptDashSortDir*=-1;}else{_ptDashSortKey=key;_ptDashSortDir=-1;}
+  dashRenderHoldingsTable();
+}
+
+// ── Portfolio Summary — view switch (Dashboard / Table) ──
+// Dashboard (mumbaiwater.in-style hero card) is the DEFAULT view; Table is
+// the original dense multi-column table. Both read the exact same
+// Portfolio Summary data (PState.names / scannerRowFor / rsDetailFor /
+// COL_DEFS etc.) — this only changes presentation, never the underlying
+// figures.
+var _ptSummaryView='dashboard';
+function setSummaryView(view){
+  _ptSummaryView=(view==='table')?'table':'dashboard';
+  var dashV=psEl('pt-sum-dashboard-view'),tableV=psEl('pt-sum-table-view');
+  var bDash=psEl('pt-sum-view-btn-dash'),bTable=psEl('pt-sum-view-btn-table');
+  if(dashV)dashV.style.display=(_ptSummaryView==='dashboard')?'block':'none';
+  if(tableV)tableV.style.display=(_ptSummaryView==='table')?'block':'none';
+  if(bDash){bDash.style.background=(_ptSummaryView==='dashboard')?'#0c1929':'transparent';bDash.style.color=(_ptSummaryView==='dashboard')?'#fff':'#666';}
+  if(bTable){bTable.style.background=(_ptSummaryView==='table')?'#0c1929':'transparent';bTable.style.color=(_ptSummaryView==='table')?'#fff':'#666';}
+  if(_ptSummaryView==='dashboard')renderDashboardView();
+}
+
 // ── Header P&L / Return / Portfolio Value stat boxes ──
 // Recomputed from the Portfolio Snapshot selection's purchase price vs current
 // price (equal-weighted, since PSnap is a watchlist-style tool, not a sized
@@ -4737,6 +5282,85 @@ function compositeScoreFor(name){
   if(ba!=null)score+=Math.max(0,Math.min(10,Number(ba)/10));
   return score;
 }
+
+// ── Shared dashboard-building helpers for the Explore tab's two
+// screener sub-dashboards (Monthly Green>SMA8 and Matching Index). Same
+// mumbaiwater.in-style visual language as the Portfolio Summary dashboard
+// (hero stat, status pill, quick stats, Regime donut, per-fund cards) —
+// factored out here since both screeners need an identical structure,
+// just with different metrics/labels and a different (already-filtered)
+// row set passed in.
+function dashEmptyState(msg){
+  return '<div style="background:linear-gradient(180deg,#eef6fb 0%,#ffffff 55%);border:1px solid #e2ecf2;border-radius:14px;padding:24px 14px;text-align:center;color:#8a95a0;font-size:11px">'+msg+'</div>';
+}
+// opts: {rows, heroLabel, heroSub, pillGoodText, pillOkText, pillWeakText,
+//        metricLabel, metricKey, metricFmt, secondaryLabel, secondaryKey, secondaryFmt}
+// Each row needs at minimum: {name, regime, hmAllGreen, ...metricKey, ...secondaryKey}
+function dashBuildScreenerDashboard(opts){
+  var rows=opts.rows;
+  var total=rows.length;
+  var regimeACount=0,regimeBCount=0,hmAllGreenCount=0;
+  rows.forEach(function(r){
+    if(r.regime==='A')regimeACount++;else if(r.regime==='B')regimeBCount++;
+    if(r.hmAllGreen)hmAllGreenCount++;
+  });
+  var pct=total?(regimeACount/total*100):0;
+  var good=pct>=50,ok=pct>=25;
+  var pillBg=good?'#e9f9ef':ok?'#fff7e0':'#fdeaea';
+  var pillColor=good?'#1a8a4a':ok?'#a3720a':'#a30a0a';
+  var pillBorder=good?'#cdeedb':ok?'#f2e2ae':'#f2cccc';
+  var pillIcon=good?'\u2713':ok?'\u25CF':'\u26A0';
+  var pillText=good?opts.pillGoodText:ok?opts.pillOkText:opts.pillWeakText;
+
+  var hero='<div style="background:linear-gradient(180deg,#eef6fb 0%,#ffffff 55%);border:1px solid #e2ecf2;border-radius:14px;padding:20px 14px 16px;text-align:center">'+
+    '<div style="line-height:1"><span style="font-size:44px;font-weight:800;color:#0c1929;letter-spacing:-1px">'+total+'</span></div>'+
+    '<div style="font-size:11px;color:#7a8894;margin-top:4px">'+opts.heroLabel+'</div>'+
+    '<div style="display:inline-flex;align-items:center;gap:6px;background:'+pillBg+';color:'+pillColor+';border:1px solid '+pillBorder+';border-radius:20px;padding:6px 14px;margin:12px 0 6px;font-size:11px;font-weight:700"><span>'+pillIcon+'</span><span>'+pillText+'</span></div>'+
+    '<div style="font-size:10px;color:#8a95a0;margin-bottom:4px">'+opts.heroSub+'</div>'+
+    '</div>';
+
+  var qo='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">'+
+    '<div style="background:#f7f9fb;border-radius:10px;padding:10px 8px;text-align:center"><div style="font-size:17px;font-weight:800;color:#1a8a4a">'+regimeACount+'</div><div style="font-size:8px;color:#8a95a0;margin-top:2px">Regime A</div></div>'+
+    '<div style="background:#f7f9fb;border-radius:10px;padding:10px 8px;text-align:center"><div style="font-size:17px;font-weight:800;color:#b8860b">'+regimeBCount+'</div><div style="font-size:8px;color:#8a95a0;margin-top:2px">Regime B</div></div>'+
+    '<div style="background:#f7f9fb;border-radius:10px;padding:10px 8px;text-align:center"><div style="font-size:17px;font-weight:800;color:#2a5adf">'+hmAllGreenCount+'</div><div style="font-size:8px;color:#8a95a0;margin-top:2px">HM All-Green</div></div>'+
+    '</div>';
+
+  var donutSegs=[{label:'Regime A',count:regimeACount,color:'#1a8a4a'},{label:'Regime B',count:regimeBCount,color:'#d4880f'},{label:'Regime C / \u2014',count:total-regimeACount-regimeBCount,color:'#cc4a4a'}].filter(function(s){return s.count>0;});
+  var donutHtml='';
+  if(donutSegs.length){
+    donutHtml='<div style="background:#f7f9fb;border-radius:12px;padding:14px;margin-top:10px">'+
+      '<div style="font-size:11px;font-weight:800;color:#0c1929;margin-bottom:8px">Regime Distribution</div>'+
+      '<div style="display:flex;justify-content:center">'+dashBuildDonutSvg(donutSegs,total)+'</div>'+
+      '<div style="text-align:center;font-size:9px;margin-top:8px;line-height:1.8">'+donutSegs.map(function(s){return '<span style="display:inline-block;margin:0 6px"><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:'+s.color+';margin-right:3px"></span>'+s.label+' ('+(total?(s.count/total*100).toFixed(1):'0.0')+'%)</span>';}).join('')+'</div>'+
+      '</div>';
+  }
+
+  var cards=rows.map(function(r){
+    var regimeColor=r.regime==='A'?'#1a8a4a':r.regime==='B'?'#b8860b':r.regime?'#cc0000':'#aab4bd';
+    var metricVal=r[opts.metricKey];
+    var metricColor=metricVal==null?'#aab4bd':(metricVal>=0?'#1a8a4a':'#cc4a1a');
+    var secondaryVal=opts.secondaryKey?r[opts.secondaryKey]:null;
+    var safeName=r.name.replace(/'/g,"\\'");
+    var inP=(typeof win.PSnap!=='undefined'&&typeof win.PSnap.has==='function')?win.PSnap.has(r.name):false;
+    return '<div style="background:#fff;border:1px solid #eef1f3;border-radius:12px;padding:12px 14px;margin-bottom:8px">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">'+
+      '<div style="min-width:0"><div style="font-size:12px;font-weight:800;color:#0c1929;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'+
+      '<span style="display:inline-block;margin-top:4px;background:#eef2fb;color:'+regimeColor+';font-size:8px;font-weight:700;padding:2px 7px;border-radius:8px">'+(r.regime?('Regime '+r.regime):'Regime \u2014')+'</span>'+
+      (r.hmAllGreen?' <span style="font-size:8px;color:#1a8a4a;font-weight:700;margin-left:4px">\u2713 HM All-Green</span>':'')+
+      '</div>'+
+      '<div style="text-align:right;flex-shrink:0"><div style="font-size:14px;font-weight:800;color:'+metricColor+'">'+opts.metricFmt(metricVal)+'</div><div style="font-size:7px;color:#8a95a0;margin-top:1px">'+opts.metricLabel+'</div></div>'+
+      '</div>'+
+      (opts.secondaryKey?'<div style="font-size:9px;color:#8a95a0;margin-top:6px">'+opts.secondaryLabel+': <span style="font-weight:700;color:'+(secondaryVal!=null&&secondaryVal>=0?'#1a8a4a':'#cc4a1a')+'">'+opts.secondaryFmt(secondaryVal)+'</span></div>':'')+
+      '<div style="display:flex;gap:8px;margin-top:10px">'+
+      '<button onclick="PSnap.viewHMChart(\''+safeName+'\')" style="flex:1;background:#0055aa;color:#fff;border:none;padding:6px;border-radius:7px;font-size:9px;font-weight:700;cursor:pointer">View HM Chart</button>'+
+      '<button onclick="PSnap.toggleName(\''+safeName+'\')" style="flex:1;background:'+(inP?'#cc3344':'#1a8a4a')+';color:#fff;border:none;padding:6px;border-radius:7px;font-size:9px;font-weight:700;cursor:pointer">'+(inP?'Remove from Portfolio':'Add to Portfolio')+'</button>'+
+      '</div>'+
+      '</div>';
+  }).join('');
+
+  return hero+qo+donutHtml+'<div style="margin-top:10px">'+cards+'</div>';
+}
+
 function renderMatchingIndex(){
   var wrap=psEl('pt-matching-wrap');
   var tbEl=psEl('pt-matching-tb');
@@ -4750,7 +5374,13 @@ function renderMatchingIndex(){
   // ending in Add to Portfolio instead of Remove.
   if(theadEl){
     var thStyleMI='padding:5px 4px;text-align:left;font-size:7px;color:#a35a00;text-transform:uppercase;white-space:nowrap';
-    var headerHtmlMI='<th style="'+thStyleMI+'">#</th><th style="font-family:\'Segoe UI\',Arial,sans-serif;padding:5px 4px;text-align:left;font-size:9px;color:#000;text-transform:uppercase;white-space:nowrap">Index</th>'+
+    // Freeze-pane: # and Index columns stay pinned to the left edge while
+    // the rest of the row (Price/Chg%/Score/COL_DEFS/Add button) scrolls
+    // underneath, same pattern as the Portfolio Summary table above —
+    // essential here since this table can run to 1300px+ wide.
+    var thStickyHashMI='position:sticky;left:0;z-index:3;background:#fff3e0;width:26px;min-width:26px;max-width:26px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)';
+    var thStickyIndexMI='position:sticky;left:26px;z-index:3;background:#fff3e0;min-width:118px;max-width:118px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)';
+    var headerHtmlMI='<th style="'+thStyleMI+';'+thStickyHashMI+'">#</th><th style="font-family:\'Segoe UI\',Arial,sans-serif;padding:5px 4px;text-align:left;font-size:9px;color:#000;text-transform:uppercase;white-space:nowrap;'+thStickyIndexMI+'">Index</th>'+
       '<th style="'+thStyleMI+'">Price</th><th style="'+thStyleMI+'">Chg%</th><th style="'+thStyleMI+'">Score</th>';
     ALL_COL_KEYS.forEach(function(k){headerHtmlMI+='<th style="'+thStyleMI+'">'+COL_DEFS[k].label+'</th>';});
     headerHtmlMI+='<th style="'+thStyleMI+'">Add to Portfolio</th>';
@@ -4759,6 +5389,7 @@ function renderMatchingIndex(){
   var totalCols=5+ALL_COL_KEYS.length+1;
   if(!allNames.length||!PState.names.length){
     tbEl.innerHTML='<tr><td colspan="'+totalCols+'" style="text-align:center;color:#666;padding:8px">Build a Portfolio (Update Portfolio) to see matches</td></tr>';
+    renderMatchingDashboardView();
     return;
   }
   var portfolioAvg=PState.names.reduce(function(s,n){return s+compositeScoreFor(n);},0)/PState.names.length;
@@ -4769,6 +5400,7 @@ function renderMatchingIndex(){
     .slice(0,15);
   if(!candidates.length){
     tbEl.innerHTML='<tr><td colspan="'+totalCols+'" style="text-align:center;color:#666;padding:8px">No indices currently score as well as your portfolio average</td></tr>';
+    renderMatchingDashboardView();
     return;
   }
   var scanR=(typeof win.ptGetScanR==='function')?win.ptGetScanR():[];
@@ -4780,8 +5412,8 @@ function renderMatchingIndex(){
     if(pr.price==null){var cn=c.name?c.name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';pr=priceOfNorm[cn]||{};}
     var r=scannerRowFor(c.name);
     var safeName=c.name.replace(/'/g,"\\'");
-    var cells='<td style="padding:5px 4px;font-size:9px">'+(i+1)+'</td>'+
-      '<td onclick="PSnap.viewHMChart(\''+safeName+'\')" style="font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 8px;font-size:10px;font-weight:600;color:#0055aa;cursor:pointer;white-space:nowrap;text-decoration:underline" title="'+c.name.replace(/"/g,'&quot;')+'">'+c.name+'</td>'+
+    var cells='<td style="position:sticky;left:0;z-index:1;background:#fff;padding:5px 4px;font-size:9px;width:26px;min-width:26px;max-width:26px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)">'+(i+1)+'</td>'+
+      '<td onclick="PSnap.viewHMChart(\''+safeName+'\')" style="position:sticky;left:26px;z-index:1;background:#fff;font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 8px;font-size:10px;font-weight:600;color:#0055aa;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:118px;max-width:118px;text-decoration:underline;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)" title="'+c.name.replace(/"/g,'&quot;')+'">'+c.name+'</td>'+
       '<td style="padding:5px 4px;font-size:9px">'+ptFmtLocal(pr.price)+'</td>'+
       '<td style="padding:5px 4px;font-size:9px;color:'+((pr.change||0)>=0?'#1a8a1a':'#cc0000')+'">'+(pr.change!=null?(pr.change>=0?'+':'')+pr.change.toFixed(1)+'%':'—')+'</td>'+
       '<td style="padding:5px 4px;font-size:9px"><span style="background:#1a8a1a;color:#fff;padding:1px 5px;border-radius:3px;font-size:8px">'+c.score.toFixed(0)+'</span> <span style="color:#888;font-size:7px">vs avg '+portfolioAvg.toFixed(0)+'</span>'+(r&&r.regime?' &nbsp;<span style="color:#888">Regime '+r.regime+'</span>':'')+'</td>';
@@ -4791,6 +5423,71 @@ function renderMatchingIndex(){
     cells+='<td style="padding:5px 4px"><button onclick="PSnap.toggleName(\''+safeName+'\')" style="background:#1a8a1a;color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">Add to Portfolio</button></td>';
     return '<tr style="border-bottom:1px solid #eee">'+cells+'</tr>';
   }).join('');
+  renderMatchingDashboardView();
+}
+
+// ── Matching Index — Dashboard view (Dashboard/Table toggle) ──
+// Same visual pattern as the Monthly Green>SMA8 dashboard above, but
+// scoped to a STRICTER subset per request: only candidates whose HM
+// Status shows all 3 green ticks (Monthly + Weekly + Daily RSI(9) all
+// above 50 — same hmAllGreen() check the Portfolio dashboard's "HM
+// All-Green" stat uses). The Table view stays unfiltered (every
+// Matching Index candidate scoring at/above the portfolio average,
+// regardless of HM Status), so Dashboard is a higher-conviction slice of
+// the same candidate list, not a different data source.
+var _ptMatchingView='dashboard';
+function setMatchingView(view){
+  _ptMatchingView=(view==='table')?'table':'dashboard';
+  var dashV=psEl('pt-matching-dashboard-view'),tableV=psEl('pt-matching-table-view');
+  var bDash=psEl('pt-matching-view-btn-dash'),bTable=psEl('pt-matching-view-btn-table');
+  if(dashV)dashV.style.display=(_ptMatchingView==='dashboard')?'block':'none';
+  if(tableV)tableV.style.display=(_ptMatchingView==='table')?'block':'none';
+  if(bDash){bDash.style.background=(_ptMatchingView==='dashboard')?'#0c1929':'transparent';bDash.style.color=(_ptMatchingView==='dashboard')?'#fff':'#666';}
+  if(bTable){bTable.style.background=(_ptMatchingView==='table')?'#0c1929':'transparent';bTable.style.color=(_ptMatchingView==='table')?'#fff':'#666';}
+  if(_ptMatchingView==='dashboard')renderMatchingDashboardView();
+}
+function renderMatchingDashboardView(){
+  var el=psEl('pt-matching-dashboard-view');
+  if(!el)return;
+  var allNames=psIndexUniverse().map(function(x){return x.name;});
+  if(!allNames.length||!PState.names.length){
+    el.innerHTML=dashEmptyState('Build a Portfolio (Update Portfolio) to see matches');
+    return;
+  }
+  var portfolioAvg=PState.names.reduce(function(s,n){return s+compositeScoreFor(n);},0)/PState.names.length;
+  var allCandidates=allNames.filter(function(n){return PState.names.indexOf(n)<0&&PState.hidden.indexOf(n)<0;})
+    .map(function(n){return {name:n,score:compositeScoreFor(n)};})
+    .filter(function(c){return c.score>=portfolioAvg;})
+    .sort(function(a,b){return b.score-a.score;})
+    .slice(0,15);
+  // The strict filter per request: HM Status must show all 3 green ticks.
+  var candidates=allCandidates.filter(function(c){return hmAllGreen(c.name);});
+  if(!candidates.length){
+    el.innerHTML=dashEmptyState('No Matching Index candidates currently have HM Status all-green (Monthly + Weekly + Daily RSI all above 50)');
+    return;
+  }
+  var scanR=(typeof win.ptGetScanR==='function')?win.ptGetScanR():[];
+  var priceOfNorm={};scanR.forEach(function(r){var nk=r.name?r.name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';priceOfNorm[nk]={price:r.price,change:r.change};});
+  var rows=candidates.map(function(c){
+    var r=scannerRowFor(c.name);
+    var nk=c.name?c.name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
+    var pr=priceOfNorm[nk]||{};
+    return {name:c.name,regime:r&&r.regime?r.regime:null,hmAllGreen:true,scoreVal:c.score,changePct:pr.change!=null?pr.change:null};
+  });
+  el.innerHTML=dashBuildScreenerDashboard({
+    rows:rows,
+    heroLabel:'HM All-Green matches beating your portfolio average',
+    heroSub:'Composite score \u2265 '+portfolioAvg.toFixed(0)+' (your Portfolio average), with Monthly + Weekly + Daily RSI all above 50',
+    pillGoodText:'Strong candidate group',
+    pillOkText:'Moderate candidate group',
+    pillWeakText:'Thin candidate group',
+    metricLabel:'Composite Score',
+    metricKey:'scoreVal',
+    metricFmt:function(v){return v==null?'—':v.toFixed(0);},
+    secondaryLabel:'Today',
+    secondaryKey:'changePct',
+    secondaryFmt:function(v){return v==null?'—':(v>=0?'+':'')+v.toFixed(1)+'%';}
+  });
 }
 
 // ── Monthly Green > SMA(8) Low screener ──
@@ -4884,11 +5581,13 @@ function renderMonthlyGreenAboveSMA8(){
   var allRows=(typeof win.ptGetAllComputedRows==='function')?win.ptGetAllComputedRows():[];
   if(!allRows||!allRows.length){
     tbEl.innerHTML='<tr><td colspan="8" style="text-align:center;color:#666;padding:8px">Run a scan to populate this list</td></tr>';
+    renderMgs8DashboardView();
     return;
   }
   var list=monthlyGreenAboveSMA8List();
   if(!list.length){
     tbEl.innerHTML='<tr><td colspan="8" style="text-align:center;color:#666;padding:8px">No funds currently match (monthly green candle above SMA(8) of monthly lows)</td></tr>';
+    renderMgs8DashboardView();
     return;
   }
   tbEl.innerHTML=list.map(function(r,i){
@@ -4906,8 +5605,8 @@ function renderMonthlyGreenAboveSMA8(){
     }
     var inP=(typeof win.PSnap!=='undefined'&&typeof win.PSnap.has==='function')?win.PSnap.has(r.name):false;
     return '<tr style="border-bottom:1px solid #eee">'+
-      '<td style="padding:5px 4px;font-size:9px">'+(i+1)+'</td>'+
-      '<td style="font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 8px;font-size:10px;font-weight:600;color:#000;word-break:break-word;white-space:normal">'+r.name+'</td>'+
+      '<td style="position:sticky;left:0;z-index:1;background:#fff;padding:5px 4px;font-size:9px;width:26px;min-width:26px;max-width:26px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)">'+(i+1)+'</td>'+
+      '<td style="position:sticky;left:26px;z-index:1;background:#fff;font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 8px;font-size:10px;font-weight:600;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:118px;max-width:118px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)" title="'+r.name.replace(/"/g,'&quot;')+'">'+r.name+'</td>'+
       '<td style="padding:5px 4px"><button onclick="PSnap.viewHMChart(\''+safeName+'\')" style="background:#0055aa;color:#fff;border:none;padding:3px 7px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">View HM Chart</button></td>'+
       '<td style="padding:5px 4px;font-size:9px;color:#1a8a1a">'+ptFmtLocal(r.close)+'</td>'+
       '<td style="padding:5px 4px;font-size:9px">'+ptFmtLocal(r.low)+'</td>'+
@@ -4916,6 +5615,7 @@ function renderMonthlyGreenAboveSMA8(){
       '<td style="padding:5px 4px"><button onclick="PSnap.toggleName(\''+safeName+'\')" style="background:'+(inP?'#cc3344':'#1a8a1a')+';color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">'+(inP?'Remove from Portfolio':'Add to Portfolio')+'</button></td>'+
       '</tr>';
   }).join('');
+  renderMgs8DashboardView();
 }
 // ── Render: "Watch for Bearish Mode" table (new) ──
 function renderMonthlyRedAtOrAboveSMA8(){
@@ -4944,8 +5644,8 @@ function renderMonthlyRedAtOrAboveSMA8(){
     }
     var inP=(typeof win.PSnap!=='undefined'&&typeof win.PSnap.has==='function')?win.PSnap.has(r.name):false;
     return '<tr style="border-bottom:1px solid #eee">'+
-      '<td style="padding:5px 4px;font-size:9px">'+(i+1)+'</td>'+
-      '<td style="font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 8px;font-size:10px;font-weight:600;color:#000;word-break:break-word;white-space:normal">'+r.name+'</td>'+
+      '<td style="position:sticky;left:0;z-index:1;background:#fff;padding:5px 4px;font-size:9px;width:26px;min-width:26px;max-width:26px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)">'+(i+1)+'</td>'+
+      '<td style="position:sticky;left:26px;z-index:1;background:#fff;font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 8px;font-size:10px;font-weight:600;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:118px;max-width:118px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)" title="'+r.name.replace(/"/g,'&quot;')+'">'+r.name+'</td>'+
       '<td style="padding:5px 4px"><button onclick="PSnap.viewHMChart(\''+safeName+'\')" style="background:#0055aa;color:#fff;border:none;padding:3px 7px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">View HM Chart</button></td>'+
       '<td style="padding:5px 4px;font-size:9px;color:#cc0000">'+ptFmtLocal(r.close)+'</td>'+
       '<td style="padding:5px 4px;font-size:9px">'+ptFmtLocal(r.low)+'</td>'+
@@ -4954,6 +5654,65 @@ function renderMonthlyRedAtOrAboveSMA8(){
       '<td style="padding:5px 4px"><button onclick="PSnap.toggleName(\''+safeName+'\')" style="background:'+(inP?'#cc3344':'#1a8a1a')+';color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">'+(inP?'Remove from Portfolio':'Add to Portfolio')+'</button></td>'+
       '</tr>';
   }).join('');
+}
+
+// ── Monthly Green > SMA(8) Low — Dashboard view (Dashboard/Table toggle) ──
+// Same mumbaiwater.in-style visual language as the Portfolio Summary
+// dashboard, but scoped to a STRICTER subset per request: only funds
+// whose LAST MONTH candle (the prior completed month — r.lastMonthGreen
+// from monthlyGreenAboveSMA8List(), not the in-progress current month
+// already required to be green/above-SMA8 by that list) was ALSO green.
+// The Table view stays unfiltered (every current-month Green>SMA8 fund),
+// so Dashboard is a higher-conviction slice of the same list, not a
+// different data source.
+var _ptMgs8View='dashboard';
+function setMgs8View(view){
+  _ptMgs8View=(view==='table')?'table':'dashboard';
+  var dashV=psEl('pt-mgs8-dashboard-view'),tableV=psEl('pt-mgs8-table-view');
+  var bDash=psEl('pt-mgs8-view-btn-dash'),bTable=psEl('pt-mgs8-view-btn-table');
+  if(dashV)dashV.style.display=(_ptMgs8View==='dashboard')?'block':'none';
+  if(tableV)tableV.style.display=(_ptMgs8View==='table')?'block':'none';
+  if(bDash){bDash.style.background=(_ptMgs8View==='dashboard')?'#0c1929':'transparent';bDash.style.color=(_ptMgs8View==='dashboard')?'#fff':'#666';}
+  if(bTable){bTable.style.background=(_ptMgs8View==='table')?'#0c1929':'transparent';bTable.style.color=(_ptMgs8View==='table')?'#fff':'#666';}
+  if(_ptMgs8View==='dashboard')renderMgs8DashboardView();
+}
+function renderMgs8DashboardView(){
+  var el=psEl('pt-mgs8-dashboard-view');
+  if(!el)return;
+  var allRows=(typeof win.ptGetAllComputedRows==='function')?win.ptGetAllComputedRows():[];
+  if(!allRows||!allRows.length){
+    el.innerHTML=dashEmptyState('Run a scan to populate this list');
+    return;
+  }
+  var fullList=monthlyGreenAboveSMA8List();
+  // The strict filter per request: last month's own candle must ALSO be
+  // green, not just the current (in-progress) month already required by
+  // monthlyGreenAboveSMA8List().
+  var list=fullList.filter(function(r){return r.lastMonthGreen===true;});
+  if(!list.length){
+    el.innerHTML=dashEmptyState('No funds currently have both the current monthly candle AND last month\u2019s candle green (above SMA(8) of monthly lows)');
+    return;
+  }
+  var rows=list.map(function(r){
+    var r2=scannerRowFor(r.name);
+    var regime=r2&&r2.regime?r2.regime:null;
+    var margin=r.sma8Low?((r.low-r.sma8Low)/r.sma8Low*100):null;
+    return {name:r.name,close:r.close,low:r.low,sma8Low:r.sma8Low,lastMonthPct:r.lastMonthPct,marginPct:margin,regime:regime,hmAllGreen:hmAllGreen(r.name)};
+  });
+  el.innerHTML=dashBuildScreenerDashboard({
+    rows:rows,
+    heroLabel:'funds green two months running',
+    heroSub:'Current month green + above SMA(8) low, AND last month also green',
+    pillGoodText:'Strong follow-through group',
+    pillOkText:'Moderate follow-through group',
+    pillWeakText:'Thin follow-through group',
+    metricLabel:'Margin above SMA(8)',
+    metricKey:'marginPct',
+    metricFmt:function(v){return v==null?'—':(v>=0?'+':'')+v.toFixed(1)+'%';},
+    secondaryLabel:'Last Month',
+    secondaryKey:'lastMonthPct',
+    secondaryFmt:function(v){return v==null?'—':(v>=0?'+':'')+v.toFixed(1)+'%';}
+  });
 }
 
 function onTabActivated(){
@@ -5080,6 +5839,7 @@ function onScanComplete(){
   updateHeaderStats();
   renderPtStats();
   renderSummary();
+  renderDashboardView();
   renderMatchingIndex();
   renderMonthlyGreenAboveSMA8();
   renderMonthlyRedAtOrAboveSMA8();
@@ -5099,6 +5859,7 @@ function resetPortfolio(){
   if(pvEl)pvEl.textContent='—';
   if(tpEl){tpEl.textContent='—';tpEl.style.color='';}
   if(trEl){trEl.textContent='—';trEl.style.color='';}
+  renderDashboardView();
 }
 
 // Reloads PState (names/purchases/hidden) fresh from localStorage and
@@ -5112,10 +5873,12 @@ function reloadState(){
   psLoad();
   if(typeof win.ptApplyHiddenFilter==='function')win.ptApplyHiddenFilter();
   renderSummary();
+  renderDashboardView();
   renderMatchingIndex();
   renderMonthlyGreenAboveSMA8();
   renderMonthlyRedAtOrAboveSMA8();
   updateHeaderStats();
+  renderDashboardView();
 }
 
 win.PSnap={
@@ -5145,6 +5908,14 @@ win.PSnap={
   restartFreshDownload:restartFreshDownload,
   reloadState:reloadState,
   restoreView:ptRestoreView,
+  setSummaryView:setSummaryView,
+  renderDashboardView:renderDashboardView,
+  dashFilterHoldings:dashFilterHoldings,
+  dashSortBy:dashSortBy,
+  setMgs8View:setMgs8View,
+  renderMgs8DashboardView:renderMgs8DashboardView,
+  setMatchingView:setMatchingView,
+  renderMatchingDashboardView:renderMatchingDashboardView,
   get updateMode(){return updateMode;}
 };
 // scannerRowFor is declared inside this IIFE (private to Portfolio
@@ -9364,6 +10135,53 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
          rows WITH the prefix, and scannerRowFor()'s normalization only
          strips punctuation/spaces — not the literal word "NPS" — so
          stripping the prefix here would make every lookup fail silently. -->
+
+<!-- ── 3.4 Setup Tab: rare/maintenance actions (Master List, backup/restore,
+     data download, Gemini keys) — split out of Portfolio Snapshot per
+     request, since these are infrequent activities distinct from the
+     everyday portfolio view. ── -->
+<div id="tab-setup" class="tab-panel">
+<div style="font-family:'Segoe UI',Arial,sans-serif;font-size:12px;max-width:100%;padding:10px;background:#fff;color:#111;min-height:100vh">
+
+<h2 style="font-family:'Segoe UI',Arial,sans-serif;font-size:18px;font-weight:900;letter-spacing:3px;color:#000;margin:0 0 6px 0;text-transform:uppercase">Setup</h2>
+<div style="font-size:10px;color:var(--text-dim);margin:0 0 14px">Master list, data download, backup/restore, and API keys — things you'll touch rarely, not every day.</div>
+
+<h3 style="color:var(--accent);font-size:12px;margin:14px 0 6px;border-bottom:1px solid var(--border);padding-bottom:3px">Data &amp; Backup</h3>
+<div id="pt-controls-row" style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;align-items:stretch">
+  <button onclick="ldExportAllData(false)" title="Save all scanner data to Timeline.json" style="background:#333;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">💾 Save</button>
+  <button onclick="ldImportAllData()" title="Restore: auto-checks your linked Timeline.json first, otherwise asks you to pick a file" style="background:#333;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">📂 Restore</button>
+  <button id="pt-btn-download-fast" onclick="PSnap.downloadDataFast()" title="Download 2500 days using parallel fetches (10-20x faster)" style="background:#cc5500;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ DL Fast</button>
+  <button id="pt-btn-restart-fresh" onclick="PSnap.restartFreshDownload()" title="Clear all saved download progress and start over from day 1. Deleting the checkpoint .json files in your Downloads folder does NOT do this — those are backup exports only, never read back by the app." style="background:#7a1f1f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">🗑️ Restart</button>
+  <button class="ld-scan-btn" onclick="if(typeof window.ptRunScan==='function')window.ptRunScan()" title="Download 2500 days of NSE data + analyze" style="background:#d4880f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ Analyze</button>
+</div>
+
+<h3 style="color:var(--accent);font-size:12px;margin:14px 0 6px;border-bottom:1px solid var(--border);padding-bottom:3px">Gemini API Keys</h3>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;align-items:center">
+  <div style="background:#f5f5f5;border:1px solid #ddd;padding:4px 8px;border-radius:4px;font-size:9px;width:100%">
+    <input id="pt-gk1" type="password" placeholder="Key 1" style="width:120px;padding:4px 6px;font-size:9px;border:1px solid #ccc;border-radius:2px" oninput="ptUpdateGeminiSaveBtn()" onchange="BB.geminiKey1(this.value);ptUpdateGeminiSaveBtn()">
+    <input id="pt-gk2" type="password" placeholder="Key 2" style="width:120px;padding:4px 6px;font-size:9px;border:1px solid #ccc;border-radius:2px;margin-left:4px" oninput="ptUpdateGeminiSaveBtn()" onchange="BB.geminiKey2(this.value);ptUpdateGeminiSaveBtn()">
+    <button id="pt-gk-save" onclick="ptSaveGeminiKeys()" style="background:#666;color:#fff;border:none;padding:5px 12px;font-size:9px;font-weight:700;border-radius:2px;margin-left:4px;cursor:pointer">Save</button>
+    <span id="pt-gk-status" style="font-size:8px;color:#1a8a1a;margin-left:4px"></span>
+  </div>
+</div>
+
+<h3 style="color:var(--accent);font-size:12px;margin:14px 0 6px;border-bottom:1px solid var(--border);padding-bottom:3px">Master List</h3>
+<div style="font-size:10px;color:var(--text-dim);margin:0 0 8px">Add or remove indices from the Portfolio Snapshot universe, or hide ones with no fund wrapper available.</div>
+<div style="display:flex;gap:3px;margin:0 0 8px">
+  <button id="pt-btn-universe" onclick="PSnap.openUniverse()" style="background:#0055aa;color:#fff;border:none;padding:8px 4px;cursor:pointer;font-weight:bold;font-size:9px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:36px;white-space:nowrap">Open Master List</button>
+</div>
+<!-- Index Universe panel (lists all NSE indices from the app's own master dataset — independent of Scanner tab) -->
+<div id="pt-universe-panel" style="display:none;margin:8px 0;border:1px solid #0055aa;border-radius:4px;background:#fff">
+  <div style="display:flex;justify-content:space-between;align-items:center;background:#0055aa;color:#fff;padding:6px 8px;border-radius:4px 4px 0 0">
+    <span style="font-size:10px;font-weight:bold;text-transform:uppercase">Master List</span>
+    <button onclick="PSnap.closeUniverse()" style="background:none;border:none;color:#fff;font-size:14px;cursor:pointer;line-height:1;padding:0 4px">×</button>
+  </div>
+  <div id="pt-universe-list" style="max-height:260px;overflow-y:auto;-webkit-overflow-scrolling:touch;font-size:9px"></div>
+</div>
+
+</div>
+</div>
+
 <div id="tab-npsswitch" class="tab-panel">
   <div style="max-width:520px;margin:0 auto;padding:10px 12px 32px;font-family:'Segoe UI',Arial,sans-serif;color:var(--n-text,#0a2540);">
 
