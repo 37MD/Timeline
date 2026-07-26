@@ -788,8 +788,12 @@ body{}
     <div style="flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;cursor:pointer;" onclick="var l=document.getElementById('hmLegendBody');var open=l.style.display!=='none';l.style.display=open?'none':'flex';document.getElementById('hmLegendChevron').textContent=open?'▾':'▴';">
         <span style="font-size:10px;font-weight:600;color:var(--text-dim);display:flex;align-items:center;gap:4px;">Legend <span id="hmLegendChevron" style="font-size:9px;color:var(--text-faint);">▾</span></span>
-        <span style="font-size:9px;color:var(--text-faint);" id="hmFundLabel">—</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <span id="hmAsOfBadge" style="display:none;font-size:9px;font-weight:600;padding:2px 7px;border-radius:99px;white-space:nowrap;"></span>
+          <span style="font-size:9px;color:var(--text-faint);" id="hmFundLabel">—</span>
+        </span>
       </div>
+      
       <div id="hmLegendBody" style="display:none;flex-wrap:wrap;gap:10px;padding:0 10px 8px;">
         <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#1d4ed8;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">NAV</span></span>
         <span style="display:flex;align-items:center;gap:3px;"><span style="width:12px;height:3px;background:#f59e0b;border-radius:1px;display:inline-block;"></span><span style="font-size:9px;color:var(--text-faint);">SMA8</span></span>
@@ -2770,7 +2774,7 @@ function ldTodayIstStr() {
   return new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
 }
 
-const APP_VERSION = 'v5.7';
+const APP_VERSION = 'v5.8';
 
 // Reads the deep weekly/daily/monthly history straight from IndexedDB —
 // the primary store for this data. The localStorage mirror (BB.deepCacheV4)
@@ -8183,71 +8187,110 @@ function _showAutoAlert(msg, type) {
     }
   } catch(e) {}
   // Auto-refresh works from any protocol (file:// or http) via CORS proxies
-  _deepLoadAsync(function(cache){
-    win._deepWeeklyCache = cache;
-    // BUG FIX: Portfolio Snapshot ('pt') is the tab marked active in the
-    // static HTML, so it's already showing on page load without ever
-    // going through switchTab('pt') — which is the ONLY place that calls
-    // onPTTabActivated(), the function that actually reads
-    // window._deepWeeklyCache and renders real data into the tab instead
-    // of its static "No data yet — open this tab to load" placeholder.
-    // Net effect: after a restore (or a plain page load), the deep cache
-    // above loads correctly into memory, but the very first tab the user
-    // sees keeps showing stale/placeholder content until they manually
-    // switch away and back. Since this callback is exactly the point
-    // where the cache becomes ready, re-run the pt tab's init here if
-    // it's the (still) active tab.
-    try {
-      var ptPanel = document.getElementById('tab-pt');
-      if (ptPanel && ptPanel.classList.contains('active') && typeof win.onPTTabActivated === 'function') {
-        win.onPTTabActivated();
+  // ── Factored into a named, re-runnable function ──
+  // Originally this was only the page-load _deepLoadAsync callback, which
+  // meant a tab left open across a session boundary (opened before market
+  // close, still open next morning) never re-checked staleness — the chart
+  // would keep silently rendering yesterday's cache until a manual reload
+  // or a manual Download tap. Now callable again on tab-visibility-regain
+  // (see the visibilitychange listener below), so a stale idle tab
+  // self-corrects instead of requiring the user to notice and act.
+  function _deepFreshnessCheckAndRefresh(isRevisit) {
+    _deepLoadAsync(function(cache){
+      win._deepWeeklyCache = cache;
+      // BUG FIX: Portfolio Snapshot ('pt') is the tab marked active in the
+      // static HTML, so it's already showing on page load without ever
+      // going through switchTab('pt') — which is the ONLY place that calls
+      // onPTTabActivated(), the function that actually reads
+      // window._deepWeeklyCache and renders real data into the tab instead
+      // of its static "No data yet — open this tab to load" placeholder.
+      // Net effect: after a restore (or a plain page load), the deep cache
+      // above loads correctly into memory, but the very first tab the user
+      // sees keeps showing stale/placeholder content until they manually
+      // switch away and back. Since this callback is exactly the point
+      // where the cache becomes ready, re-run the pt tab's init here if
+      // it's the (still) active tab.
+      try {
+        var ptPanel = document.getElementById('tab-pt');
+        if (ptPanel && ptPanel.classList.contains('active') && typeof win.onPTTabActivated === 'function') {
+          win.onPTTabActivated();
+        }
+      } catch(e) { console.warn('[DEEP] post-load Portfolio Snapshot refresh failed', e); }
+      var hasDeepData = cache && cache.dailyMap && Object.keys(cache.dailyMap).length > 0;
+      var hasScannerData = false;
+      try {
+        var sc = BB.scannerCache();
+        hasScannerData = sc && sc.results && Object.keys(sc.results).length > 0;
+      } catch(e) {}
+      if (!hasDeepData) {
+        if (hasScannerData) {
+          // CONDITION 1a: Scanner data restored from backup, but deep history (IndexedDB) was not in backup or failed to restore.
+          _showAutoAlert('\u2139\uFE0F Deep history missing. Click \u26A1 DOWNLOAD to fetch 2500 days (~10 yrs) for 158 indices.', 'warn');
+        } else {
+          // CONDITION 1b: Cold/empty cache — no data at all. User must click Step 1.
+          _showAutoAlert('\u26A0 No data found. Click \u26A1 DOWNLOAD to fetch 2500 days (~10 yrs) for 158 indices.', 'error');
+        }
+        return;
       }
-    } catch(e) { console.warn('[DEEP] post-load Portfolio Snapshot refresh failed', e); }
-    var hasDeepData = cache && cache.dailyMap && Object.keys(cache.dailyMap).length > 0;
-    var hasScannerData = false;
-    try {
-      var sc = BB.scannerCache();
-      hasScannerData = sc && sc.results && Object.keys(sc.results).length > 0;
-    } catch(e) {}
-    if (!hasDeepData) {
-      if (hasScannerData) {
-        // CONDITION 1a: Scanner data restored from backup, but deep history (IndexedDB) was not in backup or failed to restore.
-        _showAutoAlert('\u2139\uFE0F Deep history missing. Click \u26A1 DOWNLOAD to fetch 2500 days (~10 yrs) for 158 indices.', 'warn');
+      if(!cache||!cache.lastDate) {
+        // CONDITION 1c: Cache exists but no lastDate — incomplete restore
+        _showAutoAlert('\u26A0 Incomplete restore. Click \u26A1 DOWNLOAD to re-fetch 2500 days for 158 indices.', 'error');
+        return;
+      }
+      var dd=parseInt(cache.lastDate.substring(0,2),10);
+      var mm=parseInt(cache.lastDate.substring(2,4),10)-1;
+      var yy=parseInt(cache.lastDate.substring(4,8),10);
+      var last=new Date(yy,mm,dd);
+      var diffMs=Date.now()-last.getTime();
+      var diffDays=Math.floor(diffMs/86400000);
+      if(diffDays>=1 || !_deepIsComplete(cache)){
+        // CONDITION 2: Stale/incomplete — incremental auto-download triggered
+        _showAutoAlert((isRevisit ? '\u23F3 Tab resumed \u2014 stale ' : '\u23F3 Stale ') + diffDays + ' days data downloading', 'warn');
+        fetchDeepWeeklyHistory(function(done,total){
+          // Progress previously written to 'rsi-st', a status element that belonged
+          // to the now-removed RSI Bias tab. _showAutoAlert above already surfaces
+          // the stale/refresh state to the user, so no replacement element is needed.
+        }).then(function(newCache){
+          win._deepWeeklyCache=newCache;
+          _showAutoAlert('\u2705 Cache updated \u2014 ' + diffDays + ' day(s) stale, now fresh', 'ok');
+          // If the chart tab is currently showing an index, re-render so
+          // any stale badge/data on-canvas clears immediately rather than
+          // waiting for the user to notice and manually switch fund/period.
+          try {
+            var hmPanel = document.getElementById('tab-hilega');
+            if (hmPanel && hmPanel.classList.contains('active') && window._hmHistCode && typeof window.drawHilegaMilega === 'function') {
+              window.drawHilegaMilega();
+            }
+          } catch(e) {}
+        }).catch(function(){
+          _showAutoAlert('\u274C Auto-refresh failed \u2014 data may be partially updated', 'error');
+        });
       } else {
-        // CONDITION 1b: Cold/empty cache — no data at all. User must click Step 1.
-        _showAutoAlert('\u26A0 No data found. Click \u26A1 DOWNLOAD to fetch 2500 days (~10 yrs) for 158 indices.', 'error');
+        // CONDITION 3: Fresh cache — no download needed
+        if (!isRevisit) {
+          _showAutoAlert('\u2705 Cache is fresh (last updated ' + diffDays + ' day(s) ago) \u2014 no download needed', 'ok');
+        }
       }
-      return;
-    }
-    if(!cache||!cache.lastDate) {
-      // CONDITION 1c: Cache exists but no lastDate — incomplete restore
-      _showAutoAlert('\u26A0 Incomplete restore. Click \u26A1 DOWNLOAD to re-fetch 2500 days for 158 indices.', 'error');
-      return;
-    }
-    var dd=parseInt(cache.lastDate.substring(0,2),10);
-    var mm=parseInt(cache.lastDate.substring(2,4),10)-1;
-    var yy=parseInt(cache.lastDate.substring(4,8),10);
-    var last=new Date(yy,mm,dd);
-    var diffMs=Date.now()-last.getTime();
-    var diffDays=Math.floor(diffMs/86400000);
-    if(diffDays>=1 || !_deepIsComplete(cache)){
-      // CONDITION 2: Stale/incomplete — incremental auto-download triggered
-      _showAutoAlert('\u23F3 Stale ' + diffDays + ' days data downloading', 'warn');
-      fetchDeepWeeklyHistory(function(done,total){
-        // Progress previously written to 'rsi-st', a status element that belonged
-        // to the now-removed RSI Bias tab. _showAutoAlert above already surfaces
-        // the stale/refresh state to the user, so no replacement element is needed.
-      }).then(function(newCache){
-        win._deepWeeklyCache=newCache;
-        _showAutoAlert('\u2705 Cache updated \u2014 ' + diffDays + ' day(s) stale, now fresh', 'ok');
-      }).catch(function(){
-        _showAutoAlert('\u274C Auto-refresh failed \u2014 data may be partially updated', 'error');
-      });
-    } else {
-      // CONDITION 3: Fresh cache — no download needed
-      _showAutoAlert('\u2705 Cache is fresh (last updated ' + diffDays + ' day(s) ago) \u2014 no download needed', 'ok');
-    }
-  });
+    });
+  }
+  _deepFreshnessCheckAndRefresh(false);
+  // ── Re-check on tab-visibility-regain, throttled ──
+  // A tab can sit open and idle across a session boundary (backgrounded
+  // overnight, laptop sleep, etc.) with no code path that re-validates
+  // freshness until now. Throttled to once per 5 minutes so switching
+  // browser tabs/apps repeatedly in quick succession doesn't spam
+  // _deepLoadAsync calls.
+  var _deepLastVisibilityCheck = Date.now();
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState !== 'visible') return;
+      if (window._deepDownloadInProgress) return; // already refreshing
+      var now = Date.now();
+      if (now - _deepLastVisibilityCheck < 5 * 60 * 1000) return;
+      _deepLastVisibilityCheck = now;
+      _deepFreshnessCheckAndRefresh(true);
+    });
+  }
 })();
   win.DEEP_KEEP_RAW_MONTHS = DEEP_KEEP_RAW_MONTHS;
 })(window);
@@ -8853,8 +8896,54 @@ function hmHideNoDataBanner() {
   var banner = document.getElementById('hmNoDataBanner');
   if (banner) banner.style.display = 'none';
 }
+// ── Chart data-freshness badge ──
+// Shows "As of DD/MM/YYYY" next to the fund label in the (always-visible,
+// even when collapsed) legend header, colored by how stale the LAST POINT
+// ACTUALLY PLOTTED is — not cache.lastDate, which can occasionally lag a
+// specific index's own array. This is deliberately computed from the same
+// viewData the chart just rendered, so what the badge says and what's on
+// the canvas can never disagree.
+// Color/urgency thresholds use calendar days versus a trading-day floor,
+// since NSE is closed weekends/holidays — a Monday morning check will
+// correctly show 2-3 days without being flagged red as if something's wrong.
+function hmUpdateAsOfBadge(lastDateStr, periodLabel) {
+  var badge = document.getElementById('hmAsOfBadge');
+  if (!badge) return;
+  if (!lastDateStr) { badge.style.display = 'none'; return; }
+  var lastDate = (typeof EE !== 'undefined' && EE.parseDateDDMMYYYY) ? EE.parseDateDDMMYYYY(lastDateStr) : null;
+  if (!lastDate || isNaN(lastDate.getTime())) { badge.style.display = 'none'; return; }
+  var today = new Date();
+  var todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  var lastMidnight = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
+  var diffDays = Math.round((todayMidnight.getTime() - lastMidnight.getTime()) / 86400000);
+  // Weekly/Monthly periods legitimately lag by design (a weekly bar is only
+  // "complete" once its week ends) — use a looser, period-aware threshold so
+  // the badge doesn't cry wolf on a chart that's rendering correctly.
+  var freshFloor = periodLabel === 'Weekly' ? 8 : periodLabel === 'Monthly' ? 32 : 3;
+  var staleFloor = periodLabel === 'Weekly' ? 15 : periodLabel === 'Monthly' ? 62 : 6;
+  var dd = String(lastDate.getDate()).padStart(2, '0');
+  var mm = String(lastDate.getMonth() + 1).padStart(2, '0');
+  var yyyy = lastDate.getFullYear();
+  var dateDisplay = dd + '/' + mm + '/' + yyyy;
+  var label, bg, fg;
+  if (diffDays <= freshFloor) {
+    label = 'As of ' + dateDisplay;
+    bg = '#dcfce7'; fg = '#166534';
+  } else if (diffDays <= staleFloor) {
+    label = '\u26A0 As of ' + dateDisplay + ' (' + diffDays + 'd old)';
+    bg = '#fef3c7'; fg = '#92400e';
+  } else {
+    label = '\u26A0 STALE \u2014 ' + dateDisplay + ' (' + diffDays + 'd old)';
+    bg = '#fee2e2'; fg = '#991b1b';
+  }
+  badge.textContent = label;
+  badge.style.background = bg;
+  badge.style.color = fg;
+  badge.style.display = 'inline-block';
+}
 function hmClearStatBoxes(label) {
   var fl = document.getElementById('hmFundLabel'); if (fl) fl.textContent = label || '\u2014';
+  var badge = document.getElementById('hmAsOfBadge'); if (badge) badge.style.display = 'none';
   ['hmHud1', 'hmHud2', 'hmHud3'].forEach(function(id) {
     var el = document.getElementById(id); if (el) el.style.display = 'none';
   });
@@ -9251,6 +9340,10 @@ async function drawHilegaMilega() {
         var idxName = idxSel?.options?.[idxSel.selectedIndex]?.textContent || key;
         var periodLabel = window._hmPeriod.charAt(0).toUpperCase() + window._hmPeriod.slice(1);
         document.getElementById('hmFundLabel').textContent = idxName + '  \u00B7  ' + periodLabel + '  \u00B7  Days:' + _cntDaily + '  Weeks:' + _cntWeekly + '  Months:' + _cntMonthly;
+        // Freshness badge — computed from the LAST POINT ACTUALLY PLOTTED
+        // (viewData, post-slice-to-period), so it can never disagree with
+        // what's on the canvas even if a per-index array lags cache.lastDate.
+        hmUpdateAsOfBadge(viewData[viewData.length - 1] ? viewData[viewData.length - 1].date : null, periodLabel);
 
         // ── SMA(8) of the low price, for Pane 1 overlay ──
         // (No separate low series is stored — daily/weekly/monthly caches
