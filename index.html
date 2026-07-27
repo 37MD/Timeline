@@ -10191,6 +10191,138 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
       <div style="font-size:11px;color:#888;margin-top:2px;">Equity ⇄ Corporate Bond — suggested allocation</div>
     </div>
 
+    <!-- Mode Toggle: BAF Switch (default) / NPS Switch -->
+    <div style="display:flex;gap:0;margin-bottom:12px;border:2px solid var(--n-accent,#009e70);border-radius:8px;overflow:hidden;">
+      <button type="button" id="bsToggleBaf" onclick="bsToggleMode('baf')" style="flex:1;padding:8px 4px;border:none;font-weight:700;font-size:12px;cursor:pointer;background:var(--n-accent,#009e70);color:#fff;transition:all .2s;">BAF Switch</button>
+      <button type="button" id="bsToggleNps" onclick="bsToggleMode('nps')" style="flex:1;padding:8px 4px;border:none;font-weight:700;font-size:12px;cursor:pointer;background:transparent;color:#667;transition:all .2s;">NPS Switch</button>
+    </div>
+
+    <!-- ═══ BAF Switch Mode ═══ -->
+    <div id="bsBafModeWrap" style="display:block;">
+      <div style="font-size:10px;color:#888;text-align:center;margin-bottom:8px;">When to permanently switch from BAF → NPS Scheme E (in installments you choose)</div>
+
+      <!-- BAF Fund Picker -->
+      <div style="border:2px solid #c97a00;border-radius:10px;padding:10px;margin-bottom:10px;background:var(--n-surface,#fff);">
+        <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Choose BAF Fund</div>
+        <div id="bsBafGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;"></div>
+      </div>
+
+      <div id="bsStatus" style="font-size:11px;color:#888;text-align:center;margin-bottom:10px;min-height:14px;"></div>
+
+      <!-- BAF vs Best NPS E cards -->
+      <div id="bsCompareWrap" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+          <div id="bsCardBaf" style="border:1.5px solid #c97a00;border-radius:10px;padding:10px;">
+            <div style="font-size:10px;color:#888;text-transform:uppercase;">BAF Fund</div>
+            <div id="bsBafName" style="font-size:0.85rem;font-weight:800;color:#c97a00;margin:3px 0;">—</div>
+            <div id="bsBafRegime" style="font-size:11px;color:#667;">—</div>
+            <div id="bsBafReturn" style="font-size:11px;color:#667;">1Y Return —</div>
+          </div>
+          <div id="bsCardNpsE" style="border:1.5px solid #1a8a4a;border-radius:10px;padding:10px;">
+            <div style="font-size:10px;color:#888;text-transform:uppercase;">Best NPS Scheme E</div>
+            <div id="bsNpsEName" style="font-size:0.85rem;font-weight:800;color:#1a8a4a;margin:3px 0;">—</div>
+            <div id="bsNpsERegime" style="font-size:11px;color:#667;">—</div>
+            <div id="bsNpsEReturn" style="font-size:11px;color:#667;">1Y Return —</div>
+          </div>
+        </div>
+
+        <!-- Return Comparison -->
+        <div style="border:2px solid var(--n-border,#b0bece);border-radius:10px;padding:10px;margin-bottom:10px;background:var(--n-surface,#fff);">
+          <div style="text-align:center;margin-bottom:6px;">
+            <div style="font-size:10px;color:#556;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">Return Comparison</div>
+          </div>
+          <div id="bsPeriodBtns" style="display:flex;gap:4px;margin-bottom:8px;">
+            <button type="button" onclick="bsSelectPeriod('3M')" class="bsPeriodBtn" data-p="3M" style="flex:1;padding:5px 2px;border-radius:4px;border:1px solid var(--n-border,#b0bece);background:transparent;color:#667;font-size:10px;font-weight:700;cursor:pointer;">3M</button>
+            <button type="button" onclick="bsSelectPeriod('6M')" class="bsPeriodBtn" data-p="6M" style="flex:1;padding:5px 2px;border-radius:4px;border:1px solid var(--n-border,#b0bece);background:transparent;color:#667;font-size:10px;font-weight:700;cursor:pointer;">6M</button>
+            <button type="button" onclick="bsSelectPeriod('1Y')" class="bsPeriodBtn" data-p="1Y" style="flex:1;padding:5px 2px;border-radius:4px;border:2px solid #c97a00;background:rgba(201,122,0,0.08);color:#c97a00;font-size:10px;font-weight:700;cursor:pointer;">1Y</button>
+            <button type="button" onclick="bsSelectPeriod('2Y')" class="bsPeriodBtn" data-p="2Y" style="flex:1;padding:5px 2px;border-radius:4px;border:1px solid var(--n-border,#b0bece);background:transparent;color:#667;font-size:10px;font-weight:700;cursor:pointer;">2Y</button>
+            <button type="button" onclick="bsSelectPeriod('3Y')" class="bsPeriodBtn" data-p="3Y" style="flex:1;padding:5px 2px;border-radius:4px;border:1px solid var(--n-border,#b0bece);background:transparent;color:#667;font-size:10px;font-weight:700;cursor:pointer;">3Y</button>
+          </div>
+          <div style="display:flex;height:26px;border-radius:6px;overflow:hidden;border:1px solid var(--border,#e0e0e0);margin-bottom:6px;">
+            <div id="bsBafRetBar" style="background:#c97a00;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:width .3s;">BAF —%</div>
+            <div id="bsNpsERetBar" style="background:#1a8a4a;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:width .3s;">NPS E —%</div>
+          </div>
+          <div id="bsRetDiff" style="font-size:11px;color:#667;text-align:center;">—</div>
+        </div>
+
+        <!-- Recommendation -->
+        <div id="bsRecBox" style="border:2px solid var(--n-border,#b0bece);border-radius:10px;padding:12px;margin-bottom:10px;text-align:center;">
+          <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.06em;">Suggested Action</div>
+          <div id="bsRecTitle" style="font-size:1.15rem;font-weight:800;margin:6px 0 2px;color:#556;">—</div>
+          <div id="bsRecSub" style="font-size:12px;color:#556;margin-bottom:6px;">—</div>
+          <div id="bsRecDetail" style="font-size:11px;color:#778;text-align:left;line-height:1.5;"></div>
+        </div>
+
+        <!-- HM: BAF → NPS E Weekly RSI Signal -->
+        <div style="border:2px solid var(--n-accent2,#c97a00);border-radius:10px;padding:10px;margin-bottom:10px;background:var(--n-surface,#fff);">
+          <div style="text-align:center;margin-bottom:6px;">
+            <div style="font-size:10px;color:var(--n-accent2,#c97a00);text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">Hilega Milega — BAF → NPS E Signal</div>
+            <div style="font-size:10px;color:#889;margin-top:2px;">Weekly RSI(9) &gt; 50 AND Price &gt; SMA(48) → Invest window</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+            <label style="font-size:10px;color:#889;white-space:nowrap;">RSI Period</label>
+            <input type="number" id="bsHmPeriod" value="9" min="2" max="20" onchange="bsHmCalc()" style="width:56px;padding:4px 6px;border-radius:4px;border:1px solid var(--border,#e0e0e0);font-family:var(--mono,monospace);font-size:12px;text-align:center;">
+            <button type="button" onclick="bsHmCalc()" style="flex:1;padding:6px 8px;border-radius:4px;border:none;background:var(--n-accent2,#c97a00);color:#fff;font-weight:700;font-size:11px;cursor:pointer;">RECALCULATE</button>
+          </div>
+          <div style="text-align:center;">
+            <div id="bsHmState" style="font-size:1.05rem;font-weight:800;margin-bottom:2px;">—</div>
+            <div id="bsHmDetail" style="font-size:11px;color:#667;margin-bottom:4px;">—</div>
+            <div id="bsHmLevels" style="font-size:10px;color:#889;"></div>
+          </div>
+        </div>
+
+        <!-- 4-Year Backtest: BAF vs NPS E -->
+        <div style="border:2px solid var(--n-border,#b0bece);border-radius:10px;padding:10px;margin-bottom:10px;background:var(--n-surface,#fff);">
+          <div style="text-align:center;margin-bottom:8px;">
+            <div style="font-size:10px;color:#556;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">4-Year Historical Validation</div>
+            <div style="font-size:10px;color:#889;margin-top:2px;">Every past BAF→NPS E / NPS E→BAF switching signal and what it would have returned</div>
+          </div>
+          <div id="bsBtStatus" style="font-size:11px;color:#889;text-align:center;">—</div>
+          <div id="bsBtSummaryWrap" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+              <div style="border:1px solid var(--border,#e0e0e0);border-radius:6px;padding:6px 4px;text-align:center;">
+                <div style="font-size:9px;color:#889;text-transform:uppercase;">Switches</div>
+                <div id="bsBtCount" style="font-size:14px;font-weight:800;">—</div>
+              </div>
+              <div style="border:1px solid var(--border,#e0e0e0);border-radius:6px;padding:6px 4px;text-align:center;">
+                <div style="font-size:9px;color:#889;text-transform:uppercase;">Strategy Return</div>
+                <div id="bsBtStratReturn" style="font-size:14px;font-weight:800;">—</div>
+              </div>
+              <div style="border:1px solid var(--border,#e0e0e0);border-radius:6px;padding:6px 4px;text-align:center;">
+                <div style="font-size:9px;color:#889;text-transform:uppercase;">Buy &amp; Hold BAF</div>
+                <div id="bsBtHoldReturn" style="font-size:14px;font-weight:800;">—</div>
+              </div>
+            </div>
+            <div style="font-size:10px;color:#889;text-transform:uppercase;margin-bottom:4px;">Switch log (oldest → newest)</div>
+            <div style="max-height:280px;overflow-y:auto;border:1px solid var(--border,#e0e0e0);border-radius:6px;">
+              <table style="width:100%;border-collapse:collapse;font-size:10.5px;">
+                <thead style="position:sticky;top:0;background:var(--n-surface2,#f5f5f5);">
+                  <tr>
+                    <th style="padding:4px 3px;text-align:left;color:#889;font-size:9px;text-transform:uppercase;">Date</th>
+                    <th style="padding:4px 3px;text-align:left;color:#889;font-size:9px;text-transform:uppercase;">Switch</th>
+                    <th style="padding:4px 3px;text-align:right;color:#889;font-size:9px;text-transform:uppercase;">RSI</th>
+                    <th style="padding:4px 3px;text-align:right;color:#889;font-size:9px;text-transform:uppercase;">Held</th>
+                    <th style="padding:4px 3px;text-align:right;color:#889;font-size:9px;text-transform:uppercase;">Leg Return</th>
+                  </tr>
+                </thead>
+                <tbody id="bsBtTbody"></tbody>
+              </table>
+            </div>
+            <div style="font-size:9px;color:#aab;margin-top:6px;line-height:1.5;">
+              Simulated: switches 100% BAF⇔NPS E on every weekly RSI(9) cross of 50, gated by Price&gt;SMA(48). Ignores exit load, switch-frequency limits — treat as directional validation only.
+            </div>
+          </div>
+        </div>
+
+        <div style="font-size:10px;color:#aab;text-align:center;line-height:1.5;">
+          Advisory only — based on BAF's Weekly RSI(9) regime and return comparison with best NPS Scheme E. Switch manually via your AMC portal.
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ NPS Switch Mode (existing Phase 1) ═══ -->
+    <div id="nsNpsModeWrap" style="display:none;">
+
     <!-- AMC + Tier picker -->
     <div style="border:2px solid var(--n-accent,#009e70);border-radius:10px;padding:10px;margin-bottom:10px;background:var(--n-surface,#fff);">
       <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Choose fund house</div>
@@ -10356,6 +10488,8 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
         </div>
       </div>
     </div>
+
+    </div><!-- end nsNpsModeWrap -->
   </div>
 </div>
 <!-- #tab-npsswitch -->
@@ -10807,14 +10941,16 @@ function nsRefresh() {
 window.onNpsSwitchTabActivated = function() {
   try {
     nsBuildAmcGrid();
+    bsBuildBafGrid();
   } catch (err) {
     var status = document.getElementById('nsStatus');
     if (status) status.innerHTML = '⚠️ NPS Switch error: ' + (err && err.message ? err.message : err);
     console.error('[NPS Switch]', err);
     return;
   }
-  nsSafeRefresh();
-  nsBcSafeRun();
+  // Default to BAF Switch mode
+  window.bsState.mode = 'baf';
+  bsToggleMode('baf');
 };
 
 // ── Hilega Milega Weekly Switch Calculator + 4-Year Backtest ──
@@ -11167,6 +11303,468 @@ function nsBcRun() {
       '<td style="padding:4px 3px;text-align:center;color:' + (wmaYes === true ? '#1a8a4a' : wmaYes === false ? '#cc3344' : '#999') + ';">' + (wmaYes === true ? 'YES' : wmaYes === false ? 'NO' : '—') + '</td>' +
     '</tr>';
   }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BAF SWITCH — BAF → NPS Scheme E permanent switch advisor
+// ═══════════════════════════════════════════════════════════════════════════════
+// Purpose: Helps user decide when to permanently switch from a Balanced
+// Advantage Fund to NPS Scheme E (Equity), in user-chosen installments.
+// Uses same Regime/RSI logic as NPS Switch, but one-directional (BAF→NPS E).
+// HM signal: Weekly RSI(9) > 50 AND Price > SMA(48) → invest window.
+
+window.bsState = { bafAmc: 'HDFC', period: '1Y', mode: 'baf' };
+
+function bsToggleMode(mode) {
+  window.bsState.mode = mode;
+  var bafBtn = document.getElementById('bsToggleBaf');
+  var npsBtn = document.getElementById('bsToggleNps');
+  var bafWrap = document.getElementById('bsBafModeWrap');
+  var npsWrap = document.getElementById('nsNpsModeWrap');
+  if (mode === 'baf') {
+    bafBtn.style.background = 'var(--n-accent,#009e70)'; bafBtn.style.color = '#fff';
+    npsBtn.style.background = 'transparent'; npsBtn.style.color = '#667';
+    bafWrap.style.display = 'block'; npsWrap.style.display = 'none';
+    bsRefresh();
+  } else {
+    npsBtn.style.background = 'var(--n-accent,#009e70)'; npsBtn.style.color = '#fff';
+    bafBtn.style.background = 'transparent'; bafBtn.style.color = '#667';
+    bafWrap.style.display = 'none'; npsWrap.style.display = 'block';
+    nsSafeRefresh();
+    nsBcSafeRun();
+  }
+}
+
+function bsBuildBafGrid() {
+  var grid = document.getElementById('bsBafGrid');
+  if (!grid || !window.amcFunds) return;
+  var bafAmcKeys = ['HDFC', 'ICICI', 'KOTAK', 'ABSL'];
+  grid.innerHTML = bafAmcKeys.map(function(amc) {
+    var active = amc === window.bsState.bafAmc;
+    var bafFund = window.amcFunds[amc] ? window.amcFunds[amc].find(function(f) { return f.name.indexOf('Balanced Advantage') !== -1; }) : null;
+    var label = bafFund ? bafFund.name.replace(' - Growth', '').replace('Balanced Advantage', 'BAF') : amc;
+    return '<button type="button" onclick="bsSelectBaf(\'' + amc + '\')" style="padding:8px 4px;border-radius:6px;border:1.5px solid ' +
+      (active ? '#c97a00' : 'var(--n-border,#b0bece)') + ';background:' +
+      (active ? 'rgba(201,122,0,0.1)' : 'transparent') + ';color:' +
+      (active ? '#c97a00' : '#556') + ';font-weight:700;font-size:11px;cursor:pointer;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + label + '</button>';
+  }).join('');
+}
+
+function bsSelectBaf(amc) {
+  window.bsState.bafAmc = amc;
+  bsBuildBafGrid();
+  bsRefresh();
+}
+
+function bsSelectPeriod(p) {
+  window.bsState.period = p;
+  var btns = document.querySelectorAll('.bsPeriodBtn');
+  btns.forEach(function(b) {
+    var isActive = b.getAttribute('data-p') === p;
+    b.style.borderColor = isActive ? '#c97a00' : 'var(--n-border,#b0bece)';
+    b.style.background = isActive ? 'rgba(201,122,0,0.08)' : 'transparent';
+    b.style.color = isActive ? '#c97a00' : '#667';
+  });
+  bsRefresh();
+}
+
+function bsGetWeeklyEntries(name) {
+  var deep = window._deepWeeklyCache;
+  if (!deep || !deep.weeklyMap) return null;
+  var key = U.normalize(name);
+  return deep.weeklyMap[key] || null;
+}
+
+function bsGetDailyEntries(name) {
+  var deep = window._deepWeeklyCache;
+  if (!deep || !deep.dailyMap) return null;
+  var key = U.normalize(name);
+  return deep.dailyMap[key] || null;
+}
+
+function bsParseEntries(entries) {
+  if (!entries) return { dates: [], closes: [] };
+  var dates = [], closes = [];
+  for (var i = 0; i < entries.length; i++) {
+    var parts = entries[i].split('|');
+    var ds = parts[0];
+    var d = new Date(parseInt(ds.substring(4, 8), 10), parseInt(ds.substring(2, 4), 10) - 1, parseInt(ds.substring(0, 2), 10));
+    var c = parseFloat(parts[4]);
+    if (!isNaN(c) && d.getTime()) { dates.push(d); closes.push(c); }
+  }
+  return { dates: dates, closes: closes };
+}
+
+function bsComputeReturn(closes, dates, period) {
+  if (!closes || closes.length < 2) return null;
+  var now = dates[dates.length - 1];
+  var target = new Date(now);
+  if (period === '3M') target.setMonth(target.getMonth() - 3);
+  else if (period === '6M') target.setMonth(target.getMonth() - 6);
+  else if (period === '1Y') target.setFullYear(target.getFullYear() - 1);
+  else if (period === '2Y') target.setFullYear(target.getFullYear() - 2);
+  else if (period === '3Y') target.setFullYear(target.getFullYear() - 3);
+  var startIdx = 0;
+  for (var i = 0; i < dates.length; i++) {
+    if (dates[i] >= target) { startIdx = i; break; }
+  }
+  if (startIdx >= dates.length - 1) return null;
+  return ((closes[closes.length - 1] - closes[startIdx]) / closes[startIdx]) * 100;
+}
+
+function bsFindBestNpsE(period) {
+  var bestName = null, bestReturn = -Infinity;
+  var codes = (typeof DD !== 'undefined' && DD.NPS && DD.NPS._defaultCodes) ? DD.NPS._defaultCodes : [];
+  var names = (typeof DD !== 'undefined' && DD.NPS && DD.NPS._schemeNames) ? DD.NPS._schemeNames : {};
+  codes.forEach(function(code) {
+    var name = names[code] || code;
+    if (name.indexOf('Scheme E') === -1 || name.indexOf('Tier I') === -1) return;
+    var entries = bsGetWeeklyEntries(name);
+    if (!entries || entries.length < 10) return;
+    var parsed = bsParseEntries(entries);
+    var ret = bsComputeReturn(parsed.closes, parsed.dates, period);
+    if (ret !== null && ret > bestReturn) { bestReturn = ret; bestName = name; }
+  });
+  return { name: bestName, ret: bestReturn !== -Infinity ? bestReturn : null };
+}
+
+function bsRefresh() {
+  var status = document.getElementById('bsStatus');
+  var wrap = document.getElementById('bsCompareWrap');
+  if (!wrap) return;
+
+  var bafAmc = window.bsState.bafAmc;
+  var period = window.bsState.period;
+
+  var bafFundList = window.amcFunds[bafAmc] || [];
+  var bafFund = bafFundList.find(function(f) { return f.name.indexOf('Balanced Advantage') !== -1; });
+  if (!bafFund) {
+    wrap.style.display = 'none';
+    status.textContent = 'BAF fund not found for ' + bafAmc;
+    return;
+  }
+
+  var bafEntries = bsGetWeeklyEntries(bafFund.name);
+  if (!bafEntries || bafEntries.length < 10) {
+    wrap.style.display = 'none';
+    status.innerHTML = 'No weekly history for ' + bafFund.name + '. <a href="javascript:void(0)" onclick="switchTab(\'pt\')" style="color:#c97a00;font-weight:700;">Run scan on Portfolio Snapshot →</a>';
+    return;
+  }
+
+  var bafParsed = bsParseEntries(bafEntries);
+  var bafRet = bsComputeReturn(bafParsed.closes, bafParsed.dates, period);
+
+  var bestNpsE = bsFindBestNpsE(period);
+  if (!bestNpsE.name) {
+    wrap.style.display = 'none';
+    status.textContent = 'No NPS Scheme E Tier I data found.';
+    return;
+  }
+  var npsEEntries = bsGetWeeklyEntries(bestNpsE.name);
+  var npsEParsed = bsParseEntries(npsEEntries);
+
+  status.textContent = '';
+  wrap.style.display = '';
+
+  document.getElementById('bsBafName').textContent = bafFund.name.replace(' - Growth', '');
+  document.getElementById('bsNpsEName').textContent = bestNpsE.name.replace('[NPS] ', '');
+
+  var bafRow = scannerRowFor(bafFund.name);
+  var npsERow = scannerRowFor(bestNpsE.name);
+  if (bafRow && bafRow.regime) {
+    var bafLbl = nsRegimeLabel(bafRow.regime);
+    document.getElementById('bsBafRegime').textContent = bafLbl.text;
+    document.getElementById('bsBafRegime').style.color = bafLbl.color;
+  } else {
+    document.getElementById('bsBafRegime').textContent = 'No data';
+    document.getElementById('bsBafRegime').style.color = '#999';
+  }
+  if (npsERow && npsERow.regime) {
+    var npsELbl = nsRegimeLabel(npsERow.regime);
+    document.getElementById('bsNpsERegime').textContent = npsELbl.text;
+    document.getElementById('bsNpsERegime').style.color = npsELbl.color;
+  } else {
+    document.getElementById('bsNpsERegime').textContent = 'No data';
+    document.getElementById('bsNpsERegime').style.color = '#999';
+  }
+
+  document.getElementById('bsBafReturn').textContent = period + ' Return: ' + (bafRet !== null ? (bafRet >= 0 ? '+' : '') + bafRet.toFixed(1) + '%' : '—');
+  document.getElementById('bsBafReturn').style.color = bafRet !== null && bafRet >= 0 ? '#1a8a4a' : '#cc3344';
+  document.getElementById('bsNpsEReturn').textContent = period + ' Return: ' + (bestNpsE.ret !== null ? (bestNpsE.ret >= 0 ? '+' : '') + bestNpsE.ret.toFixed(1) + '%' : '—');
+  document.getElementById('bsNpsEReturn').style.color = bestNpsE.ret !== null && bestNpsE.ret >= 0 ? '#1a8a4a' : '#cc3344';
+
+  if (bafRet !== null && bestNpsE.ret !== null) {
+    var bafAbs = Math.abs(bafRet), npsAbs = Math.abs(bestNpsE.ret);
+    var total = bafAbs + npsAbs;
+    if (total === 0) total = 1;
+    document.getElementById('bsBafRetBar').style.width = (bafAbs / total * 100) + '%';
+    document.getElementById('bsBafRetBar').textContent = 'BAF ' + (bafRet >= 0 ? '+' : '') + bafRet.toFixed(1) + '%';
+    document.getElementById('bsNpsERetBar').style.width = (npsAbs / total * 100) + '%';
+    document.getElementById('bsNpsERetBar').textContent = 'NPS E ' + (bestNpsE.ret >= 0 ? '+' : '') + bestNpsE.ret.toFixed(1) + '%';
+    var diff = bestNpsE.ret - bafRet;
+    document.getElementById('bsRetDiff').innerHTML = 'NPS E ' + (diff >= 0 ? 'outperforms' : 'underperforms') + ' by <b style="color:' + (diff >= 0 ? '#1a8a4a' : '#cc3344') + '">' + (diff >= 0 ? '+' : '') + diff.toFixed(1) + '%</b>';
+  }
+
+  var npsOutperforms = (bafRet !== null && bestNpsE.ret !== null && bestNpsE.ret > bafRet);
+  var bafRegime = bafRow && bafRow.regime ? bafRow.regime : null;
+  var recBox = document.getElementById('bsRecBox');
+  var recTitle = document.getElementById('bsRecTitle');
+  var recSub = document.getElementById('bsRecSub');
+  var recDetail = document.getElementById('bsRecDetail');
+
+  var hmSignal = bsCheckHmSignal(bafParsed);
+
+  if (npsOutperforms && hmSignal) {
+    recTitle.textContent = 'SWITCH TO NPS E';
+    recTitle.style.color = '#1a8a4a';
+    recSub.textContent = 'BAF underperforming + trend confirmed';
+    recDetail.textContent = 'NPS Scheme E (' + period + ': +' + bestNpsE.ret.toFixed(1) + '%) outperforms BAF (' + (bafRet >= 0 ? '+' : '') + bafRet.toFixed(1) + '%). BAF\'s weekly RSI(9) > 50 and price is above SMA(48) — favorable entry window. Start switching in installments of your choice.';
+    recBox.style.borderColor = '#1a8a4a';
+  } else if (npsOutperforms && !hmSignal) {
+    recTitle.textContent = 'WAIT — TREND NOT CONFIRMED';
+    recTitle.style.color = '#b8860b';
+    recSub.textContent = 'NPS E outperforms but BAF trend not yet bullish';
+    recDetail.textContent = 'NPS Scheme E has better ' + period + ' returns, but BAF\'s weekly RSI(9) is below 50 or price is below SMA(48). Wait for the trend to confirm before switching.';
+    recBox.style.borderColor = '#b8860b';
+  } else {
+    recTitle.textContent = 'STAY IN BAF';
+    recTitle.style.color = '#3a7abf';
+    recSub.textContent = bafRet !== null ? 'BAF is outperforming NPS E (' + period + ')' : 'Insufficient return data';
+    recDetail.textContent = bafRet !== null ? 'BAF (' + period + ': ' + (bafRet >= 0 ? '+' : '') + bafRet.toFixed(1) + '%) is performing better than NPS E (' + (bestNpsE.ret >= 0 ? '+' : '') + bestNpsE.ret.toFixed(1) + '%). No reason to switch right now.' : 'Not enough data to compare returns.';
+    recBox.style.borderColor = '#3a7abf';
+  }
+
+  bsHmCalc();
+  bsBtRun(bafParsed, npsEParsed, bafFund.name, bestNpsE.name);
+}
+
+function bsCheckHmSignal(parsed) {
+  if (!parsed || !parsed.closes || parsed.closes.length < 55) return false;
+  var period = parseInt(document.getElementById('bsHmPeriod').value, 10) || 9;
+  var rsiArr = U.calcRSI(parsed.closes, period);
+  if (rsiArr.length < 2) return false;
+  var lastRsi = rsiArr[rsiArr.length - 1];
+
+  var sma48 = new Array(parsed.closes.length).fill(null);
+  for (var i = 47; i < parsed.closes.length; i++) {
+    var sum = 0;
+    for (var j = i - 47; j <= i; j++) sum += parsed.closes[j];
+    sma48[i] = sum / 48;
+  }
+  var lastPrice = parsed.closes[parsed.closes.length - 1];
+  var lastSma48 = sma48[sma48.length - 1];
+
+  return lastRsi > 50 && lastPrice > lastSma48;
+}
+
+function bsHmCalc() {
+  var stateEl = document.getElementById('bsHmState');
+  var detailEl = document.getElementById('bsHmDetail');
+  var levelsEl = document.getElementById('bsHmLevels');
+  if (!stateEl) return;
+
+  var bafAmc = window.bsState.bafAmc;
+  var bafFundList = window.amcFunds[bafAmc] || [];
+  var bafFund = bafFundList.find(function(f) { return f.name.indexOf('Balanced Advantage') !== -1; });
+  if (!bafFund) { stateEl.textContent = '—'; return; }
+
+  var entries = bsGetWeeklyEntries(bafFund.name);
+  if (!entries || entries.length < 55) {
+    stateEl.textContent = '—';
+    detailEl.textContent = 'Not enough weekly data.';
+    levelsEl.textContent = '';
+    return;
+  }
+
+  var parsed = bsParseEntries(entries);
+  var period = parseInt(document.getElementById('bsHmPeriod').value, 10) || 9;
+  var rsiArr = U.calcRSI(parsed.closes, period);
+  if (rsiArr.length < 2) {
+    stateEl.textContent = '—'; detailEl.textContent = 'Not enough RSI data.'; levelsEl.textContent = '';
+    return;
+  }
+
+  var sma48 = new Array(parsed.closes.length).fill(null);
+  for (var i = 47; i < parsed.closes.length; i++) {
+    var sum = 0;
+    for (var j = i - 47; j <= i; j++) sum += parsed.closes[j];
+    sma48[i] = sum / 48;
+  }
+
+  var lastRsi = rsiArr[rsiArr.length - 1];
+  var prevRsi = rsiArr[rsiArr.length - 2];
+  var lastPrice = parsed.closes[parsed.closes.length - 1];
+  var lastSma48 = sma48[sma48.length - 1];
+  var justCrossedUp = prevRsi < 50 && lastRsi >= 50;
+  var justCrossedDown = prevRsi >= 50 && lastRsi < 50;
+  var rsiAbove50 = lastRsi > 50;
+  var priceAboveSma = lastPrice > lastSma48;
+  var signal = rsiAbove50 && priceAboveSma;
+
+  var stateText, stateColor, detail;
+  if (signal && justCrossedUp) {
+    stateText = '↗ INVEST NOW — Enter NPS E';
+    stateColor = '#1a8a4a';
+    detail = 'Weekly RSI(' + period + ') just crossed above 50 (' + prevRsi.toFixed(1) + ' → ' + lastRsi.toFixed(1) + ') AND price > SMA(48). Optimal entry window.';
+  } else if (!signal && justCrossedDown) {
+    stateText = '↘ WAIT — Do not invest';
+    stateColor = '#cc3344';
+    detail = 'Weekly RSI(' + period + ') just crossed below 50 (' + prevRsi.toFixed(1) + ' → ' + lastRsi.toFixed(1) + '). Stay in BAF.';
+  } else if (signal) {
+    stateText = '▲ INVEST WINDOW OPEN';
+    stateColor = '#1a8a4a';
+    detail = 'Weekly RSI(' + period + ') is ' + lastRsi.toFixed(1) + ' (> 50) and price > SMA(48). Conditions favorable for switching.';
+  } else {
+    stateText = '▼ WAIT — Not yet';
+    stateColor = '#cc3344';
+    detail = 'Weekly RSI(' + period + ') is ' + lastRsi.toFixed(1) + (rsiAbove50 ? '' : ' (< 50)') + (priceAboveSma ? '' : ' and price < SMA(48)').trim() + '. Stay in BAF.';
+  }
+
+  stateEl.textContent = stateText;
+  stateEl.style.color = stateColor;
+  detailEl.textContent = detail;
+  levelsEl.textContent = 'RSI(' + period + '): ' + lastRsi.toFixed(1) + '  |  Price: ' + lastPrice.toFixed(2) + '  |  SMA(48): ' + (lastSma48 ? lastSma48.toFixed(2) : '—');
+}
+
+function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
+  var status = document.getElementById('bsBtStatus');
+  var wrap = document.getElementById('bsBtSummaryWrap');
+  if (!bafParsed || !bafParsed.closes || bafParsed.closes.length < 55 ||
+      !npsEParsed || !npsEParsed.closes || npsEParsed.closes.length < 55) {
+    wrap.style.display = 'none';
+    status.textContent = 'Not enough weekly history for 4-year backtest.';
+    return;
+  }
+
+  var period = parseInt(document.getElementById('bsHmPeriod').value, 10) || 9;
+
+  var cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - 4);
+  var startIdx = 0;
+  for (var wi = 0; wi < bafParsed.dates.length; wi++) {
+    if (bafParsed.dates[wi] >= cutoff) { startIdx = wi; break; }
+  }
+
+  var rsiOffset = period;
+  var startRsiIdx = Math.max(0, startIdx - rsiOffset);
+  var rsiFull = U.calcRSI(bafParsed.closes, period);
+
+  if (rsiFull.length - startRsiIdx < 2) {
+    wrap.style.display = 'none';
+    status.textContent = 'Not enough data to cover 4-year window.';
+    return;
+  }
+
+  var sma48 = new Array(bafParsed.closes.length).fill(null);
+  for (var si = 47; si < bafParsed.closes.length; si++) {
+    var sum = 0;
+    for (var sj = si - 47; sj <= si; sj++) sum += bafParsed.closes[sj];
+    sma48[si] = sum / 48;
+  }
+
+  function nearestBAFClose(targetDate) {
+    var best = null;
+    for (var i = 0; i < bafParsed.dates.length; i++) {
+      if (bafParsed.dates[i] <= targetDate) best = bafParsed.closes[i]; else break;
+    }
+    return best;
+  }
+  function nearestNpsEClose(targetDate) {
+    var best = null;
+    for (var i = 0; i < npsEParsed.dates.length; i++) {
+      if (npsEParsed.dates[i] <= targetDate) best = npsEParsed.closes[i]; else break;
+    }
+    return best;
+  }
+
+  var series = [];
+  for (var k = startRsiIdx; k < rsiFull.length; k++) {
+    var closeIdx = k + rsiOffset;
+    if (closeIdx >= bafParsed.dates.length) break;
+    series.push({ closeIdx: closeIdx, date: bafParsed.dates[closeIdx], rsi: rsiFull[k], price: bafParsed.closes[closeIdx], sma48: sma48[closeIdx] });
+  }
+  if (series.length < 2) {
+    wrap.style.display = 'none'; status.textContent = 'Not enough data.'; return;
+  }
+
+  var holdingBAF = !(series[0].rsi > 50 && series[0].price > (series[0].sma48 || series[0].price));
+  var log = [];
+  var legStartDate = series[0].date;
+  var legStartPrice = holdingBAF ? series[0].price : (nearestNpsEClose(series[0].date) || series[0].price);
+
+  for (var s = 1; s < series.length; s++) {
+    var prevRsi = series[s - 1].rsi, curRsi = series[s].rsi;
+    var prevPrice = series[s - 1].price, curPrice = series[s].price;
+    var prevSma = series[s - 1].sma48, curSma = series[s].sma48;
+    if (prevRsi == null || curRsi == null) continue;
+
+    var prevSignal = prevRsi > 50 && prevPrice > (prevSma || prevPrice);
+    var curSignal = curRsi > 50 && curPrice > (curSma || curPrice);
+    var crossToNpsE = !prevSignal && curSignal;
+    var crossToBAF = prevSignal && !curSignal;
+
+    if (!crossToNpsE && !crossToBAF) continue;
+
+    var switchDate = series[s].date;
+    var exitPrice = holdingBAF ? nearestBAFClose(switchDate) || curPrice : nearestNpsEClose(switchDate) || curPrice;
+    var legReturnPct = ((exitPrice - legStartPrice) / legStartPrice) * 100;
+    var heldWeeks = Math.round((switchDate - legStartDate) / (7 * 24 * 3600 * 1000));
+
+    log.push({ date: switchDate, switchTo: crossToNpsE ? 'NPS E' : 'BAF', rsi: curRsi, heldWeeks: heldWeeks, legReturnPct: legReturnPct });
+
+    holdingBAF = crossToBAF;
+    legStartDate = switchDate;
+    legStartPrice = crossToNpsE ? (nearestNpsEClose(switchDate) || curPrice) : (nearestBAFClose(switchDate) || curPrice);
+  }
+
+  var lastIdx = series[series.length - 1];
+  var finalExitPrice = holdingBAF ? (nearestBAFClose(lastIdx.date) || lastIdx.price) : (nearestNpsEClose(lastIdx.date) || lastIdx.price);
+  var finalLegReturn = ((finalExitPrice - legStartPrice) / legStartPrice) * 100;
+
+  var stratMultiplier = 1;
+  for (var li = 0; li < log.length; li++) stratMultiplier *= (1 + log[li].legReturnPct / 100);
+  stratMultiplier *= (1 + finalLegReturn / 100);
+  var stratTotalReturn = (stratMultiplier - 1) * 100;
+
+  var holdReturn = ((bafParsed.closes[bafParsed.closes.length - 1] - bafParsed.closes[series[0].closeIdx]) / bafParsed.closes[series[0].closeIdx]) * 100;
+
+  status.textContent = '';
+  wrap.style.display = '';
+  document.getElementById('bsBtCount').textContent = log.length;
+
+  var stratEl = document.getElementById('bsBtStratReturn');
+  stratEl.textContent = (stratTotalReturn >= 0 ? '+' : '') + stratTotalReturn.toFixed(1) + '%';
+  stratEl.style.color = stratTotalReturn >= 0 ? '#1a8a4a' : '#cc3344';
+
+  var holdEl = document.getElementById('bsBtHoldReturn');
+  holdEl.textContent = (holdReturn >= 0 ? '+' : '') + holdReturn.toFixed(1) + '%';
+  holdEl.style.color = holdReturn >= 0 ? '#1a8a4a' : '#cc3344';
+
+  var tbody = document.getElementById('bsBtTbody');
+  if (!log.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:8px;text-align:center;color:#999;">No switching signals in the last 4 years — held ' + (holdingBAF ? 'BAF' : 'NPS E') + ' throughout.</td></tr>';
+  } else {
+    tbody.innerHTML = log.map(function(row, idx) {
+      var toColor = row.switchTo === 'NPS E' ? '#1a8a4a' : '#c97a00';
+      var toLabel = row.switchTo === 'NPS E' ? '↗ → NPS E' : '↘ → BAF';
+      var retColor = row.legReturnPct >= 0 ? '#1a8a4a' : '#cc3344';
+      var bg = idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)';
+      return '<tr style="background:' + bg + ';border-top:1px solid var(--border,#e0e0e0);">' +
+        '<td style="padding:4px 3px;white-space:nowrap;">' + nsFmtDate(row.date) + '</td>' +
+        '<td style="padding:4px 3px;color:' + toColor + ';font-weight:700;white-space:nowrap;">' + toLabel + '</td>' +
+        '<td style="padding:4px 3px;text-align:right;">' + row.rsi.toFixed(1) + '</td>' +
+        '<td style="padding:4px 3px;text-align:right;white-space:nowrap;">' + row.heldWeeks + 'w</td>' +
+        '<td style="padding:4px 3px;text-align:right;color:' + retColor + ';font-weight:700;">' + (row.legReturnPct >= 0 ? '+' : '') + row.legReturnPct.toFixed(1) + '%</td>' +
+        '</tr>';
+    }).join('') +
+    '<tr style="border-top:2px solid var(--border,#e0e0e0);background:rgba(0,0,0,0.03);">' +
+      '<td style="padding:4px 3px;white-space:nowrap;">' + nsFmtDate(lastIdx.date) + '</td>' +
+      '<td style="padding:4px 3px;color:#889;font-weight:700;white-space:nowrap;">Current (open)</td>' +
+      '<td style="padding:4px 3px;text-align:right;">' + (lastIdx.rsi != null ? lastIdx.rsi.toFixed(1) : '—') + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;white-space:nowrap;">' + Math.round((lastIdx.date - legStartDate) / (7 * 24 * 3600 * 1000)) + 'w</td>' +
+      '<td style="padding:4px 3px;text-align:right;color:' + (finalLegReturn >= 0 ? '#1a8a4a' : '#cc3344') + ';font-weight:700;">' + (finalLegReturn >= 0 ? '+' : '') + finalLegReturn.toFixed(1) + '%</td>' +
+    '</tr>';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
