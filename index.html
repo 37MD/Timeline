@@ -3906,25 +3906,19 @@ async function ptRunScan(){
   try {
     if(typeof window.fetchDeepNPSHistory==='function'){
       ptEl('pt-st').innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #b8860b;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> NPS NAVs...';
-      var _npsCacheCheck=await Promise.race([new Promise(function(res){_npsLoadCache(res);}),new Promise(function(_,rej){setTimeout(function(){rej(new Error('NPS cache load timeout'));},10000);})]).catch(function(){return{lastUpdated:null,npsMap:{}};});
+      var _npsCacheCheck=await Promise.race([new Promise(function(res){_npsLoadCache(res);}),new Promise(function(_,rej){setTimeout(function(){rej(new Error('NPS cache load timeout'));},10000);})]).catch(function(){return{lastUpdated:null,lastFetchDate:null,npsMap:{}};});
       var _npsDiff=null;
-      if(_npsCacheCheck&&_npsCacheCheck.lastUpdated){
+      var _npsFetchDate=_npsCacheCheck&&_npsCacheCheck.lastFetchDate;
+      if(_npsFetchDate){
+        var _npsED=new Date(parseInt(_npsFetchDate.substring(4,8),10),parseInt(_npsFetchDate.substring(2,4),10)-1,parseInt(_npsFetchDate.substring(0,2),10));
+        _npsDiff=Math.floor((Date.now()-_npsED.getTime())/86400000);
+      }else if(_npsCacheCheck&&_npsCacheCheck.lastUpdated){
         var _npsLd=_npsCacheCheck.lastUpdated;
         var _npsED=new Date(parseInt(_npsLd.substring(4,8),10),parseInt(_npsLd.substring(2,4),10)-1,parseInt(_npsLd.substring(0,2),10));
         _npsDiff=Math.floor((Date.now()-_npsED.getTime())/86400000);
       }
-      // BUG FIX: this used to treat ANY lastUpdated value as fresh —
-      // _npsDiff was computed and shown in the log line but never actually
-      // compared against a threshold, so a cache from weeks ago still
-      // silently skipped re-fetching forever. Now only skips when the
-      // newest NAV data on record is 0-1 day(s) old (same tolerance the
-      // main NSE deep-cache freshness check already uses) — anything
-      // older genuinely re-attempts the fetch, so a real gap (e.g. NAV
-      // publication catching up after a lag) gets picked up on the very
-      // next scan instead of being stuck until some unrelated event
-      // clears the cache.
       if(_npsCacheCheck&&_npsDiff!=null&&_npsDiff<=1&&_npsCacheCheck.npsMap&&Object.keys(_npsCacheCheck.npsMap).length>0){
-        ptLog('✅ NPS cache is fresh (last updated '+_npsDiff+' day(s) ago) — no download needed');
+        ptLog('✅ NPS cache is fresh (last fetched '+_npsDiff+' day(s) ago) — no download needed');
       }else{
         ptLog('📊 Fetching NPS scheme NAVs...');
         await window.fetchDeepNPSHistory(null,function(dn,total,code){
@@ -3952,17 +3946,19 @@ async function ptRunScan(){
   try {
     if(typeof window.fetchDeepBAFHistory==='function'){
       ptEl('pt-st').innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #b8860b;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> BAF NAVs...';
-      var _bafCacheCheck=await Promise.race([new Promise(function(res){_bafLoadCache(res);}),new Promise(function(_,rej){setTimeout(function(){rej(new Error('BAF cache load timeout'));},10000);})]).catch(function(){return{lastUpdated:null,bafMap:{}};});
+      var _bafCacheCheck=await Promise.race([new Promise(function(res){_bafLoadCache(res);}),new Promise(function(_,rej){setTimeout(function(){rej(new Error('BAF cache load timeout'));},10000);})]).catch(function(){return{lastUpdated:null,lastFetchDate:null,bafMap:{}};});
       var _bafDiff=null;
-      if(_bafCacheCheck&&_bafCacheCheck.lastUpdated){
+      var _bafFetchDate=_bafCacheCheck&&_bafCacheCheck.lastFetchDate;
+      if(_bafFetchDate){
+        var _bafED=new Date(parseInt(_bafFetchDate.substring(4,8),10),parseInt(_bafFetchDate.substring(2,4),10)-1,parseInt(_bafFetchDate.substring(0,2),10));
+        _bafDiff=Math.floor((Date.now()-_bafED.getTime())/86400000);
+      }else if(_bafCacheCheck&&_bafCacheCheck.lastUpdated){
         var _bafLd=_bafCacheCheck.lastUpdated;
         var _bafED=new Date(parseInt(_bafLd.substring(4,8),10),parseInt(_bafLd.substring(2,4),10)-1,parseInt(_bafLd.substring(0,2),10));
         _bafDiff=Math.floor((Date.now()-_bafED.getTime())/86400000);
       }
-      // Same fix as the NPS check above — only skip re-fetching when
-      // genuinely 0-1 day(s) old, not merely present.
       if(_bafCacheCheck&&_bafDiff!=null&&_bafDiff<=1&&_bafCacheCheck.bafMap&&Object.keys(_bafCacheCheck.bafMap).length>0){
-        ptLog('✅ BAF cache is fresh (last updated '+_bafDiff+' day(s) ago) — no download needed');
+        ptLog('✅ BAF cache is fresh (last fetched '+_bafDiff+' day(s) ago) — no download needed');
       }else{
         ptLog('📊 Fetching BAF fund NAVs...');
         await window.fetchDeepBAFHistory(null,function(dn,total,code){
@@ -6196,7 +6192,7 @@ function _npsLoadCache(cb) {
 }
 
 function _npsSaveCache(cache) {
-  return _idbPut(DEEP_CACHE_KEY_NPS, { lastUpdated: cache.lastUpdated, npsMap: cache.npsMap });
+  return _idbPut(DEEP_CACHE_KEY_NPS, { lastUpdated: cache.lastUpdated, lastFetchDate: cache.lastFetchDate || null, npsMap: cache.npsMap });
 }
 
 // ── 11.4c BAF Cache (Container DD sub-container) ──
@@ -6212,7 +6208,7 @@ function _bafLoadCache(cb) {
 }
 
 function _bafSaveCache(cache) {
-  return _idbPut(DEEP_CACHE_KEY_BAF, { lastUpdated: cache.lastUpdated, bafMap: cache.bafMap });
+  return _idbPut(DEEP_CACHE_KEY_BAF, { lastUpdated: cache.lastUpdated, lastFetchDate: cache.lastFetchDate || null, bafMap: cache.bafMap });
 }
 
 // Same dedupe-by-date + newest-first sort + DEEP_WINDOW_DAYS slice as
@@ -6262,6 +6258,7 @@ async function fetchDeepBAFHistory(codes, onProgress) {
     });
   });
   cache.lastUpdated = _bafNewestDate || deepFmtDate(new Date());
+  cache.lastFetchDate = deepFmtDate(new Date());
   await _bafSaveCache(cache);
   console.log('[BAF] fetch complete —', okCount, 'funds with data,', emptyCount, 'empty/failed, out of', list.length, 'total');
   return cache;
@@ -6324,6 +6321,7 @@ async function fetchDeepNPSHistory(codes, onProgress) {
     });
   });
   cache.lastUpdated = _npsNewestDate || deepFmtDate(new Date());
+  cache.lastFetchDate = deepFmtDate(new Date());
   await _npsSaveCache(cache);
   console.log('[NPS] fetch complete —', okCount, 'schemes with data,', emptyCount, 'empty/failed, out of', list.length, 'total');
   return cache;
@@ -11867,7 +11865,7 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
       return chain.then(function() {
         // Save updated cache back to IDB
         if (typeof _npsSaveCache === 'function' && missingCodes.length > 0) {
-          _npsSaveCache({ lastUpdated: new Date().toISOString(), npsMap: npsMap }).catch(function() {});
+          _npsSaveCache({ lastUpdated: deepFmtDate(new Date()), npsMap: npsMap }).catch(function() {});
         }
         _npsCache = { schemes: result };
         return _npsCache;
@@ -11936,7 +11934,7 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
       return chain.then(function() {
         // Save updated cache back to IDB
         if (typeof _bafSaveCache === 'function' && missingCodes.length > 0) {
-          _bafSaveCache({ lastUpdated: new Date().toISOString(), bafMap: bafMap }).catch(function() {});
+          _bafSaveCache({ lastUpdated: deepFmtDate(new Date()), bafMap: bafMap }).catch(function() {});
         }
         _bafCache = { funds: result };
         return _bafCache;
