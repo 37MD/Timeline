@@ -237,6 +237,13 @@ body{}
 .tab-btn:hover{color:var(--text-dim)}
 .tab-btn.active{color:var(--accent)}
 .tab-btn.active .bn-icon{filter:none}
+.bottom-nav{overflow:hidden}
+@media(max-width:600px){
+  .bottom-nav{gap:0;padding:3px 2px calc(3px + env(safe-area-inset-bottom,0px))}
+  .tab-btn{flex:1 1 0;min-width:0;padding:4px 1px;gap:1px;font-size:9px}
+  .tab-btn .bn-icon{font-size:15px}
+  .tab-btn .bn-label{font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+}
 .tab-panel{display:none;padding-bottom:calc(58px + env(safe-area-inset-bottom,0px))}
 .tab-panel.active{display:block}
 #tab-hilega.tab-panel{padding-bottom:0}
@@ -935,13 +942,13 @@ body{}
       <div style="background:#f7f9fb;border-radius:10px;padding:10px 12px">
         <div style="background:#e6f9ee;color:#1a8a4a;width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;margin-bottom:6px">↗</div>
         <div style="font-size:9px;color:#8a95a0">Best Holding</div>
-        <div id="pt-dash-qo3-val" style="font-size:14px;font-weight:800;color:#0c1929;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+        <div id="pt-dash-qo3-val" style="font-size:13px;font-weight:800;color:#0c1929;margin-top:2px;word-wrap:break-word;overflow-wrap:break-word;overflow:hidden">—</div>
         <div id="pt-dash-qo3-sub" style="font-size:8px;color:#aab4bd;margin-top:2px">—</div>
       </div>
       <div style="background:#f7f9fb;border-radius:10px;padding:10px 12px">
         <div style="background:#fdeee6;color:#cc5a1a;width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;margin-bottom:6px">↘</div>
         <div style="font-size:9px;color:#8a95a0">Worst Holding</div>
-        <div id="pt-dash-qo4-val" style="font-size:14px;font-weight:800;color:#0c1929;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+        <div id="pt-dash-qo4-val" style="font-size:13px;font-weight:800;color:#0c1929;margin-top:2px;word-wrap:break-word;overflow-wrap:break-word;overflow:hidden">—</div>
         <div id="pt-dash-qo4-sub" style="font-size:8px;color:#aab4bd;margin-top:2px">—</div>
       </div>
       <div style="background:#f7f9fb;border-radius:10px;padding:10px 12px">
@@ -967,12 +974,12 @@ body{}
     <div style="background:#f7f9fb;border-radius:12px;padding:10px">
       <input id="pt-dash-search" type="text" placeholder="Search holding..." oninput="PSnap.dashFilterHoldings(this.value)" style="width:100%;box-sizing:border-box;border:1px solid #e2e6ea;border-radius:8px;padding:8px 10px;font-size:11px;background:#fff;margin-bottom:8px">
       <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-      <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:460px">
+      <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:360px">
         <thead><tr style="color:#8a95a0;background:#f7f9fb">
-          <th onclick="PSnap.dashSortBy('name')" style="text-align:left;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;position:sticky;left:0;z-index:3;background:#f7f9fb;min-width:110px;max-width:110px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">Holding</th>
-          <th onclick="PSnap.dashSortBy('return')" style="text-align:left;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Return</th>
-          <th onclick="PSnap.dashSortBy('price')" style="text-align:right;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Current</th>
-          <th onclick="PSnap.dashSortBy('purchase')" style="text-align:right;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Purchase</th>
+          <th onclick="PSnap.dashSortBy('name')" style="text-align:left;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;position:sticky;left:0;z-index:3;background:#f7f9fb;min-width:100px;max-width:100px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">Holding</th>
+          <th onclick="PSnap.dashSortBy('return')" style="text-align:left;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;width:60px">Return</th>
+          <th onclick="PSnap.dashSortBy('price')" style="text-align:right;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;width:70px">Current</th>
+          <th onclick="PSnap.dashSortBy('purchase')" style="text-align:right;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;width:70px">Purchase</th>
         </tr></thead>
         <tbody id="pt-dash-holdings-tb"><tr><td colspan="4" style="text-align:center;color:#999;padding:10px">No holdings yet</td></tr></tbody>
       </table>
@@ -5114,10 +5121,10 @@ function renderDashboardView(){
       var barPct=rw.retPct==null?0:Math.max(0,Math.min(100,50+rw.retPct));
       var cardId='pt-dash-card-'+i;
       return '<div style="background:#fff;border:1px solid #eef1f3;border-radius:12px;padding:14px;margin-bottom:10px">'+
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">'+
-        '<div><div style="font-size:13px;font-weight:800;color:#0c1929">'+rw.name+'</div>'+
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">'+
+        '<div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:800;color:#0c1929;word-wrap:break-word;overflow-wrap:break-word">'+rw.name+'</div>'+
         '<span style="display:inline-block;margin-top:4px;background:#eef2fb;color:'+regimeColor+';font-size:9px;font-weight:700;padding:2px 8px;border-radius:9px">'+(rw.regime?('Regime '+rw.regime):'Regime —')+'</span></div>'+
-        '<div style="background:'+(rw.change!=null&&rw.change>=0?'#e9f9ef':'#fdeaea')+';color:'+changeColor+';font-size:10px;font-weight:700;padding:4px 8px;border-radius:8px;white-space:nowrap">'+(rw.change!=null&&rw.change>=0?'▲ ':rw.change!=null?'▼ ':'')+changeTxt+'</div>'+
+        '<div style="background:'+(rw.change!=null&&rw.change>=0?'#e9f9ef':'#fdeaea')+';color:'+changeColor+';font-size:10px;font-weight:700;padding:4px 8px;border-radius:8px;white-space:nowrap;flex-shrink:0">'+(rw.change!=null&&rw.change>=0?'▲ ':rw.change!=null?'▼ ':'')+changeTxt+'</div>'+
         '</div>'+
         '<div style="font-size:26px;font-weight:800;color:#0c1929;margin-top:10px">'+retTxt+'</div>'+
         '<div style="background:linear-gradient(90deg,'+(rw.retPct!=null&&rw.retPct<0?'#cc4a1a,#e08a4a':'#2a5adf,#1a8a4a')+');height:8px;border-radius:4px;margin-top:6px;width:'+barPct.toFixed(1)+'%;max-width:100%"></div>'+
