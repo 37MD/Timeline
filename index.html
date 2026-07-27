@@ -977,9 +977,9 @@ body{}
       <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:360px">
         <thead><tr style="color:#8a95a0;background:#f7f9fb">
           <th onclick="PSnap.dashSortBy('name')" style="text-align:left;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;position:sticky;left:0;z-index:3;background:#f7f9fb;min-width:100px;max-width:100px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">Holding</th>
-          <th onclick="PSnap.dashSortBy('return')" style="text-align:left;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;width:60px">Return</th>
-          <th onclick="PSnap.dashSortBy('price')" style="text-align:right;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;width:70px">Current</th>
-          <th onclick="PSnap.dashSortBy('purchase')" style="text-align:right;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;width:70px">Purchase</th>
+          <th onclick="PSnap.dashSortBy('return')" style="text-align:left;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Return</th>
+          <th onclick="PSnap.dashSortBy('price')" style="text-align:right;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Current</th>
+          <th onclick="PSnap.dashSortBy('purchase')" style="text-align:right;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Purchase</th>
         </tr></thead>
         <tbody id="pt-dash-holdings-tb"><tr><td colspan="4" style="text-align:center;color:#999;padding:10px">No holdings yet</td></tr></tbody>
       </table>
@@ -5238,14 +5238,12 @@ function dashRenderHoldingsTable(){
   tb.innerHTML=rows.map(function(rw){
     var retColor=rw.retPct==null?'#aab4bd':(rw.retPct>=0?'#1a8a4a':'#cc0000');
     var retTxt=rw.retPct==null?'—':(rw.retPct>=0?'+':'')+rw.retPct.toFixed(2)+'%';
-    var barPct=rw.retPct==null?0:Math.min(100,Math.abs(rw.retPct)*2);
-    var barColor=rw.retPct==null?'#dfe4e8':(rw.retPct>=0?'#1a8a4a':'#cc4a1a');
     var safeName=rw.name.replace(/'/g,"\\'");
     return '<tr onclick="PSnap.viewHMChart(\''+safeName+'\')" style="border-bottom:1px solid #eef1f3;cursor:pointer">'+
-      '<td style="position:sticky;left:0;z-index:1;background:#fff;padding:6px;font-size:10px;font-weight:700;color:#0c1929;white-space:nowrap;min-width:110px;max-width:110px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">'+rw.name+'</td>'+
-      '<td style="padding:6px"><div style="display:flex;align-items:center;gap:3px"><div style="width:28px;background:#e9edf0;border-radius:3px;height:6px;overflow:hidden;flex-shrink:0"><div style="width:'+barPct.toFixed(1)+'%;background:'+barColor+';height:100%"></div></div><span style="font-size:9px;font-weight:700;color:'+retColor+';white-space:nowrap">'+retTxt+'</span></div></td>'+
-      '<td style="padding:6px;text-align:right;font-size:9px;color:#0c1929;white-space:nowrap">'+ptFmtLocal(rw.cur)+'</td>'+
-      '<td style="padding:6px;text-align:right;font-size:9px;color:#8a95a0;white-space:nowrap">'+ptFmtLocal(rw.purPrice)+'</td>'+
+      '<td style="position:sticky;left:0;z-index:1;background:#fff;padding:6px;font-size:10px;font-weight:700;color:#0c1929;white-space:nowrap;min-width:100px;max-width:100px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">'+rw.name+'</td>'+
+      '<td style="padding:6px 4px;font-size:9px;font-weight:700;color:'+retColor+';white-space:nowrap">'+retTxt+'</td>'+
+      '<td style="padding:6px 4px;text-align:right;font-size:9px;color:#0c1929;white-space:nowrap">'+ptFmtLocal(rw.cur)+'</td>'+
+      '<td style="padding:6px 4px;text-align:right;font-size:9px;color:#8a95a0;white-space:nowrap">'+ptFmtLocal(rw.purPrice)+'</td>'+
       '</tr>';
   }).join('');
 }
