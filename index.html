@@ -1026,7 +1026,7 @@ body{}
   <div id="pt-sum-table-view" style="display:none">
     <div style="font-size:8px;color:#888;margin-bottom:4px">Confluence / Regime / P&gt;WMA / BA Weightage / RS 1M / RS 2M / RS 3M / RS Score / Signal / HM Status / Returns / HM Chart — all shown below. Tap a header button above to jump to a column.</div>
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #1a8a1a;border-radius:4px">
-    <table class="freeze-col1" style="width:100%;border-collapse:collapse;font-size:9px;min-width:1300px">
+    <table class="freeze-col1" style="width:100%;border-collapse:collapse;font-size:9px;min-width:1100px">
       <thead><tr id="pt-sum-thead" style="background:#eaffea"></tr></thead>
       <tbody id="pt-sum-tb"><tr><td style="text-align:center;color:#666;padding:8px">No indices in Portfolio yet — use Update Portfolio to add some</td></tr></tbody>
     </table>
@@ -4991,9 +4991,9 @@ function renderSummary(){
     {key:'hmstatus',label:'HM Status'},{key:'returns',label:'Returns'}
   ];
   var baseCols=['#'];
-  var thStyle='padding:5px 4px;text-align:left;font-size:7px;color:#0a6b0a;text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none';
-  var thStickyHash='position:sticky;left:0;z-index:3;background:#eaffea;width:26px;min-width:26px;max-width:26px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)';
-  var thStickyIndex='position:sticky;left:26px;z-index:3;background:#eaffea;min-width:118px;max-width:118px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)';
+  var thStyle='padding:5px 2px;text-align:left;font-size:7px;color:#0a6b0a;text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none';
+  var thStickyHash='position:sticky;left:0;z-index:3;background:#eaffea;width:22px;min-width:22px;max-width:22px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)';
+  var thStickyIndex='position:sticky;left:22px;z-index:3;background:#eaffea;min-width:90px;max-width:90px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)';
   var headerHtml=baseCols.map(function(h){return '<th style="'+thStyle+';cursor:default;'+thStickyHash+'">'+h+'</th>';}).join('');
   headerHtml+=sortCols.map(function(c){
     var arrow=_ptSortKey===c.key?(_ptSortDir>0?' ▲':' ▼'):'';
@@ -5020,14 +5020,14 @@ function renderSummary(){
     var norm=name?name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
     var pr=priceOf[norm]||{};
     var safeName=name.replace(/'/g,"\\'");
-    var cells='<td style="position:sticky;left:0;z-index:1;background:#fff;padding:5px 4px;font-size:9px;width:26px;min-width:26px;max-width:26px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)">'+(i+1)+'</td>'+
-      '<td onclick="PSnap.viewHMChart(\''+safeName+'\')" style="position:sticky;left:26px;z-index:1;background:#fff;font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 8px;font-size:10px;font-weight:600;color:#0055aa;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:118px;max-width:118px;text-decoration:underline;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)" title="'+name.replace(/"/g,'&quot;')+'">'+name+'</td>'+
-      '<td style="padding:5px 4px;font-size:9px">'+ptFmtLocal(pr.price)+'</td>'+
-      '<td style="padding:5px 4px;font-size:9px;color:'+((pr.change||0)>=0?'#1a8a1a':'#cc0000')+'">'+(pr.change!=null?(pr.change>=0?'+':'')+pr.change.toFixed(1)+'%':'—')+'</td>';
+    var cells='<td style="position:sticky;left:0;z-index:1;background:#fff;padding:5px 2px;font-size:9px;width:22px;min-width:22px;max-width:22px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)">'+(i+1)+'</td>'+
+      '<td onclick="PSnap.viewHMChart(\''+safeName+'\')" style="position:sticky;left:22px;z-index:1;background:#fff;font-family:\'Segoe UI\',Arial,sans-serif;padding:4px 6px;font-size:10px;font-weight:600;color:#0055aa;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:90px;max-width:90px;text-decoration:underline;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)" title="'+name.replace(/"/g,'&quot;')+'">'+name+'</td>'+
+      '<td style="padding:5px 2px;font-size:9px">'+ptFmtLocal(pr.price)+'</td>'+
+      '<td style="padding:5px 2px;font-size:9px;color:'+((pr.change||0)>=0?'#1a8a1a':'#cc0000')+'">'+(pr.change!=null?(pr.change>=0?'+':'')+pr.change.toFixed(1)+'%':'—')+'</td>';
     ALL_COL_KEYS.forEach(function(k){
-      cells+='<td style="padding:5px 4px;font-size:9px;white-space:nowrap">'+COL_DEFS[k].render(name)+'</td>';
+      cells+='<td style="padding:5px 2px;font-size:9px;white-space:nowrap">'+COL_DEFS[k].render(name)+'</td>';
     });
-    cells+='<td style="padding:5px 4px"><button onclick="event.stopPropagation();PSnap.toggleName(\''+safeName+'\')" style="background:#cc3344;color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">Remove from Portfolio</button></td>';
+    cells+='<td style="padding:5px 2px"><button onclick="event.stopPropagation();PSnap.toggleName(\''+safeName+'\')" style="background:#cc3344;color:#fff;border:none;padding:3px 6px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">Remove from Portfolio</button></td>';
     return '<tr onclick="ptHighlightRow(this)" style="border-bottom:1px solid #eee;cursor:pointer">'+cells+'</tr>';
   }).join('');
 }
