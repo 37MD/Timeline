@@ -4286,12 +4286,40 @@ function hmAllGreen(name){
 // ── Index Universe ──
 var _psShowHidden=false; // local UI toggle for the Universe panel's "show hidden" view
 var _psUniverseDateDraft={}; // name -> date string, holds the picked date until "Add" is tapped (so re-renders don't lose it)
+// Look up historical closing price from the deep daily cache for a given
+// fund name and ISO date (YYYY-MM-DD).  Returns the close price or null
+// if the date/cache is unavailable.  Used by setUniverseDateDraft() and
+// toggleName() so the purchase price matches the actual close on the
+// selected purchase date instead of the current live price.
+function _psHistCloseForDate(name,dateIso){
+  if(!dateIso||!window.EE||typeof window.EE.dailyEntriesFor!=='function')return null;
+  var entries=window.EE.dailyEntriesFor(name);
+  if(!entries||!entries.length)return null;
+  var parts=dateIso.split('-'); if(parts.length!==3)return null;
+  var ddmm=parts[2]+parts[1]+parts[0]; // DDMMYYYY to match entry format
+  // Exact match first
+  for(var i=0;i<entries.length;i++){
+    var seg=entries[i].split('|');
+    if(seg[0]===ddmm){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
+  }
+  // Nearest earlier date (for weekends/holidays)
+  for(var i=entries.length-1;i>=0;i--){
+    var seg=entries[i].split('|');
+    if(seg[0]<ddmm){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
+  }
+  return null;
+}
 function setUniverseDateDraft(name,dateVal){
   _psUniverseDateDraft[name]=dateVal;
   // If already in the portfolio, update its stored purchase date immediately
   // (this is an edit, not a draft for a future add).
   if(PState.purchases[name]){
     PState.purchases[name].date=dateVal;
+    // Re-fetch historical close price for the new date so Returns reflects
+    // the actual price on the selected purchase date (not the current live
+    // price that was stored when the fund was first added).
+    var histClose=_psHistCloseForDate(name,dateVal);
+    if(histClose!=null)PState.purchases[name].price=histClose;
     psSave();
     var sumWrap=psEl('pt-summary-wrap');
     if(sumWrap&&sumWrap.style.display!=='none'){renderSummary();renderMatchingIndex();}
@@ -4456,7 +4484,10 @@ function toggleName(name){
   }else{
     PState.names.push(name);
     var pdate=_psUniverseDateDraft[name]||new Date().toISOString().slice(0,10);
-    PState.purchases[name]={date:pdate,price:priceRow?priceRow.price:null};
+    // Use historical close price for the selected date if available,
+    // otherwise fall back to the current live price from the scan row.
+    var histClose=_psHistCloseForDate(name,pdate);
+    PState.purchases[name]={date:pdate,price:histClose!=null?histClose:(priceRow?priceRow.price:null)};
   }
   psSave();
   var univPanel=psEl('pt-universe-panel');
@@ -5092,9 +5123,9 @@ function renderDashboardView(){
       var widthPct=pct==null?0:Math.min(100,Math.abs(pct)/maxAbs*100);
       var barColor=pct==null?'#dfe4e8':(pct>=0?'#1a8a4a':'#cc4a1a');
       var label=pct==null?'—':(pct>=0?'+':'')+pct.toFixed(1)+'%';
-      var safeName=rw.name.length>16?rw.name.slice(0,15)+'…':rw.name;
+      var safeName=rw.name;
       return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'+
-        '<div style="width:78px;flex-shrink:0;font-size:9px;color:#556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+rw.name.replace(/"/g,'&quot;')+'">'+safeName+'</div>'+
+        '<div style="width:90px;flex-shrink:0;font-size:9px;color:#556;overflow:hidden;text-overflow:ellipsis" title="'+rw.name.replace(/"/g,'&quot;')+'">'+safeName+'</div>'+
         '<div style="flex:1;background:#e9edf0;border-radius:4px;height:10px;position:relative;overflow:hidden">'+
         '<div style="width:'+widthPct.toFixed(1)+'%;background:'+barColor+';height:100%;border-radius:4px"></div></div>'+
         '<div style="width:52px;flex-shrink:0;text-align:right;font-size:9px;font-weight:700;color:'+(pct==null?'#999':(pct>=0?'#1a8a4a':'#cc4a1a'))+'">'+label+'</div>'+
@@ -5212,7 +5243,7 @@ function dashRenderHoldingsTable(){
     var safeName=rw.name.replace(/'/g,"\\'");
     return '<tr onclick="PSnap.viewHMChart(\''+safeName+'\')" style="border-bottom:1px solid #eef1f3;cursor:pointer">'+
       '<td style="position:sticky;left:0;z-index:1;background:#fff;padding:6px;font-size:10px;font-weight:700;color:#0c1929;white-space:nowrap;min-width:110px;max-width:110px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">'+rw.name+'</td>'+
-      '<td style="padding:6px"><div style="display:flex;align-items:center;gap:6px"><div style="width:44px;background:#e9edf0;border-radius:3px;height:6px;overflow:hidden"><div style="width:'+barPct.toFixed(1)+'%;background:'+barColor+';height:100%"></div></div><span style="font-size:9px;font-weight:700;color:'+retColor+';white-space:nowrap">'+retTxt+'</span></div></td>'+
+      '<td style="padding:6px"><div style="display:flex;align-items:center;gap:3px"><div style="width:28px;background:#e9edf0;border-radius:3px;height:6px;overflow:hidden;flex-shrink:0"><div style="width:'+barPct.toFixed(1)+'%;background:'+barColor+';height:100%"></div></div><span style="font-size:9px;font-weight:700;color:'+retColor+';white-space:nowrap">'+retTxt+'</span></div></td>'+
       '<td style="padding:6px;text-align:right;font-size:9px;color:#0c1929;white-space:nowrap">'+ptFmtLocal(rw.cur)+'</td>'+
       '<td style="padding:6px;text-align:right;font-size:9px;color:#8a95a0;white-space:nowrap">'+ptFmtLocal(rw.purPrice)+'</td>'+
       '</tr>';
