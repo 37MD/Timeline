@@ -5723,7 +5723,7 @@ function onTabActivated(){
   // standalone banner, so all status messages live in a single place.
   var dc=window._deepWeeklyCache;
   var _ssp=(typeof window._statusStripPush==='function')?window._statusStripPush:function(){};
-  // Builds "click ⚡ Analyze — takes about X" using the average of up to
+  // Builds "click 🔄 Update App — takes about X" using the average of up to
   // the last 5 real scan durations (recorded in ptRunScan on completion).
   // Falls back to a generic "1-2 minutes" estimate before any scan has
   // ever completed on this device, rather than showing nothing or a
@@ -5743,7 +5743,7 @@ function onTabActivated(){
     var eDate=new Date(parseInt(ld.substring(4,8),10),parseInt(ld.substring(2,4),10)-1,parseInt(ld.substring(0,2),10));
     var diffDays=Math.floor((Date.now()-eDate.getTime())/86400000);
     if(diffDays<=1){
-      _ssp('\u2705 Cache is fresh (updated '+diffDays+' day(s) ago) \u2014 tap \u26A1 Analyze to refresh the tables, '+_scanEtaPhrase(), 'good');
+      _ssp('\u2705 Cache is fresh (updated '+diffDays+' day(s) ago) \u2014 tap \u26A1 Update App to refresh the tables, '+_scanEtaPhrase(), 'good');
     }else{
       _ssp('\u26A0 Data is '+diffDays+' day(s) old \u2014 click \u26A1 ANALYZE to refresh, '+_scanEtaPhrase(), 'warn');
     }
@@ -10150,9 +10150,9 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
 <div id="pt-controls-row" style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;align-items:stretch">
   <button onclick="ldExportAllData(false)" title="Save all scanner data to Timeline.json" style="background:#333;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">💾 Save</button>
   <button onclick="ldImportAllData()" title="Restore: auto-checks your linked Timeline.json first, otherwise asks you to pick a file" style="background:#333;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">📂 Restore</button>
-  <button id="pt-btn-download-fast" onclick="PSnap.downloadDataFast()" title="Download 2500 days using parallel fetches (10-20x faster)" style="background:#cc5500;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ DL Fast</button>
+
   <button id="pt-btn-restart-fresh" onclick="PSnap.restartFreshDownload()" title="Clear all saved download progress and start over from day 1. Deleting the checkpoint .json files in your Downloads folder does NOT do this — those are backup exports only, never read back by the app." style="background:#7a1f1f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">🗑️ Restart</button>
-  <button class="ld-scan-btn" onclick="if(typeof window.ptRunScan==='function')window.ptRunScan()" title="Download 2500 days of NSE data + analyze" style="background:#d4880f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ Analyze</button>
+  <button class="ld-scan-btn" onclick="if(typeof window.ptRunScan==='function')window.ptRunScan()" title="Download 2500 days of NSE data + analyze" style="background:#d4880f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">🔄 Update App</button>
 </div>
 
 <h3 style="color:var(--accent);font-size:12px;margin:14px 0 6px;border-bottom:1px solid var(--border);padding-bottom:3px">Gemini API Keys</h3>
@@ -12899,7 +12899,7 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
 //
 // ENTRY POINTS:
 //   1. downloadData() — DL button auto-triggers this BEFORE fetchDeepWeeklyHistory
-//   2. ptRunScan()    — Analyze button runs this as Step -1 (fallback, in case
+//   2. ptRunScan()    — Update App button runs this as Step -1 (fallback, in case
 //                       DL was skipped)
 //   3. Manual: window.downloadNPSBAF2500() from browser console
 //
@@ -12911,14 +12911,14 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
 // Session-level guard: both downloadData() (Step 0) and ptRunScan()
 // (Step -1, documented above as "a safety net in case the DL button was
 // never pressed") unconditionally call downloadNPSBAF2500(). If the user
-// clicks the "DL" button and then "Analyze" — an entirely natural
+// clicks the "DL" button and then "Update App" — an entirely natural
 // workflow, since both buttons sit right next to each other — this would
 // otherwise re-fetch all 36 funds a second time and pop 4 file-download
 // prompts instead of 2. This tracks whether a download already completed
 // in the current page session (resets on reload) so the second call can
 // skip the redundant fetch instead of silently doubling it.
 var _dl2500LastRun = 0;
-var _DL2500_DEDUP_MS = 5 * 60 * 1000; // 5 min — long enough to cover DL-then-Analyze, short enough that a deliberate re-run (e.g. next day, same tab left open) still refreshes
+var _DL2500_DEDUP_MS = 5 * 60 * 1000; // 5 min — long enough to cover DL-then-Update App, short enough that a deliberate re-run (e.g. next day, same tab left open) still refreshes
 
 // BUG FIX: persisted once-per-day guard, separate from the session-level
 // one above. Step 0b/0c already correctly detect that the underlying NPS
@@ -12927,7 +12927,7 @@ var _DL2500_DEDUP_MS = 5 * 60 * 1000; // 5 min — long enough to cover DL-then-
 // a browser download of NPSData2500.json and BAFData2500.json every time
 // it ran, regardless of whether the cache data had actually changed. The
 // session guard above only prevents that within the SAME page session
-// (e.g. clicking DL then Analyze back-to-back); it resets to 0 on every
+// (e.g. clicking DL then Update App back-to-back); it resets to 0 on every
 // app restart. So: close the app, reopen it the same day, the very first
 // scan re-triggered two file-save prompts for data that was byte-for-byte
 // identical to what was already saved in the Downloads folder yesterday
@@ -12982,7 +12982,7 @@ async function downloadNPSBAF2500(logFn) {
   // fetches these same 32 schemes into the ld_deep_nps_v1 IndexedDB cache
   // for actual use in the scan. Before this fast path existed, both steps
   // independently re-fetched all 32 schemes from the network on every
-  // Analyze click with a cold/stale cache — this function's own fetch
+  // Update App click with a cold/stale cache — this function's own fetch
   // result was thrown away except for the exported .json files. If the
   // cache already has every scheme (i.e. Step 0b, or an earlier run of
   // this function, already populated it), reuse that instead of hitting
