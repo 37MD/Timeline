@@ -992,7 +992,7 @@ body{}
       <h4 style="font-size:14px;font-weight:800;color:#0c1929;margin:0">Portfolio Analysis</h4>
     </div>
     <div style="font-size:10px;color:#8a95a0;margin:0 0 8px 30px">Visual breakdown of returns and Regime composition</div>
-    <div style="background:#f7f9fb;border-radius:12px;padding:10px;margin-bottom:10px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+    <div style="background:#f7f9fb;border-radius:12px;padding:10px;margin-bottom:10px">
       <div style="font-size:12px;font-weight:800;color:#0c1929;margin-bottom:2px">Returns by Holding</div>
       <div style="font-size:9px;color:#8a95a0;margin-bottom:10px">Current return % vs purchase price, per holding</div>
       <div id="pt-dash-bar-chart"></div>
@@ -5154,11 +5154,11 @@ function renderDashboardView(){
       var barColor=pct==null?'#dfe4e8':(pct>=0?'#1a8a4a':'#cc4a1a');
       var label=pct==null?'—':(pct>=0?'+':'')+pct.toFixed(1)+'%';
       var safeName=rw.name;
-      return '<div style="display:flex;align-items:center;gap:4px;margin-bottom:5px">'+
-        '<div style="width:55px;flex-shrink:0;font-size:8px;color:#556;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+rw.name.replace(/"/g,'&quot;')+'">'+safeName+'</div>'+
-        '<div style="flex:1;background:#e9edf0;border-radius:4px;height:8px;position:relative;overflow:hidden">'+
+      return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'+
+        '<div style="width:30%;flex-shrink:0;font-size:9px;color:#556;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+rw.name.replace(/"/g,'&quot;')+'">'+safeName+'</div>'+
+        '<div style="flex:1;background:#e9edf0;border-radius:4px;height:10px;position:relative;overflow:hidden">'+
         '<div style="width:'+widthPct.toFixed(1)+'%;background:'+barColor+';height:100%;border-radius:4px"></div></div>'+
-        '<div style="width:40px;flex-shrink:0;text-align:right;font-size:8px;font-weight:700;color:'+(pct==null?'#999':(pct>=0?'#1a8a4a':'#cc4a1a'))+'">'+label+'</div>'+
+        '<div style="width:18%;flex-shrink:0;text-align:right;font-size:9px;font-weight:700;color:'+(pct==null?'#999':(pct>=0?'#1a8a4a':'#cc4a1a'))+'">'+label+'</div>'+
         '</div>';
     }).join('');
   }
