@@ -974,12 +974,12 @@ body{}
     <div style="background:#f7f9fb;border-radius:12px;padding:10px">
       <input id="pt-dash-search" type="text" placeholder="Search holding..." oninput="PSnap.dashFilterHoldings(this.value)" style="width:100%;box-sizing:border-box;border:1px solid #e2e6ea;border-radius:8px;padding:8px 10px;font-size:11px;background:#fff;margin-bottom:8px">
       <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-      <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:360px">
+      <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:320px">
         <thead><tr style="color:#8a95a0;background:#f7f9fb">
-          <th onclick="PSnap.dashSortBy('name')" style="text-align:left;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;position:sticky;left:0;z-index:3;background:#f7f9fb;min-width:100px;max-width:100px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">Holding</th>
-          <th onclick="PSnap.dashSortBy('return')" style="text-align:left;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Return</th>
-          <th onclick="PSnap.dashSortBy('price')" style="text-align:right;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Current</th>
-          <th onclick="PSnap.dashSortBy('purchase')" style="text-align:right;padding:4px 4px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap">Purchase</th>
+          <th onclick="PSnap.dashSortBy('name')" style="text-align:left;padding:4px 6px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;position:sticky;left:0;z-index:3;background:#f7f9fb;min-width:120px;max-width:120px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">Holding</th>
+          <th onclick="PSnap.dashSortBy('return')" style="text-align:left;padding:4px 2px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;max-width:70px;overflow:hidden">Return</th>
+          <th onclick="PSnap.dashSortBy('price')" style="text-align:right;padding:4px 2px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;max-width:70px;overflow:hidden">Current</th>
+          <th onclick="PSnap.dashSortBy('purchase')" style="text-align:right;padding:4px 2px;font-size:8px;text-transform:uppercase;cursor:pointer;white-space:nowrap;max-width:70px;overflow:hidden">Purchase</th>
         </tr></thead>
         <tbody id="pt-dash-holdings-tb"><tr><td colspan="4" style="text-align:center;color:#999;padding:10px">No holdings yet</td></tr></tbody>
       </table>
@@ -992,10 +992,10 @@ body{}
       <h4 style="font-size:14px;font-weight:800;color:#0c1929;margin:0">Portfolio Analysis</h4>
     </div>
     <div style="font-size:10px;color:#8a95a0;margin:0 0 8px 30px">Visual breakdown of returns and Regime composition</div>
-    <div style="background:#f7f9fb;border-radius:12px;padding:14px;margin-bottom:10px">
+    <div style="background:#f7f9fb;border-radius:12px;padding:14px;margin-bottom:10px;overflow-x:auto;-webkit-overflow-scrolling:touch">
       <div style="font-size:12px;font-weight:800;color:#0c1929;margin-bottom:2px">Returns by Holding</div>
       <div style="font-size:9px;color:#8a95a0;margin-bottom:10px">Current return % vs purchase price, per holding</div>
-      <div id="pt-dash-bar-chart"></div>
+      <div id="pt-dash-bar-chart" style="min-width:280px"></div>
     </div>
     <div style="background:#f7f9fb;border-radius:12px;padding:14px">
       <div style="font-size:12px;font-weight:800;color:#0c1929;margin-bottom:2px">Regime Distribution</div>
@@ -4292,20 +4292,50 @@ var _psUniverseDateDraft={}; // name -> date string, holds the picked date until
 // toggleName() so the purchase price matches the actual close on the
 // selected purchase date instead of the current live price.
 function _psHistCloseForDate(name,dateIso){
-  if(!dateIso||!window.EE||typeof window.EE.dailyEntriesFor!=='function')return null;
-  var entries=window.EE.dailyEntriesFor(name);
-  if(!entries||!entries.length)return null;
+  if(!dateIso)return null;
   var parts=dateIso.split('-'); if(parts.length!==3)return null;
-  var ddmm=parts[2]+parts[1]+parts[0]; // DDMMYYYY to match entry format
-  // Exact match first
-  for(var i=0;i<entries.length;i++){
-    var seg=entries[i].split('|');
-    if(seg[0]===ddmm){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
+  var ddmm=parts[2]+parts[1]+parts[0]; // DDMMYYYY to match dailyMap entry format
+  // Build candidate keys from the name — try lowercase, normalized, and raw
+  var candidates=[];
+  if(name){
+    var lo=name.toLowerCase();
+    var norm=lo.replace(/[^a-z0-9]/gi,'');
+    candidates.push(name,lo,norm);
+    if(norm!==lo)candidates.push(norm);
   }
-  // Nearest earlier date (for weekends/holidays)
-  for(var i=entries.length-1;i>=0;i--){
-    var seg=entries[i].split('|');
-    if(seg[0]<ddmm){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
+  // Deduplicate
+  var seen={};var keys=[];candidates.forEach(function(k){if(k&&!seen[k]){seen[k]=1;keys.push(k);}});
+  // Search the deep daily cache directly
+  var cache=window._deepWeeklyCache;
+  if(cache&&cache.dailyMap){
+    for(var k=0;k<keys.length;k++){
+      var entries=cache.dailyMap[keys[k]];
+      if(!entries||!entries.length)continue;
+      // Exact date match
+      for(var i=0;i<entries.length;i++){
+        var seg=entries[i].split('|');
+        if(seg[0]===ddmm){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
+      }
+      // Nearest earlier date (for weekends/holidays)
+      for(var i=entries.length-1;i>=0;i--){
+        var seg=entries[i].split('|');
+        if(seg[0]<ddmm){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
+      }
+    }
+  }
+  // Fallback: try EE.dailyEntriesFor (same cache, different lookup path)
+  if(window.EE&&typeof window.EE.dailyEntriesFor==='function'){
+    var entries=window.EE.dailyEntriesFor(name);
+    if(entries&&entries.length){
+      for(var i=0;i<entries.length;i++){
+        var seg=entries[i].split('|');
+        if(seg[0]===ddmm){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
+      }
+      for(var i=entries.length-1;i>=0;i--){
+        var seg=entries[i].split('|');
+        if(seg[0]<ddmm){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
+      }
+    }
   }
   return null;
 }
@@ -5124,11 +5154,11 @@ function renderDashboardView(){
       var barColor=pct==null?'#dfe4e8':(pct>=0?'#1a8a4a':'#cc4a1a');
       var label=pct==null?'—':(pct>=0?'+':'')+pct.toFixed(1)+'%';
       var safeName=rw.name;
-      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'+
-        '<div style="width:90px;flex-shrink:0;font-size:9px;color:#556;overflow:hidden;text-overflow:ellipsis" title="'+rw.name.replace(/"/g,'&quot;')+'">'+safeName+'</div>'+
+      return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">'+
+        '<div style="width:70px;flex-shrink:0;font-size:9px;color:#556;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+rw.name.replace(/"/g,'&quot;')+'">'+safeName+'</div>'+
         '<div style="flex:1;background:#e9edf0;border-radius:4px;height:10px;position:relative;overflow:hidden">'+
         '<div style="width:'+widthPct.toFixed(1)+'%;background:'+barColor+';height:100%;border-radius:4px"></div></div>'+
-        '<div style="width:52px;flex-shrink:0;text-align:right;font-size:9px;font-weight:700;color:'+(pct==null?'#999':(pct>=0?'#1a8a4a':'#cc4a1a'))+'">'+label+'</div>'+
+        '<div style="width:44px;flex-shrink:0;text-align:right;font-size:9px;font-weight:700;color:'+(pct==null?'#999':(pct>=0?'#1a8a4a':'#cc4a1a'))+'">'+label+'</div>'+
         '</div>';
     }).join('');
   }
@@ -5240,10 +5270,10 @@ function dashRenderHoldingsTable(){
     var retTxt=rw.retPct==null?'—':(rw.retPct>=0?'+':'')+rw.retPct.toFixed(2)+'%';
     var safeName=rw.name.replace(/'/g,"\\'");
     return '<tr onclick="PSnap.viewHMChart(\''+safeName+'\')" style="border-bottom:1px solid #eef1f3;cursor:pointer">'+
-      '<td style="position:sticky;left:0;z-index:1;background:#fff;padding:6px;font-size:10px;font-weight:700;color:#0c1929;white-space:nowrap;min-width:100px;max-width:100px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">'+rw.name+'</td>'+
-      '<td style="padding:6px 4px;font-size:9px;font-weight:700;color:'+retColor+';white-space:nowrap">'+retTxt+'</td>'+
-      '<td style="padding:6px 4px;text-align:right;font-size:9px;color:#0c1929;white-space:nowrap">'+ptFmtLocal(rw.cur)+'</td>'+
-      '<td style="padding:6px 4px;text-align:right;font-size:9px;color:#8a95a0;white-space:nowrap">'+ptFmtLocal(rw.purPrice)+'</td>'+
+      '<td style="position:sticky;left:0;z-index:1;background:#fff;padding:6px;font-size:10px;font-weight:700;color:#0c1929;white-space:nowrap;min-width:120px;max-width:120px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 3px -2px rgba(0,0,0,0.2)">'+rw.name+'</td>'+
+      '<td style="padding:6px 2px;font-size:9px;font-weight:700;color:'+retColor+';white-space:nowrap;max-width:70px;overflow:hidden">'+retTxt+'</td>'+
+      '<td style="padding:6px 2px;text-align:right;font-size:9px;color:#0c1929;white-space:nowrap;max-width:70px;overflow:hidden">'+ptFmtLocal(rw.cur)+'</td>'+
+      '<td style="padding:6px 2px;text-align:right;font-size:9px;color:#8a95a0;white-space:nowrap;max-width:70px;overflow:hidden">'+ptFmtLocal(rw.purPrice)+'</td>'+
       '</tr>';
   }).join('');
 }
