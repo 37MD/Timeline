@@ -3527,10 +3527,32 @@ function switchTab(name) {
     window.onPTTabActivated();
     if (typeof renderMonthlyGreenAboveSMA8 === 'function') renderMonthlyGreenAboveSMA8();
     if (typeof renderMatchingIndex === 'function') renderMatchingIndex();
+    // onPTTabActivated() may itself have just kicked off an async
+    // ptRunScan() (cold start / empty scanR) OR a scan may already have
+    // been in flight from another tab — either way the synchronous
+    // renders above can fire against stale/empty data. Re-render once
+    // any in-flight scan actually finishes, so this tab is never stuck
+    // showing "Run a scan..." after navigating here directly (e.g.
+    // Setup → Explore) instead of via a tab that already completed one.
+    if (typeof window.ptWaitForScan === 'function') {
+      window.ptWaitForScan().then(function(){
+        if (typeof renderMonthlyGreenAboveSMA8 === 'function') renderMonthlyGreenAboveSMA8();
+        if (typeof renderMatchingIndex === 'function') renderMatchingIndex();
+      }).catch(function(){});
+    }
   }
   if (name === 'watch' && typeof window.onPTTabActivated === 'function') {
     window.onPTTabActivated();
     if (typeof renderMonthlyRedAtOrAboveSMA8 === 'function') renderMonthlyRedAtOrAboveSMA8();
+    // Same race-guard as the Explore branch above — without this, going
+    // Setup → Watch directly (no prior tab having completed a scan) shows
+    // stale/empty tables because onPTTabActivated()'s auto-scan is still
+    // running when we render synchronously here.
+    if (typeof window.ptWaitForScan === 'function') {
+      window.ptWaitForScan().then(function(){
+        if (typeof renderMonthlyRedAtOrAboveSMA8 === 'function') renderMonthlyRedAtOrAboveSMA8();
+      }).catch(function(){});
+    }
   }
   if (name === 'hilega' && typeof openHilegaTab === 'function') { openHilegaTab(); }
   if (name === 'npsswitch' && typeof window.onNpsSwitchTabActivated === 'function') { window.onNpsSwitchTabActivated(); }
@@ -3572,6 +3594,15 @@ var PT_BATCH=5,PT_DELAY=400,PT_FETCH_DAYS=300; // was 100 — deeper warm-up whe
 // Universe / Update Portfolio / Summary / Matching Index all read this) ──
 var ptScanR=[];
 var _ptScanRunning=false;
+// Resolves once the scan currently in flight (if any) finishes — lets
+// other tabs (Explore/Watch, whose renders need ptAllComputedRows) await
+// a scan someone else already started instead of racing it with their own
+// synchronous render call. null when no scan is in flight; callers should
+// treat that as "nothing to wait for, render immediately is fine".
+var _ptScanInFlightPromise=null;
+function ptWaitForScan(){
+  return _ptScanInFlightPromise||Promise.resolve();
+}
 // Unfiltered computed rows (before the isHidden() filter is applied), kept
 // so ptApplyHiddenFilter() can rebuild ptScanR from already-computed data
 // when hide/unhide toggles — no re-fetch, no re-computation needed.
@@ -3914,7 +3945,17 @@ window.hmMergeBAFIntoDailyMap = async function(onRow) {
 
 // ── 10.6 Main Scan ──
 async function ptRunScan(){
-  if(_ptScanRunning){ptLog('⏳ Scan already in progress — skipping');return;}
+  // If a scan is already in flight (kicked off by another tab's
+  // activation), return that SAME promise instead of bailing out with
+  // undefined — callers like switchTab('watch')/('explore') that need to
+  // know when data is actually ready must be able to await it, not just
+  // fire-and-forget a no-op. See ptWaitForScan() below for the read-only
+  // variant used by callers that don't want to trigger a scan themselves.
+  if(_ptScanRunning&&_ptScanInFlightPromise){ptLog('⏳ Scan already in progress — waiting for it to finish');return _ptScanInFlightPromise;}
+  _ptScanInFlightPromise=_ptRunScanImpl().finally(function(){_ptScanInFlightPromise=null;});
+  return _ptScanInFlightPromise;
+}
+async function _ptRunScanImpl(){
   _ptScanRunning=true;
   ptLogClear();
   var _ptScanStartTs=Date.now(); // used below to measure real elapsed time for the "Cache is fresh" banner's next-scan ETA
@@ -4278,6 +4319,7 @@ win.ptRerender=function(){if(ptScanR&&ptScanR.length)ptRender(ptScanR);};
 
 // Expose globals
 win.ptRunScan=ptRunScan;
+win.ptWaitForScan=ptWaitForScan;
 win.ptApplyHiddenFilter=ptApplyHiddenFilter;
 
 })(window);
