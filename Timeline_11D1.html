@@ -1151,13 +1151,33 @@ body{}
 <h2 style="font-family:'Segoe UI',Arial,sans-serif;font-size:18px;font-weight:900;letter-spacing:3px;color:#000;margin:0 0 6px 0;text-transform:uppercase">Watch</h2>
 
 <div id="pt-bear-wrap" style="margin:8px 0">
-  <h3 style="color:#0055aa;font-size:12px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">Watch for Bearish Mode</h3>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 5px;border-bottom:1px solid #ccc;padding-bottom:3px">
+    <h3 style="color:#0055aa;font-size:12px;margin:0">Watch for Bearish Mode</h3>
+    <div style="display:flex;background:#f0f0f0;border-radius:14px;padding:2px;gap:2px">
+      <button id="pt-bear-view-btn-dash" onclick="PSnap.setBearView('dashboard')" style="border:none;background:#0c1929;color:#fff;padding:5px 10px;border-radius:12px;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap">Dashboard</button>
+      <button id="pt-bear-view-btn-table" onclick="PSnap.setBearView('table')" style="border:none;background:transparent;color:#666;padding:5px 10px;border-radius:12px;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap">Table</button>
+    </div>
+  </div>
   <div style="font-size:8px;color:#888;margin-bottom:4px">Current monthly candle is RED (close &lt; open) but its low is still at or above the SMA(8) of monthly lows — support intact for now, but the candle has turned bearish. Scanned across the full universe (NSE + NPS + BAF).</div>
+
+  <!-- ── Dashboard view (DEFAULT) — analysis restricted to funds that
+       either (a) had last month's own candle green, OR (b) meet the HM
+       Score (Weighted) hero framework — i.e. score at/above the "good"
+       threshold (>=66%) used by the Portfolio/Explore dashboards' hero
+       pill. Either condition qualifies (OR, not AND), per request. The
+       Table view below stays unfiltered (every current-month Red>=SMA8
+       fund), so Dashboard is a higher-conviction slice of the same list,
+       not a different data source — same pattern as Explore's Green>SMA8
+       and Matching Index dashboards. ── -->
+  <div id="pt-bear-dashboard-view"></div>
+
+  <div id="pt-bear-table-view" style="display:none">
   <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #cc0000;border-radius:4px">
   <table style="width:100%;border-collapse:collapse;font-size:9px;min-width:680px">
     <thead><tr style="background:#fdeaea"><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap;position:sticky;left:0;z-index:3;background:#fdeaea;width:26px;min-width:26px;max-width:26px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)">#</th><th style="font-family:'Segoe UI',Arial,sans-serif;padding:5px 4px;text-align:left;font-size:9px;color:#000;text-transform:uppercase;white-space:nowrap;position:sticky;left:26px;z-index:3;background:#fdeaea;min-width:118px;max-width:118px;box-shadow:2px 0 3px -2px rgba(0,0,0,0.25)">Index</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">View</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Close</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">M. Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">SMA(8) Low</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Last Month Candle</th><th style="padding:5px 4px;text-align:left;font-size:7px;color:#8a0a0a;text-transform:uppercase;white-space:nowrap">Add to Portfolio</th></tr></thead>
     <tbody id="pt-bear-tb"><tr><td colspan="8" style="text-align:center;color:#666;padding:8px">Run a scan to populate this list</td></tr></tbody>
   </table>
+  </div>
   </div>
 </div>
 
@@ -5910,11 +5930,13 @@ function renderMonthlyRedAtOrAboveSMA8(){
   var allRows=(typeof win.ptGetAllComputedRows==='function')?win.ptGetAllComputedRows():[];
   if(!allRows||!allRows.length){
     tbEl.innerHTML='<tr><td colspan="8" style="text-align:center;color:#666;padding:8px">Run a scan to populate this list</td></tr>';
+    renderBearDashboardView();
     return;
   }
   var list=monthlyRedAtOrAboveSMA8List();
   if(!list.length){
     tbEl.innerHTML='<tr><td colspan="8" style="text-align:center;color:#666;padding:8px">No funds currently match (monthly red candle still at/above SMA(8) of monthly lows)</td></tr>';
+    renderBearDashboardView();
     return;
   }
   // Same column sequence as renderMonthlyGreenAboveSMA8 — see its comments
@@ -5940,6 +5962,75 @@ function renderMonthlyRedAtOrAboveSMA8(){
       '<td style="padding:5px 4px"><button onclick="PSnap.toggleName(\''+safeName+'\')" style="background:'+(inP?'#cc3344':'#1a8a1a')+';color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">'+(inP?'Remove from Portfolio':'Add to Portfolio')+'</button></td>'+
       '</tr>';
   }).join('');
+  renderBearDashboardView();
+}
+
+// ── Watch for Bearish Mode — Dashboard view (Dashboard/Table toggle) ──
+// Same mumbaiwater.in-style visual language as the Explore tab's Green>
+// SMA8 / Matching Index dashboards, via the same dashBuildScreenerDashboard
+// helper. Scoped to funds whose current monthly candle is RED but still
+// at/above the SMA(8) of monthly lows (monthlyRedAtOrAboveSMA8List()),
+// further filtered per request to those that either:
+//   (a) had LAST MONTH's own candle green (r.lastMonthGreen===true), OR
+//   (b) fit the "HM Score (Weighted)" hero framework — i.e. score at or
+//       above the same >=66% "good" threshold dashBuildScreenerDashboard's
+//       hero pill uses (hmScoreFor(name) >= 66).
+// This is an OR, not an AND — a fund needs to satisfy only one condition
+// to appear here. The Table view stays unfiltered (every current-month
+// Red>=SMA8 fund), so Dashboard is a higher-conviction slice of the same
+// list, not a different data source.
+var _ptBearView='dashboard';
+function setBearView(view){
+  _ptBearView=(view==='table')?'table':'dashboard';
+  var dashV=psEl('pt-bear-dashboard-view'),tableV=psEl('pt-bear-table-view');
+  var bDash=psEl('pt-bear-view-btn-dash'),bTable=psEl('pt-bear-view-btn-table');
+  if(dashV)dashV.style.display=(_ptBearView==='dashboard')?'block':'none';
+  if(tableV)tableV.style.display=(_ptBearView==='table')?'block':'none';
+  if(bDash){bDash.style.background=(_ptBearView==='dashboard')?'#0c1929':'transparent';bDash.style.color=(_ptBearView==='dashboard')?'#fff':'#666';}
+  if(bTable){bTable.style.background=(_ptBearView==='table')?'#0c1929':'transparent';bTable.style.color=(_ptBearView==='table')?'#fff':'#666';}
+  if(_ptBearView==='dashboard')renderBearDashboardView();
+}
+function renderBearDashboardView(){
+  var el=psEl('pt-bear-dashboard-view');
+  if(!el)return;
+  var allRows=(typeof win.ptGetAllComputedRows==='function')?win.ptGetAllComputedRows():[];
+  if(!allRows||!allRows.length){
+    el.innerHTML=dashEmptyState('Run a scan to populate this list');
+    return;
+  }
+  var fullList=monthlyRedAtOrAboveSMA8List();
+  // The OR filter per request: last month's own candle green, OR HM
+  // Score (Weighted) at/above the 66% "good" threshold.
+  var HM_SCORE_GOOD=66;
+  var list=fullList.filter(function(r){
+    var hs=hmScoreFor(r.name);
+    var scoreOk=(hs!=null&&hs>=HM_SCORE_GOOD);
+    return r.lastMonthGreen===true||scoreOk;
+  });
+  if(!list.length){
+    el.innerHTML=dashEmptyState('No Watch funds currently have last month\u2019s candle green, or an HM Score (Weighted) of 66% or higher');
+    return;
+  }
+  var rows=list.map(function(r){
+    var r2=scannerRowFor(r.name);
+    var regime=r2&&r2.regime?r2.regime:null;
+    var margin=r.sma8Low?((r.low-r.sma8Low)/r.sma8Low*100):null;
+    return {name:r.name,close:r.close,low:r.low,sma8Low:r.sma8Low,lastMonthPct:r.lastMonthPct,marginPct:margin,regime:regime,hmAllGreen:hmAllGreen(r.name),hmScore:hmScoreFor(r.name)};
+  });
+  el.innerHTML=dashBuildScreenerDashboard({
+    rows:rows,
+    heroLabel:'Watch funds worth a closer look',
+    heroSub:'Red candle at/above SMA(8) low, with last month green OR HM Score (Weighted) \u2265 '+HM_SCORE_GOOD+'%',
+    pillGoodText:'Strong watch group',
+    pillOkText:'Moderate watch group',
+    pillWeakText:'Thin watch group',
+    metricLabel:'Margin above SMA(8)',
+    metricKey:'marginPct',
+    metricFmt:function(v){return v==null?'—':(v>=0?'+':'')+v.toFixed(1)+'%';},
+    secondaryLabel:'Last Month',
+    secondaryKey:'lastMonthPct',
+    secondaryFmt:function(v){return v==null?'—':(v>=0?'+':'')+v.toFixed(1)+'%';}
+  });
 }
 
 // ── Monthly Green > SMA(8) Low — Dashboard view (Dashboard/Table toggle) ──
@@ -6202,6 +6293,8 @@ win.PSnap={
   renderMgs8DashboardView:renderMgs8DashboardView,
   setMatchingView:setMatchingView,
   renderMatchingDashboardView:renderMatchingDashboardView,
+  setBearView:setBearView,
+  renderBearDashboardView:renderBearDashboardView,
   get updateMode(){return updateMode;}
 };
 // scannerRowFor is declared inside this IIFE (private to Portfolio
