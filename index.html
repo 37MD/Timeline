@@ -894,11 +894,12 @@ body{}
       <div id="pt-dash-hero" style="line-height:1">
         <span id="pt-dash-hero-num" style="font-size:52px;font-weight:800;color:#0c1929;letter-spacing:-1px">—</span><span style="font-size:22px;color:#aab4bd;font-weight:600">%</span>
       </div>
-      <div style="font-size:12px;color:#7a8894;margin-top:4px">of Portfolio Regime A + P&gt;WMA</div>
+      <div style="font-size:12px;color:#7a8894;margin-top:4px">Portfolio HM Score (Monthly+Weekly+Daily RSI weighted)</div>
 
       <div id="pt-dash-pill" style="display:inline-flex;align-items:center;gap:6px;background:#e9f9ef;color:#1a8a4a;border:1px solid #cdeedb;border-radius:20px;padding:7px 16px;margin:14px 0 8px;font-size:12px;font-weight:700">
         <span id="pt-dash-pill-icon">✓</span><span id="pt-dash-pill-text">Loading Portfolio…</span>
       </div>
+      <div id="pt-dash-verdict" style="font-size:12px;color:#0c1929;font-weight:600;margin-bottom:6px">—</div>
       <div id="pt-dash-subtext" style="font-size:11px;color:#8a95a0;margin-bottom:14px">—</div>
 
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:6px 0 10px">
@@ -1012,6 +1013,20 @@ body{}
     <div style="font-size:10px;color:#8a95a0;margin:0 0 8px 30px">Detailed status of each holding with Regime, Signal, and HM Status</div>
     <div id="pt-dash-holdings-detail"></div>
 
+    <!-- 5.5 NEAR-FLIP WATCH — early warning: holdings whose Monthly/Weekly/
+         Daily RSI(9) sits close to the 50 threshold, i.e. at risk of
+         crossing into/out of HM All-Green on the next update. Forward-
+         looking, unlike Important Updates below which is retrospective
+         (what already changed). Mirrors the water dashboard's "Lowest
+         Reservoir" attention-flag pattern — surfaces the holding(s)
+         closest to a status change before it happens. -->
+    <div style="display:flex;align-items:center;gap:8px;margin:20px 0 2px">
+      <span style="background:#fff7e0;color:#a3720a;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px">◎</span>
+      <h4 style="font-size:14px;font-weight:800;color:#0c1929;margin:0">Near-Flip Watch</h4>
+    </div>
+    <div style="font-size:10px;color:#8a95a0;margin:0 0 8px 30px">Holdings within 5 points of the RSI(9)=50 threshold on any timeframe — early warning before a Regime or HM Status change</div>
+    <div id="pt-dash-nearflip"></div>
+
     <!-- 6. IMPORTANT UPDATES feed — notable events derived from the data -->
     <div style="display:flex;align-items:center;gap:8px;margin:20px 0 2px">
       <span style="background:#fdeee6;color:#cc5a1a;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px">⚠</span>
@@ -1020,10 +1035,13 @@ body{}
     <div style="font-size:10px;color:#8a95a0;margin:0 0 8px 30px">Notable Regime, HM Status, and Signal changes across your Portfolio</div>
     <div id="pt-dash-updates"></div>
 
+
+
   </div>
 
   <!-- ── (b) Table view — original dense Portfolio Summary table ── -->
   <div id="pt-sum-table-view" style="display:none">
+    <div id="pt-sum-table-asof" style="font-size:8px;color:#888;margin-bottom:4px">Data as of: —</div>
     <div style="font-size:8px;color:#888;margin-bottom:4px">Confluence / Regime / P&gt;WMA / BA Weightage / RS 1M / RS 2M / RS 3M / RS Score / Signal / HM Status / Returns / HM Chart — all shown below. Tap a header button above to jump to a column.</div>
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #1a8a1a;border-radius:4px">
     <table class="freeze-col1" style="width:100%;border-collapse:collapse;font-size:9px;min-width:1100px">
@@ -1096,7 +1114,8 @@ body{}
       <button id="pt-matching-view-btn-table" onclick="PSnap.setMatchingView('table')" style="border:none;background:transparent;color:#666;padding:5px 10px;border-radius:12px;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap">Table</button>
     </div>
   </div>
-  <div style="font-size:8px;color:#888;margin-bottom:4px">Indices outside your Portfolio scoring at or above its average (Regime + P&gt;WMA + RS Score + BA Weightage composite). Same columns as Portfolio Summary.</div>
+  <div style="font-size:8px;color:#888;margin-bottom:4px">Indices outside your Portfolio scoring at or above its average (HM Score + RS Score + P&gt;WMA + BA Weightage composite). Same columns as Portfolio Summary.</div>
+  <div id="pt-matching-asof" style="font-size:8px;color:#888;margin-bottom:4px">Data as of: —</div>
 
   <!-- ── Dashboard view (DEFAULT) — analysis restricted to funds whose HM
        Status shows all 3 green ticks (Monthly + Weekly + Daily RSI(9) all
@@ -1973,6 +1992,7 @@ window._buildProxyUrl = DD._buildProxyUrl;
 //   BB.baCSV(dateStr)          — get/set ba_csv_<date>
 //   BB.baGold(symbol)          — get/set ba_gold_<sym>
 //   BB.ptPortfolio()           — get/set pt_v10_pf
+//   BB.ptPrevSnapshot()        — get/set ld_pt_prevsnapshot_v1 (HM/Regime change-detection)
 //   BB.deepCacheV4()           — get ld_deep_weekly_history_v4 (read-only, legacy migration)
 //   BB.deepCacheV3()           — get ld_deep_weekly_history_v3 (read-only, legacy migration)
 //   BB.mfScanCache()           — get/set mf_scan_results_cache
@@ -2182,6 +2202,17 @@ var BB = (function() {
     return setJSON('pt_v10_pf', data);
   }
 
+  // Portfolio Snapshot's per-holding HM/Regime state as of the last
+  // completed scan: {name: {regime, hmAllGreen, hmScore}}. Used by the
+  // Portfolio dashboard's "Important Updates" to detect and surface
+  // transitions (regime flip, HM All-Green gained/lost) since the
+  // previous scan, rather than only showing current static state.
+  function ptPrevSnapshot(data) {
+    if (data === undefined) return getJSON('ld_pt_prevsnapshot_v1', null);
+    if (data === null) return remove('ld_pt_prevsnapshot_v1');
+    return setJSON('ld_pt_prevsnapshot_v1', data);
+  }
+
   // Deep cache v4: {lastDate, dailyMap, weeklyMap, monthlyMap}
   // Read-only migration source — see storage audit. This used to also
   // accept writes (a full duplicate copy of the IndexedDB deep cache,
@@ -2292,6 +2323,7 @@ var BB = (function() {
     baCSV: baCSV,
     baGold: baGold,
     ptPortfolio: ptPortfolio,
+    ptPrevSnapshot: ptPrevSnapshot,
     deepCacheV4: deepCacheV4,
     deepCacheV3: deepCacheV3,
     mfScanCache: mfScanCache,
@@ -4118,6 +4150,7 @@ async function ptRunScan(){
   var count=ptApplyHiddenFilter();
   ptEl('pt-st').textContent=(usedDeepCache?'[Data Engine]':'[NSE]')+' '+count+' indices scanned';
   ptEl('pt-ts').textContent=new Date().toLocaleString();
+  _ptScanCompletedAt=Date.now();
   ptLog('✅ Scan complete — '+count+' indices (NSE + NPS + BAF)');
   // Persist how long THIS scan actually took (in seconds), so the next
   // "Cache is fresh" banner can tell the person a realistic wait time
@@ -4157,6 +4190,13 @@ function ptApplyHiddenFilter(){
   ptRender(ptScanR);
   return ptScanR.length;
 }
+// Timestamp of the most recent completed price scan — distinct from
+// render time. The Portfolio dashboard's "Updated:" line previously just
+// showed when the dashboard re-rendered, which could read as fresh even
+// when the underlying prices were from an old, possibly failed/partial
+// scan. Set whenever ptScanR is populated with real scan output.
+var _ptScanCompletedAt=null;
+win.ptGetScanCompletedAt=function(){return _ptScanCompletedAt;};
 
 // ── 10.7 Render Table ──
 // Portfolio Snapshot main table: # | Index | Price | Chg% | HM Status
@@ -4280,6 +4320,69 @@ function hmAllGreen(name){
   if(!st)return false;
   return st.daily!=null && st.weekly!=null && st.monthly!=null &&
          st.daily>50 && st.weekly>50 && st.monthly>50;
+}
+// ── HM Score: weighted partial-credit version of HM Status (M/W/D RSI(9)>50) ──
+// Single source of truth for "how HM-aligned is this holding right now",
+// used everywhere the app scores/ranks by HM/MTF conviction rather than
+// just showing the pass/fail all-green flag. Weights reflect Hilega
+// Milega's own timeframe hierarchy: Monthly (regime) > Weekly (trend) >
+// Daily (tactical/noisiest). hmAllGreen() above remains the strict
+// pass/fail gate (used for sorting/filtering to "fully qualified only");
+// this returns 0-100 for anywhere a graded score is more informative.
+// Returns null (not 0) if EE/data unavailable, so callers can distinguish
+// "no data" from "0% aligned" — callers should treat null as excluded from
+// averages, not as a zero.
+function hmScoreFor(name){
+  if(!window.EE || typeof window.EE.hmStatusFor!=='function')return null;
+  var st=window.EE.hmStatusFor(name);
+  if(!st)return null;
+  var score=0,any=false;
+  if(st.monthly!=null){any=true;if(st.monthly>50)score+=50;}
+  if(st.weekly!=null){any=true;if(st.weekly>50)score+=30;}
+  if(st.daily!=null){any=true;if(st.daily>50)score+=20;}
+  return any?score:null;
+}
+// Near-Flip Watch: finds the timeframe (M/W/D) whose RSI(9) sits closest
+// to the 50 threshold for a given holding, within a configurable band
+// (default 5 points either side). Returns null if no timeframe is within
+// the band, or {timeframe, value, distance, side} for the closest one
+// otherwise. "side" is which way it would flip if it crosses ('gain' if
+// currently ≤50 and rising toward green, 'lose' if currently >50 and at
+// risk of dropping below). This is intentionally the tightest-margin
+// reading only — a holding can be flagged for one timeframe even if its
+// other two are comfortably clear, since that's the one that would move
+// first.
+function hmNearFlipFor(name,band){
+  band=band||5;
+  if(!window.EE || typeof window.EE.hmStatusFor!=='function')return null;
+  var st=window.EE.hmStatusFor(name);
+  if(!st)return null;
+  var candidates=[
+    {timeframe:'Monthly',value:st.monthly},
+    {timeframe:'Weekly',value:st.weekly},
+    {timeframe:'Daily',value:st.daily}
+  ].filter(function(c){return c.value!=null;});
+  var best=null;
+  candidates.forEach(function(c){
+    var dist=Math.abs(c.value-50);
+    if(dist<=band&&(!best||dist<best.distance)){
+      best={timeframe:c.timeframe,value:c.value,distance:dist,side:c.value<=50?'gain':'lose'};
+    }
+  });
+  return best;
+}
+// Shared "Data as of: ..." text, reading the true scan-completion
+// timestamp (not render time) — same source the dashboard's staleness
+// warning uses. Used by the Table view and Matching Index sections so
+// data freshness is visible without switching to the Dashboard view.
+function ptDataAsOfText(){
+  var scanTs=(typeof win.ptGetScanCompletedAt==='function')?win.ptGetScanCompletedAt():null;
+  if(!scanTs)return 'Data as of: unknown — no completed scan yet this session';
+  var pad=function(n){return n<10?'0'+n:''+n;};
+  var d=new Date(scanTs);
+  var ageMin=Math.round((Date.now()-scanTs)/60000);
+  var stale=ageMin>=60;
+  return 'Data as of: '+d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' at '+pad(d.getHours())+':'+pad(d.getMinutes())+(stale?' ⚠ stale ('+(ageMin>=120?Math.round(ageMin/60)+'h':ageMin+'m')+' old)':'');
 }
 
 
@@ -4983,6 +5086,7 @@ function ptFmtLocal(n){return n==null?'—':'Rs '+Number(n).toFixed(2).replace(/
 function renderSummary(){
   var theadEl=psEl('pt-sum-thead'),tbEl=psEl('pt-sum-tb');
   if(!theadEl||!tbEl)return;
+  var asofEl=psEl('pt-sum-table-asof');if(asofEl)asofEl.textContent=ptDataAsOfText();
   var sortCols=[
     {key:'index',label:'Index'},{key:'price',label:'Price'},{key:'change',label:'Chg%'},
     {key:'confluence',label:'RSI Weekly'},{key:'regime',label:'Regime'},{key:'pwma',label:'P>WMA'},
@@ -5044,12 +5148,13 @@ var _ptDashSortKey='return',_ptDashSortDir=-1;
 function renderDashboardView(){
   var heroNum=psEl('pt-dash-hero-num'),pillIcon=psEl('pt-dash-pill-icon'),pillText=psEl('pt-dash-pill-text'),
       subtext=psEl('pt-dash-subtext'),stat1=psEl('pt-dash-stat1'),stat2=psEl('pt-dash-stat2'),stat3=psEl('pt-dash-stat3'),
-      updated=psEl('pt-dash-updated');
+      updated=psEl('pt-dash-updated'),verdictEl=psEl('pt-dash-verdict');
   if(!heroNum)return;
   if(!PState.names.length){
     heroNum.textContent='—';
     if(pillIcon)pillIcon.textContent='ℹ️';
     if(pillText)pillText.textContent='No Portfolio yet';
+    if(verdictEl)verdictEl.textContent='—';
     if(subtext)subtext.textContent='Use Update Portfolio to add holdings.';
     [stat1,stat2,stat3].forEach(function(el){if(el)el.textContent='—';});
     if(updated)updated.textContent='Updated: —';
@@ -5061,12 +5166,13 @@ function renderDashboardView(){
     var dc=psEl('pt-dash-donut-chart');if(dc)dc.innerHTML='';
     var dl=psEl('pt-dash-donut-legend');if(dl)dl.innerHTML='';
     var det=psEl('pt-dash-holdings-detail');if(det)det.innerHTML='';
+    var nf=psEl('pt-dash-nearflip');if(nf)nf.innerHTML='';
     var upd=psEl('pt-dash-updates');if(upd)upd.innerHTML='<div style="font-size:10px;color:#999;padding:8px 0">No updates yet — add holdings to your Portfolio.</div>';
     _ptDashRows=[];
     return;
   }
   var names=PState.names.slice();
-  var regimeACount=0,regimeBCount=0,regimeCCount=0,pwmaYesCount=0,hmAllGreenCount=0,leaderCount=0,retSum=0,retCount=0,todaySum=0,todayCount=0;
+  var regimeACount=0,regimeBCount=0,regimeCCount=0,pwmaYesCount=0,hmAllGreenCount=0,leaderCount=0,retSum=0,retCount=0,todaySum=0,todayCount=0,hmScoreSum=0,hmScoreCount=0;
   var scanR=(typeof win.ptGetScanR==='function')?win.ptGetScanR():[];
   var priceOf={};scanR.forEach(function(r){var k=r.name?r.name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';priceOf[k]={price:r.price,change:r.change};});
   var rows=names.map(function(name){
@@ -5079,6 +5185,8 @@ function renderDashboardView(){
     if(pwmaYes)pwmaYesCount++;
     var allGreen=hmAllGreen(name);
     if(allGreen)hmAllGreenCount++;
+    var hmScore=hmScoreFor(name);
+    if(hmScore!=null){hmScoreSum+=hmScore;hmScoreCount++;}
     if(signal==='LEADER')leaderCount++;
     var norm=name?name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
     var pr=priceOf[norm]||{};
@@ -5087,13 +5195,54 @@ function renderDashboardView(){
     var retPct=null;
     if(pur&&pur.price!=null&&cur!=null&&pur.price){retPct=(cur-pur.price)/pur.price*100;retSum+=retPct;retCount++;}
     if(pr.change!=null){todaySum+=pr.change;todayCount++;}
-    return {name:name,regime:regime,pwmaYes:pwmaYes,signal:signal,retPct:retPct,cur:cur,change:pr.change,purPrice:pur?pur.price:null,hmAllGreen:allGreen};
+    return {name:name,regime:regime,pwmaYes:pwmaYes,signal:signal,retPct:retPct,cur:cur,change:pr.change,purPrice:pur?pur.price:null,hmAllGreen:allGreen,hmScore:hmScore};
   });
   _ptDashRows=rows;
+
+  // ── Change detection: diff current HM/Regime state against the last
+  // persisted snapshot to surface transitions (regime flips, HM All-Green
+  // gained/lost) in Important Updates below — mirrors the water dashboard's
+  // "Vihar Lake started overflowing" style operational alerts, which are
+  // about *change since last look*, not just current static state. Only
+  // runs meaningfully once a prior snapshot exists; the first-ever render
+  // has nothing to diff against and just seeds the baseline silently.
+  var _prevSnap=(typeof BB!=='undefined'&&typeof BB.ptPrevSnapshot==='function')?BB.ptPrevSnapshot():null;
+  var _transitions=[];
+  if(_prevSnap){
+    rows.forEach(function(rw){
+      var prev=_prevSnap[rw.name];
+      if(!prev)return; // new holding since last snapshot — nothing to diff
+      if(prev.regime!=null&&rw.regime!=null&&prev.regime!==rw.regime){
+        _transitions.push({kind:'regime',name:rw.name,from:prev.regime,to:rw.regime,
+          text:rw.name+' moved from Regime '+prev.regime+' to Regime '+rw.regime+' since last scan.'});
+      }
+      if(prev.hmAllGreen===false&&rw.hmAllGreen===true){
+        _transitions.push({kind:'hmgain',name:rw.name,
+          text:rw.name+' just turned HM All-Green (Monthly + Weekly + Daily RSI all above 50).'});
+      } else if(prev.hmAllGreen===true&&rw.hmAllGreen===false){
+        _transitions.push({kind:'hmloss',name:rw.name,
+          text:rw.name+' lost HM All-Green status since last scan.'});
+      }
+    });
+  }
+  // Persist current state as the new baseline for the next diff. Only
+  // writes when there's actual scan data to snapshot (hmScore/regime not
+  // both null for every holding), so a render with no scan yet doesn't
+  // clobber a good prior snapshot with an all-empty one.
+  if(rows.length&&typeof BB!=='undefined'&&typeof BB.ptPrevSnapshot==='function'){
+    var _hasData=rows.some(function(rw){return rw.regime!=null||rw.hmScore!=null;});
+    if(_hasData){
+      var _snapOut={};
+      rows.forEach(function(rw){_snapOut[rw.name]={regime:rw.regime,hmAllGreen:rw.hmAllGreen,hmScore:rw.hmScore};});
+      BB.ptPrevSnapshot(_snapOut);
+    }
+  }
   var total=names.length;
 
-  // ── 1. HERO ──
-  var scorePct=total?((regimeACount+pwmaYesCount)/(2*total)*100):0;
+  // ── 1. HERO — HM Score (weighted M/W/D RSI(9) vs 50; Monthly 50 / Weekly
+  // 30 / Daily 20), averaged across holdings that have data. This is the
+  // Portfolio's buy/sell decision basis (HM + MTF), not Regime/P>WMA. ──
+  var scorePct=hmScoreCount?(hmScoreSum/hmScoreCount):0;
   heroNum.textContent=scorePct.toFixed(1);
   var good=scorePct>=66,ok=scorePct>=40;
   if(pillIcon)pillIcon.textContent=good?'✓':ok?'●':'⚠';
@@ -5104,15 +5253,23 @@ function renderDashboardView(){
     pillWrap.style.borderColor=good?'#cdeedb':ok?'#f2e2ae':'#f2cccc';
   }
   if(pillText)pillText.textContent=good?'Portfolio Positioning is Strong':ok?'Portfolio Positioning is Mixed':'Portfolio Positioning is Weak';
-  if(subtext)subtext.textContent=regimeACount+' of '+total+' holdings in Regime A, '+pwmaYesCount+' of '+total+' above their WMA(20).';
+  if(verdictEl){
+    var _flipCount=_transitions.filter(function(t){return t.kind==='regime'||t.kind==='hmloss';}).length;
+    var _verdictBase=good?'Portfolio is well-aligned with HM/MTF regime.':ok?'Portfolio alignment with HM/MTF regime is mixed — some holdings need review.':'Portfolio is weakly aligned with HM/MTF regime — review recommended.';
+    verdictEl.textContent=_verdictBase+(_flipCount?' '+_flipCount+' holding'+(_flipCount===1?'':'s')+' flipped Regime or lost HM All-Green since last scan.':'');
+  }
+  if(subtext)subtext.textContent='Avg HM Score '+scorePct.toFixed(1)+'% (M/W/D RSI(9) weighted) — '+hmAllGreenCount+' of '+total+' holdings fully HM All-Green.';
   var pvEl=psEl('pt-pv'),tpEl=psEl('pt-tp'),trEl=psEl('pt-tr');
   if(stat1)stat1.textContent=pvEl&&pvEl.textContent!=='—'?pvEl.textContent:'—';
   if(stat2){stat2.textContent=tpEl&&tpEl.textContent!=='—'?tpEl.textContent:'—';stat2.style.color=(tpEl&&tpEl.style.color)?tpEl.style.color:'#0c1929';}
   if(stat3)stat3.textContent=String(total);
   if(updated){
-    var now=new Date();
-    var pad=function(n){return n<10?'0'+n:''+n;};
-    updated.textContent='Updated: '+now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+' at '+pad(now.getHours())+':'+pad(now.getMinutes());
+    // Shows actual scan-data completion time, not dashboard render time —
+    // a re-render (e.g. switching tabs) previously showed "just updated"
+    // even when the underlying prices were from an old/stale scan.
+    var scanTs=(typeof win.ptGetScanCompletedAt==='function')?win.ptGetScanCompletedAt():null;
+    updated.textContent=ptDataAsOfText();
+    updated.style.color=(scanTs&&(Date.now()-scanTs)/60000>=60)||!scanTs?'#cc4a1a':'';
   }
 
   // ── 2. QUICK OVERVIEW (6 cards) ──
@@ -5127,12 +5284,16 @@ function renderDashboardView(){
   var withRet=rows.filter(function(r){return r.retPct!=null;});
   var best=withRet.length?withRet.reduce(function(a,b){return b.retPct>a.retPct?b:a;}):null;
   var worst=withRet.length?withRet.reduce(function(a,b){return b.retPct<a.retPct?b:a;}):null;
+  // "(of N compared)" caveat when only a small slice of the Portfolio has
+  // a tagged purchase — otherwise Best/Worst can silently be the SAME
+  // single holding with no indication the comparison had little to work with.
+  var comparedNote=withRet.length<total?' (of '+withRet.length+' compared)':'';
   var qo3=psEl('pt-dash-qo3-val'),qo3s=psEl('pt-dash-qo3-sub');
   if(qo3){qo3.textContent=best?best.name:'—';}
-  if(qo3s){qo3s.textContent=best?((best.retPct>=0?'+':'')+best.retPct.toFixed(2)+'%'):'No purchases tagged yet';}
+  if(qo3s){qo3s.textContent=best?((best.retPct>=0?'+':'')+best.retPct.toFixed(2)+'%'+comparedNote):'No purchases tagged yet';}
   var qo4=psEl('pt-dash-qo4-val'),qo4s=psEl('pt-dash-qo4-sub');
   if(qo4){qo4.textContent=worst?worst.name:'—';}
-  if(qo4s){qo4s.textContent=worst?((worst.retPct>=0?'+':'')+worst.retPct.toFixed(2)+'%'):'No purchases tagged yet';}
+  if(qo4s){qo4s.textContent=worst?((worst.retPct>=0?'+':'')+worst.retPct.toFixed(2)+'%'+comparedNote):'No purchases tagged yet';}
   var qo5=psEl('pt-dash-qo5-val'),qo5s=psEl('pt-dash-qo5-sub');
   if(qo5){qo5.textContent=avgRet==null?'—':(avgRet>=0?'Rising':'Falling');qo5.style.color=avgRet==null?'#0c1929':(avgRet>=0?'#1a8a4a':'#cc0000');}
   if(qo5s){qo5s.textContent=retCount+' of '+total+' holdings with a tagged purchase';}
@@ -5204,12 +5365,46 @@ function renderDashboardView(){
     }).join('');
   }
 
+  // ── 5.5 NEAR-FLIP WATCH — forward-looking early warning, distinct from
+  // Important Updates (retrospective). Computed fresh each render, not
+  // diffed/persisted — it's a snapshot of current margin-to-threshold,
+  // not a change event. ──
+  var nfEl=psEl('pt-dash-nearflip');
+  if(nfEl){
+    var nfRows=[];
+    rows.forEach(function(rw){
+      var nf=hmNearFlipFor(rw.name,5);
+      if(nf)nfRows.push({name:rw.name,nf:nf});
+    });
+    nfRows.sort(function(a,b){return a.nf.distance-b.nf.distance;});
+    if(!nfRows.length){
+      nfEl.innerHTML=dashEmptyState('No holdings currently within 5 points of an RSI(9)=50 flip threshold on any timeframe.');
+    } else {
+      nfEl.innerHTML=nfRows.map(function(r){
+        var sideText=r.nf.side==='gain'?'could turn green':'could turn red';
+        var sideColor=r.nf.side==='gain'?'#1a8a4a':'#cc4a1a';
+        var safeName=r.name.replace(/'/g,"\\'");
+        return '<div onclick="PSnap.viewHMChart(\''+safeName+'\')" style="background:#fff;border:1px solid #f2e2ae;border-left:3px solid '+sideColor+';border-radius:0 10px 10px 0;padding:10px 12px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px">'+
+          '<div style="min-width:0"><div style="font-size:11px;font-weight:700;color:#0c1929;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'+
+          '<div style="font-size:9px;color:#8a95a0;margin-top:2px">'+r.nf.timeframe+' RSI(9): '+r.nf.value.toFixed(1)+' — '+sideText+' if it crosses 50</div></div>'+
+          '<div style="font-size:9px;font-weight:700;color:'+sideColor+';flex-shrink:0;white-space:nowrap">±'+r.nf.distance.toFixed(1)+' pts</div>'+
+          '</div>';
+      }).join('');
+    }
+  }
+
   // ── 6. IMPORTANT UPDATES — notable, derivable-from-data events ──
   var updEl=psEl('pt-dash-updates');
   if(updEl){
-    var notices=[];
+    // Change-detection alerts first (highest priority — these are the
+    // things that actually changed since the last scan, analogous to
+    // "Vihar Lake started overflowing" rather than a static status list).
+    var notices=_transitions.map(function(t){
+      if(t.kind==='regime')return {icon:t.to==='A'?'▲':t.from==='A'?'▼':'●',color:t.to==='A'?'#1a8a4a':t.from==='A'?'#cc4a1a':'#b8860b',text:t.text};
+      if(t.kind==='hmgain')return {icon:'✓',color:'#1a8a4a',text:t.text};
+      return {icon:'⚠',color:'#cc4a1a',text:t.text};
+    });
     rows.forEach(function(rw){
-      if(rw.hmAllGreen)notices.push({icon:'✓',color:'#1a8a4a',text:rw.name+' is HM All-Green (Monthly + Weekly + Daily RSI all above 50).'});
       if(rw.signal==='LEADER')notices.push({icon:'★',color:'#2a5adf',text:rw.name+' is currently ranked as a Signal LEADER.'});
       if(rw.signal==='LAGGARD')notices.push({icon:'⚠',color:'#cc4a1a',text:rw.name+' is currently ranked as a Signal LAGGARD.'});
       if(rw.retPct!=null&&rw.retPct<=-10)notices.push({icon:'▼',color:'#cc0000',text:rw.name+' is down '+Math.abs(rw.retPct).toFixed(1)+'% from your purchase price.'});
@@ -5310,21 +5505,38 @@ function setSummaryView(view){
 // paper-trade book). Only runs when at least one index has a tagged purchase.
 function updateHeaderStats(){
   var scanR=(typeof win.ptGetScanR==='function')?win.ptGetScanR():[];
-  var priceOf={};scanR.forEach(function(r){priceOf[r.name]=r.price;});
+  // Normalized-key lookup — matches renderSummary()/renderDashboardView()
+  // exactly, so a holding name that differs slightly in case/spacing from
+  // its scan row (e.g. "Nifty Auto" vs "NIFTY AUTO") still resolves to a
+  // live price here instead of silently missing (previous bug: this used
+  // priceOf[r.name] — exact match only — causing affected holdings to
+  // fall back to purchase price and display as flat/0% in Portfolio
+  // Value/P&L even though the Summary table showed a real live price).
+  var priceOf={};scanR.forEach(function(r){var k=r.name?r.name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';priceOf[k]=r.price;});
   var withPurchase=PState.names.filter(function(n){return PState.purchases[n]&&PState.purchases[n].price!=null;});
   var pvEl=psEl('pt-pv'),tpEl=psEl('pt-tp'),trEl=psEl('pt-tr');
   if(!withPurchase.length)return; // nothing tagged with a purchase yet — leave the "—" placeholders as-is
-  var investedTotal=0,curTotal=0;
+  var investedTotal=0,curTotal=0,includedCount=0;
   withPurchase.forEach(function(n){
+    var norm=n?n.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
+    var cur=priceOf[norm];
+    // No fallback to purchase price when live price is missing — that
+    // silently masked the holding as flat (0% return). Instead exclude it
+    // from the aggregate entirely, same convention renderDashboardView
+    // already uses (retPct stays null, excluded from retSum/retCount).
+    if(cur==null)return;
     var pur=PState.purchases[n].price;
-    var cur=priceOf[n]!=null?priceOf[n]:pur;
     investedTotal+=pur;
     curTotal+=cur;
+    includedCount++;
   });
+  if(!includedCount){if(pvEl)pvEl.textContent='—';if(tpEl)tpEl.textContent='—';if(trEl)trEl.textContent='—';return;}
   var pnl=curTotal-investedTotal;
   var retPct=investedTotal?(pnl/investedTotal*100):0;
-  if(pvEl)pvEl.textContent='Rs '+Math.round(curTotal).toLocaleString('en-IN');
-  if(tpEl){tpEl.textContent=(pnl>=0?'+':'')+'Rs '+Math.round(Math.abs(pnl)).toLocaleString('en-IN');tpEl.style.color=pnl>=0?'#1a8a1a':'#cc0000';}
+  var pvTitle='Equal-weighted sum of index price levels (1 unit per holding at its purchase price) — a notional watchlist total, not real ₹ invested capital.'+
+    (includedCount<withPurchase.length?' * '+(withPurchase.length-includedCount)+' holding(s) with a tagged purchase excluded — no live price match found.':'');
+  if(pvEl){pvEl.textContent='Rs '+Math.round(curTotal).toLocaleString('en-IN')+(includedCount<withPurchase.length?' *':'');pvEl.title=pvTitle;}
+  if(tpEl){tpEl.textContent=(pnl>=0?'+':'')+'Rs '+Math.round(Math.abs(pnl)).toLocaleString('en-IN');tpEl.style.color=pnl>=0?'#1a8a1a':'#cc0000';tpEl.title=pvTitle;}
   if(trEl){trEl.textContent=(retPct>=0?'+':'')+retPct.toFixed(2)+'%';trEl.style.color=retPct>=0?'#1a8a1a':'#cc0000';}
 }
 
@@ -5332,16 +5544,23 @@ function updateHeaderStats(){
 // better than the portfolio's average, ranked by a simple composite score
 // (Regime A + P>WMA + RS Score + BA weight all nudge the score up). Shown
 // below the Portfolio Summary table.
+// Composite ranking score for Matching Index candidates. Rebased on HM
+// Score (weighted M/W/D RSI(9) vs 50) as the dominant component, replacing
+// the old Regime-letter weight — Regime and HM Status are both derived
+// from the same RSI(9) multi-timeframe logic, so scoring both was
+// redundant double-counting. HM Score is used here (not the strict
+// hmAllGreen gate) since this is a graded ranking, not a pass/fail filter.
+// Weights: HM Score 40, RS Score 30, P>WMA 15, BA Weightage 15.
 function compositeScoreFor(name){
   var r=scannerRowFor(name);
   var score=0;
-  if(r&&r.regime==='A')score+=40;
-  else if(r&&r.regime==='B')score+=15;
-  if(r&&r.price!=null&&r.wma20Price!=null&&r.price>r.wma20Price)score+=20;
+  var hm=hmScoreFor(name);
+  if(hm!=null)score+=hm*0.40;
+  if(r&&r.price!=null&&r.wma20Price!=null&&r.price>r.wma20Price)score+=15;
   var rs=rsScoreFor(name);
   if(rs!=null)score+=Math.max(0,Math.min(30,Number(rs)));
   var ba=baPctFor(name);
-  if(ba!=null)score+=Math.max(0,Math.min(10,Number(ba)/10));
+  if(ba!=null)score+=Math.max(0,Math.min(15,Number(ba)/10*1.5));
   return score;
 }
 
@@ -5361,13 +5580,17 @@ function dashEmptyState(msg){
 function dashBuildScreenerDashboard(opts){
   var rows=opts.rows;
   var total=rows.length;
-  var regimeACount=0,regimeBCount=0,hmAllGreenCount=0;
+  var regimeACount=0,regimeBCount=0,hmAllGreenCount=0,hmScoreSum=0,hmScoreCount=0;
   rows.forEach(function(r){
     if(r.regime==='A')regimeACount++;else if(r.regime==='B')regimeBCount++;
     if(r.hmAllGreen)hmAllGreenCount++;
+    if(r.hmScore!=null){hmScoreSum+=r.hmScore;hmScoreCount++;}
   });
-  var pct=total?(regimeACount/total*100):0;
-  var good=pct>=50,ok=pct>=25;
+  // Pill basis: average HM Score (weighted M/W/D RSI(9) vs 50) — same basis
+  // as the Portfolio dashboard hero, for consistency across the app.
+  // Falls back to Regime A % only if no row has HM Score data at all.
+  var pct=hmScoreCount?(hmScoreSum/hmScoreCount):(total?(regimeACount/total*100):0);
+  var good=pct>=66,ok=pct>=40;
   var pillBg=good?'#e9f9ef':ok?'#fff7e0':'#fdeaea';
   var pillColor=good?'#1a8a4a':ok?'#a3720a':'#a30a0a';
   var pillBorder=good?'#cdeedb':ok?'#f2e2ae':'#f2cccc';
@@ -5428,6 +5651,7 @@ function renderMatchingIndex(){
   var tbEl=psEl('pt-matching-tb');
   var theadEl=psEl('pt-matching-thead');
   if(!wrap||!tbEl)return;
+  var asofElMI=psEl('pt-matching-asof');if(asofElMI)asofElMI.textContent=ptDataAsOfText();
   var allNames=psIndexUniverse().map(function(x){return x.name;});
   // Header: same column set as Portfolio Summary (Score replaces the
   // header-button "jump to column" sort headers here, since Matching
@@ -5759,7 +5983,7 @@ function renderMgs8DashboardView(){
     var r2=scannerRowFor(r.name);
     var regime=r2&&r2.regime?r2.regime:null;
     var margin=r.sma8Low?((r.low-r.sma8Low)/r.sma8Low*100):null;
-    return {name:r.name,close:r.close,low:r.low,sma8Low:r.sma8Low,lastMonthPct:r.lastMonthPct,marginPct:margin,regime:regime,hmAllGreen:hmAllGreen(r.name)};
+    return {name:r.name,close:r.close,low:r.low,sma8Low:r.sma8Low,lastMonthPct:r.lastMonthPct,marginPct:margin,regime:regime,hmAllGreen:hmAllGreen(r.name),hmScore:hmScoreFor(r.name)};
   });
   el.innerHTML=dashBuildScreenerDashboard({
     rows:rows,
