@@ -3519,6 +3519,20 @@ function switchTab(name) {
   if(btn)btn.classList.add('active');
   var panel=document.getElementById('tab-' + name);
   if(panel)panel.classList.add('active');
+  // The "← Back" FAB (shown by viewHMChart()) is only meaningful while
+  // sitting on the Hilega/Chart tab that a "View HM Chart" link sent you
+  // to. Any OTHER tab navigation — whether via Back's own handler (which
+  // already hides it directly) or by tapping a tab button directly (e.g.
+  // Portfolio → View HM Chart → Back FAB appears → tap Setup tab instead
+  // of Back) — must hide it too. Otherwise it lingers, and tapping it
+  // later fires Back's stale one-shot _hmReturnToTab/_hmReturnToPTView
+  // state, silently yanking the person back to wherever they were before
+  // they ever tapped "View HM Chart", instead of doing nothing (as a
+  // leftover-but-inert button would suggest). onTabActivated() already
+  // did this for pt/explore/watch; doing it here unconditionally (except
+  // for 'hilega' itself, which needs the FAB to stay visible) covers
+  // setup/tactical/npsswitch too, and is harmless to call twice.
+  if (name !== 'hilega' && typeof window.PSnap !== 'undefined' && typeof window.PSnap.hideBackButton === 'function') { window.PSnap.hideBackButton(); }
   if (name === 'pt' && typeof window.onPTTabActivated === 'function') { window.onPTTabActivated(); }
   if (name === 'explore' && typeof window.onPTTabActivated === 'function') {
     // Explore lives outside #tab-pt now, but its two tables (Monthly
@@ -3555,6 +3569,8 @@ function switchTab(name) {
     }
   }
   if (name === 'hilega' && typeof openHilegaTab === 'function') { openHilegaTab(); }
+  if (name === 'setup' && typeof window.PSnap !== 'undefined' && typeof window.PSnap.renderSetupPortfolioList === 'function') { window.PSnap.renderSetupPortfolioList(); }
+  if (name === 'setup' && typeof window.PSnap !== 'undefined' && typeof window.PSnap.searchPopulateCatDropdown === 'function') { window.PSnap.searchPopulateCatDropdown(); }
   if (name === 'npsswitch' && typeof window.onNpsSwitchTabActivated === 'function') { window.onNpsSwitchTabActivated(); }
   if (name === 'tactical' && typeof window.onTacticalTabActivated === 'function') { window.onTacticalTabActivated(); }
 }
@@ -4460,6 +4476,20 @@ function _psHistCloseForDate(name,dateIso){
   if(!dateIso)return null;
   var parts=dateIso.split('-'); if(parts.length!==3)return null;
   var ddmm=parts[2]+parts[1]+parts[0]; // DDMMYYYY to match dailyMap entry format
+  // Sortable form (YYYYMMDD) of the target date, used ONLY for the
+  // "nearest earlier date" ordering comparison below — DDMMYYYY strings
+  // are NOT chronologically comparable across month/year boundaries (e.g.
+  // '01012026' < '15122025' lexicographically, even though 1 Jan 2026 is
+  // chronologically after 15 Dec 2025), which could silently pick the
+  // wrong historical purchase price for any date whose nearest trading
+  // day fallback crosses a month/year boundary — exactly the case a
+  // weekend/holiday purchase date near month-end would trigger.
+  var wantSortable=parts[0]+parts[1]+parts[2]; // YYYYMMDD
+  function toSortable(ddmmyyyy){
+    // ddmmyyyy is 'DDMMYYYY' (8 chars) -> 'YYYYMMDD'
+    if(!ddmmyyyy||ddmmyyyy.length!==8)return '';
+    return ddmmyyyy.slice(4,8)+ddmmyyyy.slice(2,4)+ddmmyyyy.slice(0,2);
+  }
   // Build candidate keys from the name — try lowercase, normalized, and raw
   var candidates=[];
   if(name){
@@ -4481,10 +4511,14 @@ function _psHistCloseForDate(name,dateIso){
         var seg=entries[i].split('|');
         if(seg[0]===ddmm){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
       }
-      // Nearest earlier date (for weekends/holidays)
+      // Nearest earlier date (for weekends/holidays) — entries are
+      // oldest-first, so scanning backward and comparing on the sortable
+      // (YYYYMMDD) form finds the latest trading day still chronologically
+      // before the target date, correctly even across a month/year
+      // boundary.
       for(var i=entries.length-1;i>=0;i--){
         var seg=entries[i].split('|');
-        if(seg[0]<ddmm){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
+        if(toSortable(seg[0])<wantSortable){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
       }
     }
   }
@@ -4498,7 +4532,7 @@ function _psHistCloseForDate(name,dateIso){
       }
       for(var i=entries.length-1;i>=0;i--){
         var seg=entries[i].split('|');
-        if(seg[0]<ddmm){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
+        if(toSortable(seg[0])<wantSortable){var c=parseFloat(seg[4]);return isNaN(c)?null:c;}
       }
     }
   }
@@ -4518,6 +4552,12 @@ function setUniverseDateDraft(name,dateVal){
     psSave();
     var sumWrap=psEl('pt-summary-wrap');
     if(sumWrap&&sumWrap.style.display!=='none'){renderSummary();renderMatchingIndex();}
+    // Portfolio List (Setup tab) shows this same purchase date — keep it
+    // in sync immediately, same reasoning as toggleName()'s equivalent
+    // call: it's always visible (not gated behind a panel toggle), so
+    // without this an edited date wouldn't show until something unrelated
+    // forced a re-render.
+    if(typeof renderSetupPortfolioList==='function')renderSetupPortfolioList();
   }
 }
 
@@ -4595,9 +4635,10 @@ function renderUniverseList(list){
   listEl.innerHTML=toggleBar+visNames.map(function(n){
     var inP=PState.names.indexOf(n)>=0;
     var existingDate=(PState.purchases[n]&&PState.purchases[n].date)||_psUniverseDateDraft[n]||todayIso;
-    return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:5px 8px;border-bottom:1px solid #eee;'+(inP?'background:#cfe8ff':'')+'">'+
+    return '<div id="pt-univ-row-'+normalize(n)+'" data-univ-name="'+n.replace(/"/g,'&quot;')+'" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:5px 8px;border-bottom:1px solid #eee;'+(inP?'background:#cfe8ff':'')+'">'+
       '<span style="word-break:break-word;flex:1 1 100%;">'+n+'</span>'+
-      '<input type="date" value="'+existingDate+'" onchange="PSnap.setUniverseDateDraft(\''+n.replace(/'/g,"\\'")+'\',this.value)" title="Purchase date for this index" style="font-size:9px;padding:3px 4px;border:1px solid #ccc;border-radius:3px;flex:1 1 120px;min-width:0;">'+
+      '<input type="date" value="'+existingDate+'" onchange="PSnap.setUniverseDateDraft(\''+n.replace(/'/g,"\\'")+'\',this.value)" title="Purchase date for this index" style="font-size:9px;padding:3px 4px;border:1px solid #ccc;border-radius:3px;flex:0 1 92px;min-width:0;width:92px;">'+
+      '<button onclick="PSnap.viewHMChart(\''+n.replace(/'/g,"\\'")+'\')" style="background:#0055aa;color:#fff;border:none;padding:3px 7px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">View in HM Chart</button>'+
       '<button onclick="PSnap.toggleName(\''+n.replace(/'/g,"\\'")+'\')" style="background:'+(inP?'#cc0000':'#1a8a1a')+';color:#fff;border:none;padding:3px 7px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">'+(inP?'Remove from Portfolio':'Add to Portfolio')+'</button>'+
       '<button onclick="PSnap.hideName(\''+n.replace(/'/g,"\\'")+'\')" title="Hide from Portfolio Snapshot (e.g. no MF offers this index)" style="background:#888;color:#fff;border:none;padding:3px 7px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">Hide</button>'+
       '</div>';
@@ -4697,8 +4738,120 @@ function toggleName(name){
   // until some unrelated event forced a re-render.
   if(typeof renderMonthlyGreenAboveSMA8==='function')renderMonthlyGreenAboveSMA8();
   if(typeof renderMonthlyRedAtOrAboveSMA8==='function')renderMonthlyRedAtOrAboveSMA8();
+  if(typeof renderSetupPortfolioList==='function')renderSetupPortfolioList();
 }
 function has(name){return PState.names.indexOf(name)>=0;}
+
+// ── Setup tab: Search Fund (Category/Index picker → jump to Master List row) ──
+// Mirrors the Chart (HM) tab's hmCatSelect/hmIndexSelect pattern, but the
+// action on selecting a fund is "open Master List and scroll/highlight
+// that row" instead of drawing a chart. Data source is psIndexUniverse()
+// — the exact same list Master List itself renders from — grouped by
+// category the same way hmPopulateIndexDropdown groups the Chart tab's
+// dropdowns, so the category buckets look and behave consistently across
+// both tabs even though this one doesn't touch dailyMap/chart state at all.
+var _psSearchCatOrder=['Broad Market','Broad Market - Size','Sectoral','Sectoral - Financial','Sectoral - Healthcare','Thematic','Strategy','Dividend','Fixed Income','Real Estate','Volatility','Others','Balanced Advantage Funds','NPS Schemes'];
+function searchPopulateCatDropdown(){
+  var catSel=psEl('pt-search-cat'),idxSel=psEl('pt-search-idx');
+  if(!catSel||!idxSel)return;
+  var list=psIndexUniverse();
+  var groups={};
+  list.forEach(function(idx){
+    var cat=idx.category||idx.nseKey||'Others';
+    if(!groups[cat])groups[cat]=[];
+    groups[cat].push(idx);
+  });
+  var curVal=catSel.value;
+  catSel.innerHTML='<option value="">Category…</option>';
+  _psSearchCatOrder.forEach(function(cat){
+    if(!groups[cat])return;
+    var opt=document.createElement('option');
+    opt.value=cat;opt.textContent=cat+' ('+groups[cat].length+')';
+    catSel.appendChild(opt);
+    delete groups[cat];
+  });
+  Object.keys(groups).sort().forEach(function(cat){
+    var opt=document.createElement('option');
+    opt.value=cat;opt.textContent=cat+' ('+groups[cat].length+')';
+    catSel.appendChild(opt);
+  });
+  if(curVal&&catSel.querySelector('option[value="'+curVal.replace(/"/g,'&quot;')+'"]'))catSel.value=curVal;
+  else{catSel.value='';idxSel.innerHTML='<option value="">Select Fund…</option>';}
+}
+function searchOnCatChange(){
+  var catSel=psEl('pt-search-cat'),idxSel=psEl('pt-search-idx');
+  if(!catSel||!idxSel)return;
+  var cat=catSel.value;
+  idxSel.innerHTML='<option value="">'+(cat?'Select '+cat+' Fund…':'Select Fund…')+'</option>';
+  if(!cat)return;
+  var list=psIndexUniverse().filter(function(idx){return(idx.category||idx.nseKey||'Others')===cat;});
+  list.sort(function(a,b){return a.name<b.name?-1:a.name>b.name?1:0;});
+  list.forEach(function(idx){
+    var opt=document.createElement('option');
+    opt.value=idx.name;opt.textContent=idx.name;
+    idxSel.appendChild(opt);
+  });
+}
+function searchOnFundChange(){
+  var idxSel=psEl('pt-search-idx');
+  if(!idxSel||!idxSel.value)return;
+  jumpToMasterListRow(idxSel.value);
+}
+function jumpToMasterListRow(name){
+  // Open Master List (same as tapping "Open Master List") so the row is
+  // actually in the DOM, then scroll/highlight it. A short delay lets
+  // renderUniverseList's innerHTML swap finish before we query for the row.
+  openUniverse();
+  setTimeout(function(){
+    var row=psEl('pt-univ-row-'+normalize(name));
+    if(!row)return;
+    row.scrollIntoView({behavior:'smooth',block:'center'});
+    var origBg=row.style.background;
+    row.style.transition='background .25s ease';
+    row.style.background='#ffe08a';
+    setTimeout(function(){row.style.background=origBg;},1600);
+  },60);
+}
+
+// ── Setup tab: Portfolio List (name / purchase date / view in chart) ──
+// Sits below Master List per request — a read-only reference table (no
+// add/remove controls here, that's what the Portfolio tab's Update mode
+// and Master List panel are for) so this stays a quick "what do I own and
+// when did I buy it" glance, plus a shortcut into that fund's chart.
+function _psFmtPurchaseDate(iso){
+  if(!iso)return '—';
+  var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if(!m)return iso;
+  var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var mi=parseInt(m[2],10)-1;
+  return m[3]+'-'+(MONTHS[mi]||m[2])+'-'+m[1];
+}
+function renderSetupPortfolioList(){
+  var tb=psEl('pt-setup-portfolio-tb');
+  if(!tb)return;
+  if(!PState.names.length){
+    tb.innerHTML='<div style="padding:10px;color:#666;text-align:center">No funds in Portfolio yet</div>';
+    return;
+  }
+  var sortedNames=PState.names.slice().sort(function(a,b){return a.localeCompare(b);});
+  // Same row markup/sizing as Master List's renderUniverseList() rows —
+  // plain sans body font (no font-family override, so it inherits
+  // var(--sans) same as Master List's <span> names) instead of the small
+  // monospace a <table><td> would pick up from the global `tbody
+  // td{font-family:var(--mono)}` rule. Purchase date is shown as static
+  // text here (not an editable picker) since editing happens in Master
+  // List; this table is a read-only "what do I own and when" reference.
+  tb.innerHTML=sortedNames.map(function(name,i){
+    var safeName=name.replace(/'/g,"\\'");
+    var pur=PState.purchases[name];
+    var dateDisp=_psFmtPurchaseDate(pur&&pur.date);
+    return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:5px 8px;border-bottom:1px solid #eee">'+
+      '<span style="word-break:break-word;flex:1 1 100%;">'+name+'</span>'+
+      '<span style="font-size:8px;color:#666;background:#f5f5f5;border:1px solid #ccc;border-radius:3px;padding:3px 8px;flex:0 1 92px;min-width:0;text-align:center;white-space:nowrap">'+dateDisp+'</span>'+
+      '<button onclick="PSnap.viewHMChart(\''+safeName+'\')" style="background:#0055aa;color:#fff;border:none;padding:3px 8px;border-radius:3px;font-size:8px;cursor:pointer;white-space:nowrap">View in HM Chart</button>'+
+      '</div>';
+  }).join('');
+}
 
 // ── Update Portfolio mode (click row # to add/remove) ──
 function toggleUpdateMode(){
@@ -4864,9 +5017,26 @@ var ALL_COL_KEYS=['confluence','regime','pwma','ba','rs1m','rs2m','rs3m','rs','s
 // Used by viewHMChart()/showBackButton() so "← Back" from the Charts tab
 // restores whichever table the person actually came from, instead of
 // always landing on the default main table.
-function ptCurrentView(){
-  var univ=psEl('pt-universe-panel');
-  if(univ&&univ.style.display!=='none')return 'universe';
+//
+// IMPORTANT: pt-universe-panel (Master List) now lives ONLY in the Setup
+// tab's DOM — it is not duplicated inside tab-pt. psEl()/getElementById()
+// is a global lookup, so checking its display state here is only a valid
+// signal of "what was showing" when the origin tab is actually Setup.
+// Checking it unconditionally (old behavior) meant a stale display:block
+// left over from a previous Setup visit could make this wrongly report
+// 'universe' even when called from the Portfolio tab, and Back would then
+// call openUniverse() — a Setup-only function that also calls
+// hideSummary() — while restoring the Portfolio tab, corrupting Portfolio's
+// own summary/main view state for no reason the person did anything to
+// cause. Pass the resolved origin tab in explicitly instead of inferring
+// it a second time from global DOM state.
+function ptCurrentView(originTab){
+  if(originTab==='setup'){
+    var univ=psEl('pt-universe-panel');
+    return (univ&&univ.style.display!=='none')?'universe':'none';
+  }
+  // Portfolio tab: 'universe' is not a valid state here anymore (that
+  // panel isn't in tab-pt's DOM), so only summary/main apply.
   var sumWrap=psEl('pt-summary-wrap');
   if(sumWrap&&sumWrap.style.display!=='none')return 'summary';
   return 'main';
@@ -4880,9 +5050,10 @@ function ptRestoreView(view){
     openUniverse();
   }else if(view==='summary'){
     showSummary();
-  }else{
+  }else if(view==='main'){
     hideSummary();
   }
+  // view==='none' (Setup, Master List wasn't open): nothing to restore.
 }
 function viewHMChart(name){
   var list=psIndexUniverse();
@@ -4918,11 +5089,15 @@ function viewHMChart(name){
   // same function) — so we detect whichever tab panel is actually active
   // right now rather than assuming it's always Portfolio.
   var activePanel=document.querySelector('.tab-panel.active');
-  win._hmReturnToTab=(activePanel&&activePanel.id==='tab-explore')?'explore':(activePanel&&activePanel.id==='tab-watch')?'watch':'pt';
-  // Remember which of Portfolio's own internal views (main/summary/
-  // universe) was showing, so Back restores that too — only meaningful
-  // when the origin tab was Portfolio itself.
-  win._hmReturnToPTView=ptCurrentView();
+  win._hmReturnToTab=(activePanel&&activePanel.id==='tab-explore')?'explore':(activePanel&&activePanel.id==='tab-watch')?'watch':(activePanel&&activePanel.id==='tab-setup')?'setup':'pt';
+  // Remember which of Portfolio's own internal views (main/summary) or,
+  // if the origin was Setup, whether Master List was open — so Back
+  // restores that too. Only meaningful for 'pt'/'setup' origins; Explore
+  // and Watch don't have this sub-view concept, so this is a harmless
+  // no-op value for those (ptCurrentView returns 'main' by default, which
+  // is simply never read since showBackButton's restore is gated on
+  // _tab being 'pt' or 'setup').
+  win._hmReturnToPTView=ptCurrentView(win._hmReturnToTab);
   // Also remember exactly how far down that view was scrolled, so Back
   // restores the precise reading position — not just the right tab/view.
   // window scroll is what actually moves in this single-page layout (the
@@ -4959,7 +5134,7 @@ function showBackButton(){
       // runs last and isn't immediately overwritten by that refresh.
       var _view=win._hmReturnToPTView;
       win._hmReturnToPTView=null; // one-shot, same pattern as _hmPendingChartRequest
-      if(_tab==='pt'&&_view&&typeof win.PSnap!=='undefined'&&typeof win.PSnap.restoreView==='function'){
+      if((_tab==='pt'||_tab==='setup')&&_view&&typeof win.PSnap!=='undefined'&&typeof win.PSnap.restoreView==='function'){
         win.PSnap.restoreView(_view);
       }
       // Restore the exact scroll position the person was at before they
@@ -5002,7 +5177,26 @@ function ptSortValue(name,key){
   if(key==='rs3m'){var d=rsDetailFor(name);return d&&d.rs3m!=null?d.rs3m:-999;}
   if(key==='rs'){var s=rsScoreFor(name);return s!=null?s:0;}
   if(key==='signal'){var d=rsDetailFor(name);var order={LEADER:4,IMPROVING:3,WATCH:2,LAGGARD:1};return d&&d.signal?order[d.signal]||0:0;}
-  if(key==='returns'){var pur=PState.purchases[name];if(!pur||pur.price==null)return 0;var scanR=win.ptGetScanR?win.ptGetScanR():[];var cur=null;scanR.forEach(function(r){if(r.name===name)cur=r.price;});return cur!=null?cur-pur.price:0;}
+  if(key==='returns'){
+    var pur=PState.purchases[name];
+    if(!pur||pur.price==null)return 0;
+    var scanR=win.ptGetScanR?win.ptGetScanR():[];
+    // Same normalized-match fallback as COL_DEFS.returns.render() (the
+    // actual displayed cell) — exact-name-only matching here previously
+    // silently sorted a fund as zero return whenever its live scanR row
+    // name differed in case/spacing from the purchase record's key (an
+    // NPS/BAF-prone mismatch), even though the displayed cell for that
+    // same row correctly showed a real computed percentage.
+    var norm=name?name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
+    var cur=null;
+    scanR.forEach(function(r){
+      if(cur!=null)return;
+      if(r.name===name){cur=r.price;return;}
+      var rn=r.name?r.name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
+      if(rn===norm)cur=r.price;
+    });
+    return cur!=null?cur-pur.price:0;
+  }
   return 0;
 }
 function ptHighlightRow(el){
@@ -6302,6 +6496,8 @@ function reloadState(){
 
 win.PSnap={
   openUniverse:openUniverse,
+  hideBackButton:hideBackButton,
+  showBackButton:showBackButton,
   closeUniverse:closeUniverse,
   toggleName:toggleName,
   toggleUpdateMode:toggleUpdateMode,
@@ -6337,6 +6533,10 @@ win.PSnap={
   renderMatchingDashboardView:renderMatchingDashboardView,
   setBearView:setBearView,
   renderBearDashboardView:renderBearDashboardView,
+  renderSetupPortfolioList:renderSetupPortfolioList,
+  searchPopulateCatDropdown:searchPopulateCatDropdown,
+  searchOnCatChange:searchOnCatChange,
+  searchOnFundChange:searchOnFundChange,
   get updateMode(){return updateMode;}
 };
 // scannerRowFor is declared inside this IIFE (private to Portfolio
@@ -6672,14 +6872,21 @@ async function fetchDeepBAFHistory(codes, onProgress) {
   // the Kotak Balanced Advantage chart was stuck showing 20/07/2026 as
   // its newest point days after that date, with no visible warning that
   // the cache was actually stale.
-  var _bafNewestDate=null;
+  var _bafNewestDate=null,_bafNewestSortable=null;
   Object.keys(cache.bafMap).forEach(function(code){
     (cache.bafMap[code]||[]).forEach(function(r){
       if(!r||!r.date)return;
       var p=r.date.split('-');
       if(p.length!==3)return;
       var ddmmyyyy=p[0]+p[1]+p[2];
-      if(!_bafNewestDate||ddmmyyyy>_bafNewestDate)_bafNewestDate=ddmmyyyy;
+      // Compare on YYYYMMDD (sortable), not raw DDMMYYYY — the latter is
+      // NOT chronologically comparable across month/year boundaries (e.g.
+      // '05012026' < '31122025' lexicographically despite 5 Jan 2026 being
+      // later), which could report a stale "newest date" right after a
+      // year boundary and make the cache-freshness check silently accept
+      // an outdated cache. Same bug class fixed in _psHistCloseForDate.
+      var sortable=p[2]+p[1]+p[0];
+      if(!_bafNewestSortable||sortable>_bafNewestSortable){_bafNewestSortable=sortable;_bafNewestDate=ddmmyyyy;}
     });
   });
   cache.lastUpdated = _bafNewestDate || deepFmtDate(new Date());
@@ -6735,14 +6942,17 @@ async function fetchDeepNPSHistory(codes, onProgress) {
   // reported to the person is always genuinely accurate, and a stale
   // cache correctly keeps trying to catch up on every scan until the
   // source data itself catches up.
-  var _npsNewestDate=null;
+  var _npsNewestDate=null,_npsNewestSortable=null;
   Object.keys(cache.npsMap).forEach(function(code){
     (cache.npsMap[code]||[]).forEach(function(r){ // npsMap rows are newest-first, but scan all to be safe against any future ordering change
       if(!r||!r.date)return;
       var p=r.date.split('-'); // DD-MM-YYYY
       if(p.length!==3)return;
       var ddmmyyyy=p[0]+p[1]+p[2];
-      if(!_npsNewestDate||ddmmyyyy>_npsNewestDate)_npsNewestDate=ddmmyyyy;
+      // Same YYYYMMDD-sortable fix as the BAF block above — see its
+      // comment for why raw DDMMYYYY comparison is chronologically unsafe.
+      var sortable=p[2]+p[1]+p[0];
+      if(!_npsNewestSortable||sortable>_npsNewestSortable){_npsNewestSortable=sortable;_npsNewestDate=ddmmyyyy;}
     });
   });
   cache.lastUpdated = _npsNewestDate || deepFmtDate(new Date());
@@ -10590,16 +10800,43 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
 
 <h3 style="color:var(--accent);font-size:12px;margin:14px 0 6px;border-bottom:1px solid var(--border);padding-bottom:3px">Master List</h3>
 <div style="font-size:10px;color:var(--text-dim);margin:0 0 8px">Add or remove indices from the Portfolio Snapshot universe, or hide ones with no fund wrapper available.</div>
+
+<!-- ── Search Fund — same Category/Index picker pattern as the Chart
+     (HM) tab's hmCatSelect/hmIndexSelect, but instead of drawing a
+     chart, selecting a fund here opens the Master List panel below and
+     scrolls/highlights that fund's row. Its data source is
+     psIndexUniverse() — the identical list Master List itself renders
+     from (NSE + NPS + BAF) — so a match here is guaranteed to exist as
+     a row down there. ── -->
+<div style="font-size:9px;color:var(--text-dim);margin:0 0 4px;font-weight:600;text-transform:uppercase;letter-spacing:.03em">Search Fund</div>
+<div style="display:flex;gap:6px;margin:0 0 8px">
+  <select id="pt-search-cat" onchange="PSnap.searchOnCatChange()" class="hm-select" style="flex:0 0 34%;min-width:0">
+    <option value="">Category…</option>
+  </select>
+  <select id="pt-search-idx" onchange="PSnap.searchOnFundChange()" class="hm-select" style="flex:1;min-width:0">
+    <option value="">Select Fund…</option>
+  </select>
+</div>
+
 <div style="display:flex;gap:3px;margin:0 0 8px">
   <button id="pt-btn-universe" onclick="PSnap.openUniverse()" style="background:#0055aa;color:#fff;border:none;padding:8px 4px;cursor:pointer;font-weight:bold;font-size:9px;text-transform:uppercase;border-radius:4px;flex:1 1 0;min-height:36px;white-space:nowrap">Open Master List</button>
 </div>
 <!-- Index Universe panel (lists all NSE indices from the app's own master dataset — independent of Scanner tab) -->
 <div id="pt-universe-panel" style="display:none;margin:8px 0;border:1px solid #0055aa;border-radius:4px;background:#fff">
+
   <div style="display:flex;justify-content:space-between;align-items:center;background:#0055aa;color:#fff;padding:6px 8px;border-radius:4px 4px 0 0">
     <span style="font-size:10px;font-weight:bold;text-transform:uppercase">Master List</span>
     <button onclick="PSnap.closeUniverse()" style="background:none;border:none;color:#fff;font-size:14px;cursor:pointer;line-height:1;padding:0 4px">×</button>
   </div>
   <div id="pt-universe-list" style="max-height:260px;overflow-y:auto;-webkit-overflow-scrolling:touch;font-size:9px"></div>
+</div>
+
+<h3 style="color:var(--accent);font-size:12px;margin:14px 0 6px;border-bottom:1px solid var(--border);padding-bottom:3px">Portfolio List</h3>
+<div style="font-size:10px;color:var(--text-dim);margin:0 0 8px">Every fund currently in your Portfolio, its purchase date, and a quick link to its chart.</div>
+<div style="border:1px solid #0055aa;border-radius:4px;background:#fff;max-height:400px;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div id="pt-setup-portfolio-tb">
+    <div style="padding:10px;color:#666;text-align:center">No funds in Portfolio yet</div>
+  </div>
 </div>
 
 </div>
