@@ -3102,11 +3102,44 @@ async function ldApplyBackupJson(text) {
     // session's NPS download had genuinely succeeded and was included in
     // the backup file via _ldLoadNPSCacheForBackup.
     let npsRestored = false;
+    let npsDroppedCodes = [];
     if (parsed && parsed.npsCache && parsed.npsCache.npsMap
         && Object.keys(parsed.npsCache.npsMap).length > 0
         && typeof _npsSaveCache === 'function') {
       try {
-        await _npsSaveCache(parsed.npsCache);
+        // BUG FIX: this is the real root cause of "restore corrupted
+        // everything" — _npsSaveCache() used to write parsed.npsCache
+        // straight through with no validation. A backup file saved before
+        // an NPS scheme-code fix (e.g. SBI/TATA/AXIS/DSP codes were wrong
+        // for months, then corrected — see NPS_DEFAULT_CODES/NPS_SCHEME_
+        // NAMES history) contains npsMap entries keyed by the OLD, now-
+        // unrecognized codes. hmMergeNPSIntoDailyMap() looks up each code
+        // in the CURRENT DD.NPS._schemeNames map to find the fund's real
+        // name; an old code that isn't in that map falls back to using the
+        // raw code string ('SM009001') as if it were the fund's name, so
+        // the merge silently writes garbage under a meaningless key instead
+        // of the real holding name — the actual holding then has no price
+        // data. This is a full blind overwrite too, so it also destroyed
+        // otherwise-current data for AMCs whose codes never changed,
+        // because the whole npsMap object is replaced, not merged.
+        // Fix: only restore codes that still resolve in the CURRENT scheme
+        // map, and merge into whatever is already in IndexedDB rather than
+        // replacing it outright, so an old/partial backup can only add
+        // recognized data, never wipe out newer correct data.
+        const currentSchemeNames = (typeof DD !== 'undefined' && DD.NPS && DD.NPS._schemeNames) ? DD.NPS._schemeNames : {};
+        const existingNpsCache = await new Promise(res => window._npsLoadCache(res)).catch(() => ({ npsMap: {} }));
+        const mergedNpsMap = Object.assign({}, (existingNpsCache && existingNpsCache.npsMap) || {});
+        Object.keys(parsed.npsCache.npsMap).forEach(function(code) {
+          if (currentSchemeNames[code]) {
+            mergedNpsMap[code] = parsed.npsCache.npsMap[code];
+          } else {
+            npsDroppedCodes.push(code);
+          }
+        });
+        if (npsDroppedCodes.length) {
+          console.warn('[LD] Restore: dropped', npsDroppedCodes.length, 'NPS scheme code(s) not recognized by the current app version (likely renumbered since this backup was saved):', npsDroppedCodes);
+        }
+        await _npsSaveCache({ lastUpdated: parsed.npsCache.lastUpdated, lastFetchDate: parsed.npsCache.lastFetchDate, npsMap: mergedNpsMap });
         npsRestored = true;
       } catch (e) {
         console.warn('[LD] NPS cache restore failed', e);
@@ -3122,7 +3155,14 @@ async function ldApplyBackupJson(text) {
         && Object.keys(parsed.bafCache.bafMap).length > 0
         && typeof _bafSaveCache === 'function') {
       try {
-        await _bafSaveCache(parsed.bafCache);
+        // Merge rather than overwrite — same reasoning as the NPS block
+        // above. BAF fund codes are a fixed short list so this is lower
+        // risk than NPS, but merging costs nothing and keeps both paths
+        // consistent (a restore should only add data, never destroy
+        // otherwise-current data already in IndexedDB).
+        const existingBafCache = await new Promise(res => window._bafLoadCache(res)).catch(() => ({ bafMap: {} }));
+        const mergedBafMap = Object.assign({}, (existingBafCache && existingBafCache.bafMap) || {}, parsed.bafCache.bafMap);
+        await _bafSaveCache({ lastUpdated: parsed.bafCache.lastUpdated, lastFetchDate: parsed.bafCache.lastFetchDate, bafMap: mergedBafMap });
         bafRestored = true;
       } catch (e) {
         console.warn('[LD] BAF cache restore failed', e);
@@ -3163,6 +3203,8 @@ async function ldApplyBackupJson(text) {
       // explanation, so the user knows something is actually missing.
       console.warn('[LD] Backup restore: these keys failed to save:', restoreResult.failed);
       ldShowBackupMsg(`⚠ Database restored, but ${restoreResult.failed.length} item(s) didn't fit (storage full?)`, true);
+    } else if (npsDroppedCodes.length > 0) {
+      ldShowBackupMsg(`✓ Database restored (${deepCacheIndexCount} indices) — ${npsDroppedCodes.length} old NPS fund entr${npsDroppedCodes.length === 1 ? 'y was' : 'ies were'} skipped as outdated (this backup predates a fund-code fix); those funds may need a fresh download.`, true);
     } else if (!deepRestored) {
       // BUG FIX: on-screen visibility for the "settings restored fine, but
       // this file had no usable price history" case — previously the only
