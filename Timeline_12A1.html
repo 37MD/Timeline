@@ -5616,18 +5616,34 @@ function renderDashboardView(){
   if(hsub)hsub.textContent='Current status for all '+total+' holding'+(total===1?'':'s')+' in your Portfolio';
   dashRenderHoldingsTable();
 
-  // Data-load warning: a holding with no current price at all (blank
-  // everywhere in its row/card — Current Price, Purchase Price, HM Chart
-  // all fail) means its NAV history never successfully loaded from
-  // npsnav.in/mfapi.in, not a UI wiring problem. Surface that plainly
-  // instead of leaving the person to guess why one row looks broken.
+  // Data-load warning: two distinct broken states get surfaced here.
+  //   (1) No current price at all — NAV history never successfully
+  //       downloaded from npsnav.in/mfapi.in. Fixed by retrying the
+  //       download.
+  //   (2) Current price exists but Purchase Price is blank — this
+  //       happens when a holding was added to the portfolio BEFORE its
+  //       NAV data had loaded (its purchase record got permanently
+  //       saved with price:null at that moment); the data existing now
+  //       doesn't retroactively fix an already-saved blank purchase
+  //       price. Fixed by backfilling it from history/current price.
+  // Both cases show the same "Retry Download" action since
+  // retryFailedNpsLoads() now handles both.
   var warnEl=psEl('pt-dash-dataload-warning');
   if(warnEl){
     var noDataNames=rows.filter(function(rw){return rw.cur==null;}).map(function(rw){return rw.name;});
-    if(noDataNames.length){
+    var noPurchaseNames=rows.filter(function(rw){return rw.cur!=null&&rw.purPrice==null;}).map(function(rw){return rw.name;});
+    if(noDataNames.length||noPurchaseNames.length){
+      var msgParts=[];
+      if(noDataNames.length){
+        msgParts.push((noDataNames.length===1?'1 holding has':noDataNames.length+' holdings have')+' no price data at all ('+noDataNames.join(', ')+') — NAV history failed to download, so Current/Purchase Price and View HM Chart won\'t work until it loads.');
+      }
+      if(noPurchaseNames.length){
+        msgParts.push((noPurchaseNames.length===1?'1 holding is':noPurchaseNames.length+' holdings are')+' missing a Purchase Price ('+noPurchaseNames.join(', ')+') — likely added before their price data had loaded.');
+      }
+      var totalCount=noDataNames.length+noPurchaseNames.length;
       warnEl.innerHTML='<div style="background:#fff8e6;border:1px solid #e8c468;border-radius:10px;padding:10px 12px;margin:10px 0 4px">'+
-        '<div style="font-size:11px;font-weight:800;color:#8a6d1a">⚠️ No price data for '+noDataNames.length+' holding'+(noDataNames.length===1?'':'s')+'</div>'+
-        '<div style="font-size:9px;color:#8a6d1a;margin-top:3px">'+noDataNames.map(function(n){return n;}).join(', ')+' — the NAV history for '+(noDataNames.length===1?'this fund':'these funds')+' failed to download, so Current/Purchase Price and View HM Chart won\'t work until it loads.</div>'+
+        '<div style="font-size:11px;font-weight:800;color:#8a6d1a">⚠️ '+totalCount+' holding'+(totalCount===1?'':'s')+' need'+(totalCount===1?'s':'')+' attention</div>'+
+        msgParts.map(function(m){return '<div style="font-size:9px;color:#8a6d1a;margin-top:3px">'+m+'</div>';}).join('')+
         '<button onclick="PSnap.retryFailedNpsLoads()" style="margin-top:6px;background:#8a6d1a;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer">Retry Download</button>'+
         '</div>';
     } else {
@@ -6585,33 +6601,63 @@ async function retryFailedNpsLoads() {
       var norm = n.toLowerCase().replace(/[^a-z0-9]/gi, '');
       return priceOf[norm] == null;
     });
-    if (!missingNames.length) return;
-    // Map missing names back to their NPS scheme codes (only NPS funds are
-    // handled here — BAF funds use a fixed 4-fund list and rarely 404).
-    var codeForName = {};
-    if (typeof DD !== 'undefined' && DD.NPS && DD.NPS._schemeNames) {
-      Object.keys(DD.NPS._schemeNames).forEach(function(code) {
-        codeForName[DD.NPS._schemeNames[code]] = code;
-      });
-    }
-    var codesToRetry = missingNames.map(function(n) { return codeForName[n]; }).filter(Boolean);
-    if (!codesToRetry.length) return;
-    var npsCache = await new Promise(function(res) { window._npsLoadCache(res); }).catch(function() { return { npsMap: {} }; });
-    var npsMap = (npsCache && npsCache.npsMap) || {};
-    for (var i = 0; i < codesToRetry.length; i++) {
-      var code = codesToRetry[i];
-      var rows = await DD.NPS.fetchHistory(code);
-      if (rows && rows.length >= 20) {
-        npsMap[code] = rows;
-        if (DD.NPS._failedCodes) {
-          var idx = DD.NPS._failedCodes.indexOf(code);
-          if (idx !== -1) DD.NPS._failedCodes.splice(idx, 1);
+
+    // Only NPS funds are handled for the actual re-download (BAF funds
+    // use a fixed 4-fund list and rarely 404). If nothing is missing
+    // price data outright, skip straight to the purchase-price backfill
+    // below rather than returning early — a holding can have a current
+    // price but still be missing its Purchase Price (see comment further
+    // down), and that case has nothing to re-download.
+    if (missingNames.length) {
+      var codeForName = {};
+      if (typeof DD !== 'undefined' && DD.NPS && DD.NPS._schemeNames) {
+        Object.keys(DD.NPS._schemeNames).forEach(function(code) {
+          codeForName[DD.NPS._schemeNames[code]] = code;
+        });
+      }
+      var codesToRetry = missingNames.map(function(n) { return codeForName[n]; }).filter(Boolean);
+      if (codesToRetry.length) {
+        var npsCache = await new Promise(function(res) { window._npsLoadCache(res); }).catch(function() { return { npsMap: {} }; });
+        var npsMap = (npsCache && npsCache.npsMap) || {};
+        for (var i = 0; i < codesToRetry.length; i++) {
+          var code = codesToRetry[i];
+          var rows = await DD.NPS.fetchHistory(code);
+          if (rows && rows.length >= 20) {
+            npsMap[code] = rows;
+            if (DD.NPS._failedCodes) {
+              var idx = DD.NPS._failedCodes.indexOf(code);
+              if (idx !== -1) DD.NPS._failedCodes.splice(idx, 1);
+            }
+          }
         }
+        await window._npsSaveCache({ lastUpdated: npsCache.lastUpdated || null, npsMap: npsMap }).catch(function() {});
+        if (typeof win.hmMergeNPSIntoDailyMap === 'function') await win.hmMergeNPSIntoDailyMap();
+        if (typeof win.ptRunScan === 'function') await win.ptRunScan();
       }
     }
-    await window._npsSaveCache({ lastUpdated: npsCache.lastUpdated || null, npsMap: npsMap }).catch(function() {});
-    if (typeof win.hmMergeNPSIntoDailyMap === 'function') await win.hmMergeNPSIntoDailyMap();
-    if (typeof win.ptRunScan === 'function') await win.ptRunScan();
+
+    // Backfill purchase price for any holding that was added to the
+    // portfolio BEFORE its NAV data ever loaded (e.g. added while the
+    // scheme-code bug was still live) — its purchase record was saved
+    // with price:null at that time and nothing else ever revisits it.
+    // A holding can reach this point either because it just got its NAV
+    // data downloaded above, or because it already had a current price
+    // all along but was never backfilled. Only fills in missing prices;
+    // never overwrites a price that's already recorded.
+    var freshScanR = (typeof win.ptGetScanR === 'function') ? win.ptGetScanR() : [];
+    var freshPriceOf = {};
+    freshScanR.forEach(function(r) { var k = r.name ? r.name.toLowerCase().replace(/[^a-z0-9]/gi, '') : ''; freshPriceOf[k] = r.price; });
+    names.forEach(function(n) {
+      if (!PState.purchases[n] || PState.purchases[n].price != null) return;
+      var pdate = PState.purchases[n].date;
+      var histClose = (typeof _psHistCloseForDate === 'function') ? _psHistCloseForDate(n, pdate) : null;
+      var norm = n.toLowerCase().replace(/[^a-z0-9]/gi, '');
+      var fallbackPrice = freshPriceOf[norm];
+      var resolved = histClose != null ? histClose : (fallbackPrice != null ? fallbackPrice : null);
+      if (resolved != null) PState.purchases[n].price = resolved;
+    });
+    psSave();
+
     if (typeof renderDashboardView === 'function') renderDashboardView();
   } finally {
     if (btn) { btn.textContent = 'Retry Download'; btn.disabled = false; }
