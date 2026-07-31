@@ -19,7 +19,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Timeline_1A">
+  <meta name="apple-mobile-web-app-title" content="Timeline_12A5">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon.png">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
@@ -2319,6 +2319,19 @@ var BB = (function() {
     return set('ld_backup_last_date', val);
   }
 
+  // NPS/BAF merge-into-scanner-rows date (perf fix): the merge step
+  // (hmMergeNPSIntoDailyMap / hmMergeBAFIntoDailyMap) re-derives daily/
+  // weekly/monthly strings for every NPS scheme and BAF fund and writes
+  // them back to IndexedDB. This was running unconditionally on every
+  // app start/scan even though NPS/BAF source data itself only refreshes
+  // once a day — the raw download was already freshness-gated, this
+  // merge step wasn't. Stamped once the merge completes for the day;
+  // ptRunScan checks this before re-running the merge.
+  function npsBafMergeLastDate(val) {
+    if (val === undefined) return get('ld_npsbaf_merge_last_date') || '';
+    return set('ld_npsbaf_merge_last_date', val);
+  }
+
   // Market Breadth history: [{date:"YYYY-MM-DD", large, mid, small}, ...]
   // Appended once per scan by Container M; capped at 26 weekly points.
   function breadthHistory(data) {
@@ -2369,6 +2382,7 @@ var BB = (function() {
     hmTfDays: hmTfDays,
     hmPeriod: hmPeriod,
     backupLastDate: backupLastDate,
+    npsBafMergeLastDate: npsBafMergeLastDate,
     breadthHistory: breadthHistory,
     storageWarned: storageWarned
   };
@@ -3197,29 +3211,6 @@ async function ldApplyBackupJson(text) {
         console.warn('[LD] Could not refresh in-memory cache after restore', e);
       }
     }
-    // BUG FIX: the refresh above repopulates window._deepWeeklyCache.dailyMap
-    // straight from the 3-container IndexedDB store, which holds NSE index
-    // data ONLY — the [NPS]/[BAF] fund keys are not persisted there; they
-    // only exist in dailyMap because hmMergeNPSIntoDailyMap()/
-    // hmMergeBAFIntoDailyMap() inject them at runtime (see those functions).
-    // Previously the ONLY way those merges re-ran after a restore was via
-    // the tab-specific dispatch below (tab-pt/explore/watch/hilega/
-    // npsswitch/tactical each happen to call a merge internally) — so if
-    // Restore ran while any OTHER view was active (e.g. the default
-    // Portfolio dashboard, which has no matching branch below), the
-    // in-memory cache was left with zero NPS/BAF entries until the person
-    // manually switched tabs or reloaded the page. Symptom: "6 holdings
-    // need attention... NAV history failed to download" immediately after
-    // a restore, even though the NAV data was present and correct in the
-    // restored npsCache/bafCache the whole time. Running both merges here
-    // unconditionally — before any tab-specific re-render — guarantees
-    // dailyMap has the fund data back regardless of which tab was open.
-    try {
-      if (typeof window.hmMergeNPSIntoDailyMap === 'function') await window.hmMergeNPSIntoDailyMap();
-      if (typeof window.hmMergeBAFIntoDailyMap === 'function') await window.hmMergeBAFIntoDailyMap();
-    } catch (e) {
-      console.warn('[LD] Post-restore NPS/BAF merge into dailyMap failed', e);
-    }
     if (restoreResult.failed.length > 0) {
       // At least one key didn't fit (most likely storage quota) — say so
       // explicitly instead of quietly reporting a lower count with no
@@ -3593,6 +3584,7 @@ window.addEventListener('appinstalled', () => {
 <script>
 // Toggle tab visibility; lazy-init + auto-scan on first activation
 function switchTab(name) {
+  var _diagT0 = performance.now();
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   var btn=document.querySelector('.tab-btn[data-tab="' + name + '"]');
@@ -3663,6 +3655,16 @@ function switchTab(name) {
   if (name === 'setup' && typeof window.PSnap !== 'undefined' && typeof window.PSnap.searchPopulateCatDropdown === 'function') { window.PSnap.searchPopulateCatDropdown(); }
   if (name === 'npsswitch' && typeof window.onNpsSwitchTabActivated === 'function') { window.onNpsSwitchTabActivated(); }
   if (name === 'tactical' && typeof window.onTacticalTabActivated === 'function') { window.onTacticalTabActivated(); }
+  var _diagMs = (performance.now() - _diagT0).toFixed(0);
+  console.log('[DIAG] switchTab("' + name + '") sync portion took ' + _diagMs + 'ms');
+  try {
+    var _diagEl2 = document.getElementById('pt-st');
+    if (_diagEl2) {
+      _diagEl2.textContent = '🔍 DIAG: switchTab("' + name + '") took ' + _diagMs + 'ms (sync) — ' + new Date().toLocaleTimeString();
+      _diagEl2.style.color = '#c00';
+      _diagEl2.style.fontWeight = 'bold';
+    }
+  } catch(e) {}
 }
 
 // ═══ SCAN ALL: Sequential orchestration ═══
@@ -3932,6 +3934,7 @@ window.hmMergeNPSIntoDailyMap = async function(onRow) {
     new Promise(function(_, rej) { setTimeout(function(){ rej(new Error('NPS cache timeout')); }, 10000); })
   ]).catch(function(){ return { npsMap: {} }; });
   var npsMap = (npsCache && npsCache.npsMap) || {};
+  var _NPS_BLACKLIST = ['SM008003'];
   var npsCount = 0;
   if (!window._deepWeeklyCache) window._deepWeeklyCache = {};
   if (!window._deepWeeklyCache.dailyMap) window._deepWeeklyCache.dailyMap = {};
@@ -3959,7 +3962,16 @@ window.hmMergeNPSIntoDailyMap = async function(onRow) {
     window._idbGet(window.DEEP_CACHE_KEY_MONTHLY, function(m) { res((m && m.monthlyMap) ? m : { monthlyMap: {} }); });
   }).catch(function(){ return { monthlyMap: {} }; });
   var idbDailyMapChanged = false;
+  // Perf fix: deriving weekly/monthly strings + the 3 IndexedDB writes
+  // below only need to happen once per day — NPS source NAVs don't
+  // change intra-day. The in-memory dailyMap update and onRow callback
+  // still run every scan (cheap, and ptAllComputedRows needs these rows
+  // every time) — only the expensive re-derivation+write is skipped on
+  // repeat scans/app-starts within the same day.
+  var _npsMergeToday = ldTodayIstStr();
+  var _npsMergeAlreadyDoneToday = (BB.npsBafMergeLastDate() === _npsMergeToday);
   Object.keys(npsMap).forEach(function(code) {
+    if (_NPS_BLACKLIST.indexOf(code) !== -1) return;
     var navRows = npsMap[code]; // newest-first: [{date, nav}, ...]
     if (!navRows || navRows.length < 20) return;
     // Chart consumers (dailyEntriesFor) expect oldest-first, matching NSE.
@@ -3977,15 +3989,17 @@ window.hmMergeNPSIntoDailyMap = async function(onRow) {
       return ddmm + '|' + v + '|' + v + '|' + v + '|' + v;
     });
     window._deepWeeklyCache.dailyMap[normName] = dailyEntries;
-    idbDaily.dailyMap[normName] = dailyEntries;
-    // Aggregate into the WEEKLY and MONTHLY containers' own records —
-    // never the daily record. Key convention matches what those two
-    // containers are confirmed to use for NSE indices: fully stripped,
-    // no spaces/punctuation (e.g. "nifty50", not "nifty 50").
-    var normKeyStripped = normName.replace(/[^a-z0-9]/g, '');
-    idbWeekly.weeklyMap[normKeyStripped] = _deriveWeeklyStrings(dailyEntries);
-    idbMonthly.monthlyMap[normKeyStripped] = _deriveMonthlyStrings(dailyEntries);
-    idbDailyMapChanged = true;
+    if (!_npsMergeAlreadyDoneToday) {
+      idbDaily.dailyMap[normName] = dailyEntries;
+      // Aggregate into the WEEKLY and MONTHLY containers' own records —
+      // never the daily record. Key convention matches what those two
+      // containers are confirmed to use for NSE indices: fully stripped,
+      // no spaces/punctuation (e.g. "nifty50", not "nifty 50").
+      var normKeyStripped = normName.replace(/[^a-z0-9]/g, '');
+      idbWeekly.weeklyMap[normKeyStripped] = _deriveWeeklyStrings(dailyEntries);
+      idbMonthly.monthlyMap[normKeyStripped] = _deriveMonthlyStrings(dailyEntries);
+      idbDailyMapChanged = true;
+    }
     npsCount++;
     if (typeof onRow === 'function') onRow(closes, schemeName, navRows);
   });
@@ -3993,6 +4007,7 @@ window.hmMergeNPSIntoDailyMap = async function(onRow) {
     await window._idbPut(window.DEEP_CACHE_KEY_DAILY, idbDaily).catch(function(){});
     await window._idbPut(window.DEEP_CACHE_KEY_WEEKLY, idbWeekly).catch(function(){});
     await window._idbPut(window.DEEP_CACHE_KEY_MONTHLY, idbMonthly).catch(function(){});
+    BB.npsBafMergeLastDate(_npsMergeToday);
   }
   return npsCount;
 };
@@ -4022,6 +4037,11 @@ window.hmMergeBAFIntoDailyMap = async function(onRow) {
     window._idbGet(window.DEEP_CACHE_KEY_MONTHLY, function(m) { res((m && m.monthlyMap) ? m : { monthlyMap: {} }); });
   }).catch(function(){ return { monthlyMap: {} }; });
   var idbDailyMapChanged = false;
+  // Perf fix: same once-per-day gating as the NPS merge above — see that
+  // function's comment for the rationale. BAF NAVs don't change intra-day
+  // either, so the expensive re-derivation+write only needs to run once.
+  var _bafMergeToday = ldTodayIstStr();
+  var _bafMergeAlreadyDoneToday = (BB.npsBafMergeLastDate() === _bafMergeToday);
   // Build code → fund name lookup from BAF_FUNDS (Section 1), same pattern
   // as DD.NPS._schemeNames for the NPS side.
   var codeToName = {};
@@ -4044,11 +4064,13 @@ window.hmMergeBAFIntoDailyMap = async function(onRow) {
       return ddmm + '|' + v + '|' + v + '|' + v + '|' + v;
     });
     window._deepWeeklyCache.dailyMap[normName] = dailyEntries;
-    idbDaily.dailyMap[normName] = dailyEntries;
-    var normKeyStripped = normName.replace(/[^a-z0-9]/g, '');
-    idbWeekly.weeklyMap[normKeyStripped] = _deriveWeeklyStrings(dailyEntries);
-    idbMonthly.monthlyMap[normKeyStripped] = _deriveMonthlyStrings(dailyEntries);
-    idbDailyMapChanged = true;
+    if (!_bafMergeAlreadyDoneToday) {
+      idbDaily.dailyMap[normName] = dailyEntries;
+      var normKeyStripped = normName.replace(/[^a-z0-9]/g, '');
+      idbWeekly.weeklyMap[normKeyStripped] = _deriveWeeklyStrings(dailyEntries);
+      idbMonthly.monthlyMap[normKeyStripped] = _deriveMonthlyStrings(dailyEntries);
+      idbDailyMapChanged = true;
+    }
     bafCount++;
     if (typeof onRow === 'function') onRow(closes, fundName, navRows);
   });
@@ -4056,12 +4078,26 @@ window.hmMergeBAFIntoDailyMap = async function(onRow) {
     await window._idbPut(window.DEEP_CACHE_KEY_DAILY, idbDaily).catch(function(){});
     await window._idbPut(window.DEEP_CACHE_KEY_WEEKLY, idbWeekly).catch(function(){});
     await window._idbPut(window.DEEP_CACHE_KEY_MONTHLY, idbMonthly).catch(function(){});
+    BB.npsBafMergeLastDate(_bafMergeToday);
   }
   return bafCount;
 };
 
 // ── 10.6 Main Scan ──
 async function ptRunScan(){
+  // DIAG: temporary counter to see how many times a full scan (NSE fetch +
+  // compute) actually runs per session — visible in the status strip and
+  // console. Remove once tab-switch performance is diagnosed.
+  window._ptScanCallCount = (window._ptScanCallCount || 0) + 1;
+  console.log('[DIAG] ptRunScan() call #' + window._ptScanCallCount + ' at ' + new Date().toLocaleTimeString());
+  try {
+    var _diagEl = document.getElementById('pt-st');
+    if (_diagEl) {
+      _diagEl.textContent = '🔍 DIAG: full scan #' + window._ptScanCallCount + ' started ' + new Date().toLocaleTimeString();
+      _diagEl.style.color = '#c00';
+      _diagEl.style.fontWeight = 'bold';
+    }
+  } catch(e) {}
   // If a scan is already in flight (kicked off by another tab's
   // activation), return that SAME promise instead of bailing out with
   // undefined — callers like switchTab('watch')/('explore') that need to
@@ -4075,6 +4111,12 @@ async function ptRunScan(){
 async function _ptRunScanImpl(){
   _ptScanRunning=true;
   ptLogClear();
+  // Invalidate EE memo cache — new scan may bring fresh data, so stale
+  // cached series/HM-status values must not outlive this scan start.
+  if (window.EE && typeof window.EE.invalidateMemo === 'function') window.EE.invalidateMemo();
+  // Also reset chart-tab NPS/BAF merge guard so the next chart open
+  // re-merges the freshly downloaded NPS/BAF data into dailyMap.
+  window._hmMergeCompletedMapSize = 0;
   var _ptScanStartTs=Date.now(); // used below to measure real elapsed time for the "Cache is fresh" banner's next-scan ETA
   ptEl('pt-st').innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #b8860b;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> Loading data...';
   ptScanR=[];
@@ -4330,6 +4372,11 @@ async function _ptRunScanImpl(){
   ptEl('pt-ts').textContent=new Date().toLocaleString();
   _ptScanCompletedAt=Date.now();
   ptLog('✅ Scan complete — '+count+' indices (NSE + NPS + BAF)');
+  // Pre-warm EE memo for ALL computed names in background chunks so every
+  // subsequent tab switch is O(1) cache hits instead of full RSI recomputes.
+  if (window.EE && typeof window.EE.warmMemo === 'function') {
+    window.EE.warmMemo(ptAllComputedRows.map(function(r){return r.name;}));
+  }
   // Persist how long THIS scan actually took (in seconds), so the next
   // "Cache is fresh" banner can tell the person a realistic wait time
   // instead of a made-up number. A rolling average of the last 5 runs
@@ -4347,7 +4394,20 @@ async function _ptRunScanImpl(){
     }
   }catch(e){/* non-critical — banner just falls back to a default estimate */}
   if(typeof PSnap!=='undefined')PSnap.onScanComplete();
-  }catch(e){ptLog('❌ Scan error: '+(e.message||e));console.warn('[PT] scan error:',e);}
+  }catch(e){
+    ptLog('❌ Scan error: '+(e.message||e));
+    console.warn('[PT] scan error:',e);
+    // Same fix as onScanComplete(), applied on the error path too: if the
+    // scan failed partway through (e.g. NSE fetch returned empty data),
+    // PSnap.onScanComplete() above is never reached, so ptScanR would
+    // otherwise stay permanently empty — re-triggering a full scan on
+    // every subsequent tab switch even though ptAllComputedRows may still
+    // hold valid data from an earlier successful scan this session (or,
+    // if this is the very first scan and it failed, an empty array here
+    // is the correct/honest state — ptApplyHiddenFilter's own guard
+    // re-attempts a scan in that case, same as a cold start would).
+    if(typeof win.ptApplyHiddenFilter==='function')win.ptApplyHiddenFilter();
+  }
   finally{_ptScanRunning=false;}
 }
 
@@ -4994,15 +5054,44 @@ function onRowNumClick(i){
 // Section 10.5/11). RSI Weekly and RS Score are computed directly from
 // Container EE's migrated formulas against the Data Engine's deep daily
 // cache, the same source Hilega charts from.) ──
-function scannerRowFor(name){
+// ── PERF: O(1) scanR lookup maps ──
+// The linear O(n) scan inside scannerRowFor() was called 4-5 times per row
+// per render (regime / pwma / ba / signal / returns columns all call it).
+// For 175 rows that's ~875 full linear scans of a 175-element array per
+// single tab switch. These two maps (exact name + normalized name) reduce
+// every lookup to a hash hit. Rebuilt whenever scanR's length changes,
+// which only happens after a scan — so they're effectively per-scan caches.
+var _scanRMapCache={len:-1,byExact:null,byNorm:null};
+// _rsDetailMemo and _compositeScoreMemo: keyed by name, valid for the same
+// scanR.length. rsDetailFor() calls EE.computeRSScore() and scans scanR
+// TWICE per call (fund row + bench row) — 3 COL_DEFS columns each call it
+// independently per row, so each rendered row triggered 3×2=6 linear scans.
+// compositeScoreFor() calls scannerRowFor+hmScoreFor+rsScoreFor+baPctFor
+// and is called ≥2× per candidate in renderMatchingIndex.
+var _rsDetailMemo={len:-1,cache:null};
+var _compositeScoreMemo={len:-1,cache:null};
+function _ensureScanRMaps(){
   var scanR=(typeof win.ptGetScanR==='function')?win.ptGetScanR():[];
-  var norm=name?name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
+  if(_scanRMapCache.len===scanR.length&&_scanRMapCache.byExact)return {scanR:scanR,byExact:_scanRMapCache.byExact,byNorm:_scanRMapCache.byNorm};
+  var byExact=Object.create(null),byNorm=Object.create(null);
   for(var i=0;i<scanR.length;i++){
-    if(scanR[i].name===name)return scanR[i];
-    var rn=scanR[i].name?scanR[i].name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
-    if(rn===norm)return scanR[i];
+    var r=scanR[i];
+    if(r.name)byExact[r.name]=r;
+    var rn=r.name?r.name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
+    if(rn&&!byNorm[rn])byNorm[rn]=r;
   }
-  return null;
+  _scanRMapCache={len:scanR.length,byExact:byExact,byNorm:byNorm};
+  // Invalidate dependent memos whenever the map is rebuilt.
+  _rsDetailMemo={len:-1,cache:null};
+  _compositeScoreMemo={len:-1,cache:null};
+  return {scanR:scanR,byExact:byExact,byNorm:byNorm};
+}
+function scannerRowFor(name){
+  var maps=_ensureScanRMaps();
+  if(!name)return null;
+  if(maps.byExact[name])return maps.byExact[name];
+  var norm=name.toLowerCase().replace(/[^a-z0-9]/gi,'');
+  return maps.byNorm[norm]||null;
 }
 // RSI Weekly: W-RSI(4)·W-RSI(8)·W-RSI(14) with colored ticks
 // Green ✓ (>50), Orange ● (40-50), Red ✗ (<40)
@@ -5038,57 +5127,40 @@ function baPctFor(name){
   if(wRsi>=40)return Math.round(20+(wRsi-40)*1.5);
   return Math.round(Math.max(0,wRsi-20));
 }
-// RS Score vs Nifty 50 benchmark, computed directly via EE.computeRSScore
-// from this index's own deep-cache daily closes and the benchmark's —
-// same formula the (now-retired) RS Scanner tab used.
+// RS Score vs Nifty 50 benchmark — now just a thin wrapper over the memoized
+// rsDetailFor(), so the previously-duplicated scanR double-scan is eliminated.
 function rsScoreFor(name){
-  if(!window.EE||typeof window.EE.computeRSScore!=='function')return null;
-  var scanR=(typeof win.ptGetScanR==='function')?win.ptGetScanR():[];
-  var norm=name?name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
-  var fundRow=null;for(var i=0;i<scanR.length;i++){
-    if(scanR[i].name===name){fundRow=scanR[i];break;}
-    var rn=scanR[i].name?scanR[i].name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
-    if(rn===norm){fundRow=scanR[i];break;}
-  }
-  var benchNorm='nifty50';
-  var benchRow=null;for(var i=0;i<scanR.length;i++){
-    if(scanR[i].name==='Nifty 50'||scanR[i].name==='nifty50'){benchRow=scanR[i];break;}
-    var rn=scanR[i].name?scanR[i].name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
-    if(rn===benchNorm){benchRow=scanR[i];break;}
-  }
-  var fundCloses=fundRow&&fundRow.closes?fundRow.closes:[];
-  var benchCloses=benchRow&&benchRow.closes?benchRow.closes:[];
-  var minLen=Math.min(fundCloses.length,benchCloses.length);
-  if(minLen<20)return null;
-  var useLen=Math.max(21,minLen);
-  var fChg1m=window.EE.realReturn(fundCloses,Math.min(21,useLen-1)),bChg1m=window.EE.realReturn(benchCloses,Math.min(21,useLen-1));
-  var res=window.EE.computeRSScore(fundCloses.slice(-useLen),benchCloses.slice(-useLen),fChg1m,bChg1m);
-  return res&&res.score!=null?res.score:null;
+  var d=rsDetailFor(name);
+  return d&&d.score!=null?d.score:null;
 }
-// Full RS detail: returns {rs1m, rs2m, rs3m, score, signal} for a given index name
+// Full RS detail: returns {rs1m, rs2m, rs3m, score, signal} for a given index name.
+// PERF: memoized per scanR generation — 3 COL_DEFS columns (rs1m, rs2m, rs3m) plus
+// signal all call this independently per row, so each row was paying 3× the cost.
+// With the memo every column after the first is a free O(1) hash hit.
 function rsDetailFor(name){
   if(!window.EE||typeof window.EE.computeRSScore!=='function')return null;
-  var scanR=(typeof win.ptGetScanR==='function')?win.ptGetScanR():[];
-  var norm=name?name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
-  var fundRow=null;for(var i=0;i<scanR.length;i++){
-    if(scanR[i].name===name){fundRow=scanR[i];break;}
-    var rn=scanR[i].name?scanR[i].name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
-    if(rn===norm){fundRow=scanR[i];break;}
+  var maps=_ensureScanRMaps();
+  // Fast path: return cached result if scanR hasn't changed since last call.
+  if(_rsDetailMemo.len===maps.scanR.length&&_rsDetailMemo.cache){
+    var hit=_rsDetailMemo.cache[name||''];
+    if(hit!==undefined)return hit; // hit===null means "computed null"; !== undefined means cached
+  } else {
+    _rsDetailMemo={len:maps.scanR.length,cache:Object.create(null)};
   }
-  var benchNorm='nifty50';
-  var benchRow=null;for(var i=0;i<scanR.length;i++){
-    if(scanR[i].name==='Nifty 50'||scanR[i].name==='nifty50'){benchRow=scanR[i];break;}
-    var rn=scanR[i].name?scanR[i].name.toLowerCase().replace(/[^a-z0-9]/gi,''):'';
-    if(rn===benchNorm){benchRow=scanR[i];break;}
-  }
+  // Use O(1) maps built by _ensureScanRMaps instead of re-scanning scanR.
+  var fundRow=scannerRowFor(name);
+  var benchRow=maps.byExact['Nifty 50']||maps.byNorm['nifty50']||null;
   var fundCloses=fundRow&&fundRow.closes?fundRow.closes:[];
   var benchCloses=benchRow&&benchRow.closes?benchRow.closes:[];
   var minLen=Math.min(fundCloses.length,benchCloses.length);
-  if(minLen<20)return null;
-  var useLen=Math.max(21,minLen);
-  var fChg1m=window.EE.realReturn(fundCloses,Math.min(21,useLen-1)),bChg1m=window.EE.realReturn(benchCloses,Math.min(21,useLen-1));
-  var res=window.EE.computeRSScore(fundCloses.slice(-useLen),benchCloses.slice(-useLen),fChg1m,bChg1m);
-  return res||null;
+  var result=null;
+  if(minLen>=20){
+    var useLen=Math.max(21,minLen);
+    var fChg1m=window.EE.realReturn(fundCloses,Math.min(21,useLen-1)),bChg1m=window.EE.realReturn(benchCloses,Math.min(21,useLen-1));
+    result=window.EE.computeRSScore(fundCloses.slice(-useLen),benchCloses.slice(-useLen),fChg1m,bChg1m)||null;
+  }
+  _rsDetailMemo.cache[name||'']=result;
+  return result;
 }
 
 // ── Column registry ──
@@ -5960,7 +6032,17 @@ function updateHeaderStats(){
 // redundant double-counting. HM Score is used here (not the strict
 // hmAllGreen gate) since this is a graded ranking, not a pass/fail filter.
 // Weights: HM Score 40, RS Score 30, P>WMA 15, BA Weightage 15.
+// PERF: memoized per scanR generation — renderMatchingIndex calls this
+// once per portfolio name (for the avg) AND once per candidate name, so
+// without a memo every candidate recalculates 4 sub-scores from scratch.
 function compositeScoreFor(name){
+  var maps=_ensureScanRMaps();
+  if(_compositeScoreMemo.len===maps.scanR.length&&_compositeScoreMemo.cache){
+    var hit=_compositeScoreMemo.cache[name||''];
+    if(hit!==undefined)return hit;
+  } else {
+    _compositeScoreMemo={len:maps.scanR.length,cache:Object.create(null)};
+  }
   var r=scannerRowFor(name);
   var score=0;
   var hm=hmScoreFor(name);
@@ -5970,6 +6052,7 @@ function compositeScoreFor(name){
   if(rs!=null)score+=Math.max(0,Math.min(30,Number(rs)));
   var ba=baPctFor(name);
   if(ba!=null)score+=Math.max(0,Math.min(15,Number(ba)/10*1.5));
+  _compositeScoreMemo.cache[name||'']=score;
   return score;
 }
 
@@ -6210,7 +6293,7 @@ function monthlyGreenAboveSMA8List(){
     if(typeof win.ptIsHidden==='function'&&win.ptIsHidden(idx.name))return;
     var entries=(window.EE&&typeof window.EE.dailyEntriesFor==='function')?window.EE.dailyEntriesFor(idx.name):null;
     if(!entries||entries.length<40)return; // need enough daily history to form 8+ monthly candles
-    var monthly=(window.EE&&typeof window.EE.toMonthlyCloses==='function')?window.EE.toMonthlyCloses(entries):null;
+    var monthly=(window.EE&&typeof window.EE.toMonthlyClosesCached==='function')?window.EE.toMonthlyClosesCached(idx.name,entries):(window.EE&&typeof window.EE.toMonthlyCloses==='function')?window.EE.toMonthlyCloses(entries):null;
     if(!monthly||monthly.length<8)return; // need at least 8 candles for a real SMA(8)
     var cur=monthly[monthly.length-1];
     if(!cur||cur.c==null||cur.o==null||cur.l==null)return;
@@ -6248,7 +6331,7 @@ function monthlyRedAtOrAboveSMA8List(){
     if(typeof win.ptIsHidden==='function'&&win.ptIsHidden(idx.name))return;
     var entries=(window.EE&&typeof window.EE.dailyEntriesFor==='function')?window.EE.dailyEntriesFor(idx.name):null;
     if(!entries||entries.length<40)return;
-    var monthly=(window.EE&&typeof window.EE.toMonthlyCloses==='function')?window.EE.toMonthlyCloses(entries):null;
+    var monthly=(window.EE&&typeof window.EE.toMonthlyClosesCached==='function')?window.EE.toMonthlyClosesCached(idx.name,entries):(window.EE&&typeof window.EE.toMonthlyCloses==='function')?window.EE.toMonthlyCloses(entries):null;
     if(!monthly||monthly.length<8)return;
     var cur=monthly[monthly.length-1];
     if(!cur||cur.c==null||cur.o==null||cur.l==null)return;
@@ -6602,6 +6685,20 @@ function renderPtStats(){
 // Called once per ⚡ SCAN ALL / Portfolio Snapshot scan completion — keeps
 // the header stat boxes and (if open) the Summary/Matching tables current.
 function onScanComplete(){
+  // BUG FIX: ptScanR is reset to [] at the START of every scan (see
+  // _ptRunScanImpl) but was never being refilled from ptAllComputedRows
+  // once the scan finished — only ptApplyHiddenFilter() does that
+  // assignment, and nothing was calling it here. Net effect: ptScanR
+  // stayed permanently empty after every single scan, so the very next
+  // tab activation's cold-start check (`if(!scanR.length) ptRunScan()`
+  // in onTabActivated, Section 10.5) always saw an empty array and
+  // kicked off ANOTHER full scan — re-fetching NSE prices and re-running
+  // the NPS/BAF merge on every tab switch, forever, even though the data
+  // had just been computed seconds earlier. This one call is the fix:
+  // it does the same ptAllComputedRows -> ptScanR assignment
+  // ptApplyHiddenFilter() already does elsewhere, so cold-start checks
+  // correctly see a populated array after this point.
+  if(typeof win.ptApplyHiddenFilter==='function')win.ptApplyHiddenFilter();
   updateHeaderStats();
   renderPtStats();
   renderSummary();
@@ -8458,6 +8555,17 @@ var EE = (function() {
     return cache.dailyMap[key] || cache.dailyMap[normKey] || null;
   }
 
+  // ── PERF: per-session memoization for expensive series/HM computations ──
+  // Keyed by name+period+rsiLen. Cleared at the START of every scan
+  // (data may have changed) and pre-warmed in background chunks AFTER
+  // scan completes, so every subsequent tab switch is an O(1) cache hit.
+  var _seriesMemo = Object.create(null);   // key: name+'|'+period+'|'+rsiLen
+  var _hmStatusMemo = Object.create(null); // key: name
+  // Weekly closes memo: keyed by entries array identity (length + last entry).
+  // Re-aggregating 2500 daily strings → weekly on every render was the
+  // single biggest per-row cost inside seriesFor('weekly') calls.
+  var _weeklyMemo = Object.create(null);   // key: entries.length+'|'+lastEntry
+
   // ── Full RSI/WMA/EMA series for an index at a given period ──
   // period: 'daily' | 'weekly' | 'monthly'
   // Returns { closes, rsi, wma, ema } arrays (all same indexing as closes)
@@ -8465,13 +8573,26 @@ var EE = (function() {
   function seriesFor(name, period, opts) {
     opts = opts || {};
     var rsiLen = opts.rsiLen || 9, wmaLen = opts.wmaLen || 21, emaLen = opts.emaLen || 3;
+    // Fast path: return memoized result if data hasn't changed.
+    var memoKey = (name || '') + '|' + period + '|' + rsiLen;
+    if (_seriesMemo[memoKey]) return _seriesMemo[memoKey];
     var entries = dailyEntriesFor(name);
     if (!entries || entries.length < 40) return null;
     var closes;
     if (period === 'weekly') {
-      closes = toWeeklyCloses(entries).map(function(w) { return w.c; });
+      // Memo the expensive daily→weekly aggregation separately so it's
+      // shared across multiple rsiLen calls on the same entries array.
+      var wkKey = entries.length + '|' + entries[entries.length - 1];
+      var wkHit = _weeklyMemo[wkKey];
+      if (!wkHit) {
+        wkHit = toWeeklyCloses(entries).map(function(w) { return w.c; });
+        _weeklyMemo[wkKey] = wkHit;
+      }
+      closes = wkHit;
     } else if (period === 'monthly') {
-      closes = toMonthlyClosesEE(entries).map(function(m) { return m.c; });
+      // toMonthlyClosesCached is already declared below — uses its own
+      // length+last-entry cache key so this is also O(1) after first call.
+      closes = toMonthlyClosesCached(name, entries).map(function(m) { return m.c; });
     } else {
       closes = entries.map(function(e) { var p = e.split('|'); return parseFloat(p[4]); }).filter(function(x){ return !isNaN(x); });
     }
@@ -8479,7 +8600,9 @@ var EE = (function() {
     var rsi = calcRSI(closes, rsiLen);
     var wma = calcWMA(rsi, wmaLen);
     var ema = calcEMA(rsi, emaLen);
-    return { closes: closes, rsi: rsi, wma: wma, ema: ema };
+    var result = { closes: closes, rsi: rsi, wma: wma, ema: ema };
+    _seriesMemo[memoKey] = result;
+    return result;
   }
 
   // ── HM Status (Monthly / Weekly / Daily RSI(9) vs 50) ──
@@ -8487,13 +8610,18 @@ var EE = (function() {
   // the accurate calendar-week/month methodology used by Hilega, per
   // TradingView-matching requirement.
   function hmStatusFor(name) {
+    // Fast path: cached result is reused until the next scan invalidates it.
+    var nameKey = name || '';
+    if (_hmStatusMemo[nameKey]) return _hmStatusMemo[nameKey];
     var d = seriesFor(name, 'daily', { rsiLen: 9 });
     var w = seriesFor(name, 'weekly', { rsiLen: 9 });
     var m = seriesFor(name, 'monthly', { rsiLen: 9 });
     var dv = d && d.rsi.length ? d.rsi[d.rsi.length - 1] : null;
     var wv = w && w.rsi.length ? w.rsi[w.rsi.length - 1] : null;
     var mv = m && m.rsi.length ? m.rsi[m.rsi.length - 1] : null;
-    return { daily: dv, weekly: wv, monthly: mv };
+    var result = { daily: dv, weekly: wv, monthly: mv };
+    _hmStatusMemo[nameKey] = result;
+    return result;
   }
 
   // ── 11.8c Chart-Safe (gap-tolerant, index-preserving) Series ──
@@ -8943,12 +9071,38 @@ var EE = (function() {
     return { signal: signal, signalClass: signalClass, zone: zone, zoneClass: zoneClass, sma8: sma8v.toFixed(0), sma21: sma21v.toFixed(0), haBull: haBull, approx: approx, reason: reasons.join(" · ") };
   }
 
+  // ── Monthly-close cache (perf fix) ──
+  // toMonthlyCloses() re-aggregates the ENTIRE daily history (up to ~2500
+  // entries per index) from scratch every time it's called. Explore and
+  // Watch tabs both call this for all ~181 indices on EVERY tab
+  // activation (monthlyGreenAboveSMA8List / monthlyRedAtOrAboveSMA8List),
+  // even though the underlying daily data only actually changes once per
+  // scan. Measured cost: ~800ms+ for 181 indices x 2500 days on a fast
+  // desktop CPU — several seconds on a phone — repeated on every single
+  // tab switch, which was the real cause of the "switching tabs is slow"
+  // reports (not re-fetching, not re-rendering — this recomputation).
+  // Fix: cache the result per index, keyed to the entries array's length
+  // and its last element (a cheap, reliable proxy for "has this index's
+  // daily data changed since last time" — new scans append/replace
+  // entries, changing either the count or the newest entry's content).
+  var _monthlyCloseCache = {}; // name -> { key, result }
+  function toMonthlyClosesCached(name, entries) {
+    if (!entries || !entries.length) return toMonthlyClosesEE(entries);
+    var key = entries.length + '|' + entries[entries.length - 1];
+    var hit = _monthlyCloseCache[name];
+    if (hit && hit.key === key) return hit.result;
+    var result = toMonthlyClosesEE(entries);
+    _monthlyCloseCache[name] = { key: key, result: result };
+    return result;
+  }
+
   return {
     calcRSI: calcRSI,
     calcWMA: calcWMA,
     calcEMA: calcEMA,
     toWeeklyCloses: toWeeklyCloses,
     toMonthlyCloses: toMonthlyClosesEE,
+    toMonthlyClosesCached: toMonthlyClosesCached,
     dailyEntriesFor: dailyEntriesFor,
     seriesFor: seriesFor,
     hmStatusFor: hmStatusFor,
@@ -8980,7 +9134,32 @@ var EE = (function() {
     runExecutionTree: runExecutionTree,
     calcSMA: calcSMA,
     computeHACandles: computeHACandles,
-    computeHABandSignal: computeHABandSignal
+    computeHABandSignal: computeHABandSignal,
+    // ── PERF: memo management API ──
+    // invalidateMemo(): called at the START of every scan so stale cached
+    // series/HM-status values don't outlive the fresh data being loaded.
+    invalidateMemo: function() {
+      _seriesMemo = Object.create(null);
+      _hmStatusMemo = Object.create(null);
+      _weeklyMemo = Object.create(null);
+      _monthlyCloseCache = {};
+    },
+    // warmMemo(names): pre-compute and cache hmStatusFor() for every name
+    // in background chunks immediately after a scan completes — so the
+    // FIRST tab switch after a scan is just as fast as every later one.
+    // Uses chunked setTimeout so the main thread stays fully responsive
+    // during pre-warming (no jank even on slow phones).
+    warmMemo: function(names) {
+      if (!names || !names.length) return;
+      var i = 0;
+      var CHUNK = 15; // names per chunk — ~1-3 ms each on modern hardware
+      function chunk() {
+        var end = Math.min(i + CHUNK, names.length);
+        for (; i < end; i++) { try { hmStatusFor(names[i]); } catch(e){} }
+        if (i < names.length) setTimeout(chunk, 4);
+      }
+      setTimeout(chunk, 50); // small delay so the UI can settle first
+    }
   };
 })();
 win.EE = EE;
@@ -10891,10 +11070,24 @@ function openHilegaTab() {
   // NPS so they also appear in the Chart tab's Category/Index dropdowns
   // without requiring Portfolio Snapshot to have scanned first.
   _nsePreloadPromise.then(function() {
+  // PERF GUARD: skip the IDB reads and NPS/BAF merge if the dailyMap
+  // hasn't changed since the last time this tab was opened this session.
+  // The merge runs ~200-400ms of IDB reads on every chart-tab open without
+  // this guard — expensive, and the data is already in dailyMap.
+  var _curMapSize = (window._deepWeeklyCache && window._deepWeeklyCache.dailyMap)
+    ? Object.keys(window._deepWeeklyCache.dailyMap).length : 0;
+  if (window._hmMergeCompletedMapSize && window._hmMergeCompletedMapSize === _curMapSize && _curMapSize > 0) {
+    return Promise.resolve();
+  }
   return Promise.all([
     window.hmMergeNPSIntoDailyMap ? window.hmMergeNPSIntoDailyMap() : null,
     window.hmMergeBAFIntoDailyMap ? window.hmMergeBAFIntoDailyMap() : null
-  ]);
+  ]).then(function() {
+    // Record the post-merge map size so subsequent chart-tab opens can
+    // skip the merge as long as dailyMap's key count hasn't changed.
+    window._hmMergeCompletedMapSize = (window._deepWeeklyCache && window._deepWeeklyCache.dailyMap)
+      ? Object.keys(window._deepWeeklyCache.dailyMap).length : _curMapSize;
+  });
   }).catch(function(){}).then(function(){
   hmPopulateIndexDropdown().then(function(){
   window._hmTfDays = BB.hmTfDays();
