@@ -1826,51 +1826,59 @@ var DD = (function() {
 
     // ── Fetch + parse one scheme's full NAV history ──
     // code: npsnav.in scheme code, e.g. 'SM008001'.
-    // Returns [{date:'DD-MM-YYYY', nav:Number}, ...] (npsnav.in's native
-    // order — newest first — is preserved; caller reverses if ascending
-    // order is needed). Returns [] on any failure — never throws, so
-    // callers can loop over many codes without a try/catch each.
-    // opts: { timeout }
+    // Returns [{date:'DD-MM-YYYY', nav:Number}, ...] newest-first, or []
+    // on any failure — never throws, so callers can loop many codes safely.
+    // TWO-PASS STRATEGY:
+    //   Pass 1 — direct fetch() (npsnav.in sends its own CORS headers),
+    //     30 s timeout via Promise.race (no AbortSignal — in this Brave/PWA
+    //     environment Shields intercepts fetch() options via postMessage and
+    //     AbortSignal is not structured-cloneable, causing an immediate
+    //     "could not be cloned" throw before the request hits the network).
+    //   Pass 2 — if Pass 1 fails OR returns 0 rows (Brave block, timeout on
+    //     slow connection, rate-limit), silently retry via CORS proxy
+    //     rotation (fetchURLXHR). Keeps things invisible to the user while
+    //     ensuring a bad connection doesn't permanently stall all NPS data.
     function fetchHistory(code, opts) {
-      var timeout = (opts && opts.timeout) || 12000;
+      var timeout = (opts && opts.timeout) || 30000; // 30 s for slow mobile (~200 KB / 1 KB/s)
       var url = NPS_HISTORICAL_URL + code;
-      // NOTE: deliberately NOT using AbortController/AbortSignal here. In
-      // this environment, something (Shields/an extension/an internal
-      // relay) intercepts fetch() and tries to structurally clone its
-      // options via window.postMessage — and AbortSignal is not
-      // structured-cloneable, so passing { signal } throws immediately with
-      // "AbortSignal object could not be cloned", failing every single
-      // request before it ever reaches the network. A plain Promise.race
-      // against a timeout achieves the same "give up after N ms" behavior
-      // without needing an abortable signal at all — the underlying fetch
-      // is left to resolve/reject on its own, but its result is simply
-      // ignored if the timeout wins the race first.
-      var fetchPromise = fetch(url).then(function(res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-      });
-      var timeoutPromise = new Promise(function(_, reject) {
-        setTimeout(function() { reject(new Error('timeout after ' + timeout + 'ms')); }, timeout);
-      });
-      return Promise.race([fetchPromise, timeoutPromise]).then(function(json) {
-        // npsnav.in has been observed returning either a bare array or a
-        // {data:[...]} wrapper — the working NPS-Clues_1F reference
-        // implementation handles both (see its fetchFundData), so match
-        // that here rather than assuming only the wrapped shape. Assuming
-        // only json.data silently returned [] for every real scheme code
-        // whenever the API responded with a bare array instead.
+
+      function _parseJson(json) {
+        // npsnav.in returns bare array or {data:[...]} — handle both.
         var rows = Array.isArray(json) ? json : (json && Array.isArray(json.data) ? json.data : null);
-        if (!rows) { console.warn('[NPS] unexpected response shape for', code, json); return []; }
+        if (!rows) { console.warn('[NPS] unexpected shape for', code, json); return []; }
         var parsed = rows.map(function(r) {
           return { date: r.date, nav: parseFloat(r.nav) };
         }).filter(function(r) { return !isNaN(r.nav) && r.nav > 0; });
-        if (parsed.length === 0) console.warn('[NPS]', code, 'returned 0 usable rows from', rows.length, 'raw rows');
+        if (parsed.length === 0) console.warn('[NPS]', code, '→ 0 usable rows from', rows.length, 'raw');
         return parsed;
-      }).catch(function(err) {
-        console.warn('[NPS] fetch failed for', code, '—', err && err.message ? err.message : err);
-        NPS._failedCodes = NPS._failedCodes || [];
-        if (NPS._failedCodes.indexOf(code) === -1) NPS._failedCodes.push(code);
-        return [];
+      }
+
+      // Pass 1: direct
+      var directP = fetch(url).then(function(res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      });
+      var timeoutP = new Promise(function(_, rej) {
+        setTimeout(function() { rej(new Error('timeout ' + timeout + 'ms')); }, timeout);
+      });
+      return Promise.race([directP, timeoutP]).then(function(json) {
+        var rows = _parseJson(json);
+        if (rows.length === 0) throw new Error('zero rows — falling through to proxy');
+        return rows;
+      }).catch(function(directErr) {
+        // Pass 2: CORS proxy fallback
+        console.warn('[NPS]', code, 'direct failed (', directErr.message, ') — proxy fallback');
+        return fetchURLXHR(url, 25000).then(function(res) {
+          if (!res.ok) throw new Error('proxy HTTP ' + res.status);
+          return res.json();
+        }).then(function(json) {
+          return _parseJson(json);
+        }).catch(function(proxyErr) {
+          console.warn('[NPS] proxy also failed for', code, '—', proxyErr.message);
+          NPS._failedCodes = NPS._failedCodes || [];
+          if (NPS._failedCodes.indexOf(code) === -1) NPS._failedCodes.push(code);
+          return [];
+        });
       });
     }
 
@@ -1922,32 +1930,47 @@ var DD = (function() {
     // code: mfapi.in scheme code, e.g. '118968' (HDFC BAF).
     // Returns [{date:'DD-MM-YYYY', nav:Number}, ...] newest-first, or []
     // on any failure — never throws (same contract as NPS.fetchHistory).
+    // Same two-pass strategy as NPS.fetchHistory: direct fetch first,
+    // CORS proxy fallback if direct fails or returns 0 rows.
     function fetchHistory(code, opts) {
-      var timeout = (opts && opts.timeout) || 12000;
+      var timeout = (opts && opts.timeout) || 30000; // 30 s for slow mobile
       var url = MFAPI_URL + code;
-      // No AbortController — see NPS.fetchHistory's note above; the same
-      // environment issue (AbortSignal not structured-cloneable) applies
-      // here, so a Promise.race timeout is used instead.
-      var fetchPromise = fetch(url).then(function(res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();
-      });
-      var timeoutPromise = new Promise(function(_, reject) {
-        setTimeout(function() { reject(new Error('timeout after ' + timeout + 'ms')); }, timeout);
-      });
-      return Promise.race([fetchPromise, timeoutPromise]).then(function(json) {
-        // mfapi.in's documented shape is {data:[...]}, but handle a bare
-        // array too, same defensive pattern as NPS.fetchHistory.
+
+      function _parseJson(json) {
+        // mfapi.in documented shape is {data:[...]}, bare array also handled.
         var rows = Array.isArray(json) ? json : (json && Array.isArray(json.data) ? json.data : null);
-        if (!rows) { console.warn('[BAF] unexpected response shape for', code, json); return []; }
+        if (!rows) { console.warn('[BAF] unexpected shape for', code, json); return []; }
         var parsed = rows.map(function(r) {
           return { date: r.date, nav: parseFloat(r.nav) };
         }).filter(function(r) { return !isNaN(r.nav) && r.nav > 0; });
-        if (parsed.length === 0) console.warn('[BAF]', code, 'returned 0 usable rows from', rows.length, 'raw rows');
+        if (parsed.length === 0) console.warn('[BAF]', code, '→ 0 usable rows from', rows.length, 'raw');
         return parsed;
-      }).catch(function(err) {
-        console.warn('[BAF] fetch failed for', code, '—', err && err.message ? err.message : err);
-        return [];
+      }
+
+      // Pass 1: direct (no AbortSignal — Brave structures-clone issue)
+      var directP = fetch(url).then(function(res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      });
+      var timeoutP = new Promise(function(_, rej) {
+        setTimeout(function() { rej(new Error('timeout ' + timeout + 'ms')); }, timeout);
+      });
+      return Promise.race([directP, timeoutP]).then(function(json) {
+        var rows = _parseJson(json);
+        if (rows.length === 0) throw new Error('zero rows — falling through to proxy');
+        return rows;
+      }).catch(function(directErr) {
+        // Pass 2: CORS proxy fallback
+        console.warn('[BAF]', code, 'direct failed (', directErr.message, ') — proxy fallback');
+        return fetchURLXHR(url, 25000).then(function(res) {
+          if (!res.ok) throw new Error('proxy HTTP ' + res.status);
+          return res.json();
+        }).then(function(json) {
+          return _parseJson(json);
+        }).catch(function(proxyErr) {
+          console.warn('[BAF] proxy also failed for', code, '—', proxyErr.message);
+          return [];
+        });
       });
     }
 
@@ -4015,6 +4038,33 @@ window.hmMergeNPSIntoDailyMap = async function(onRow) {
     await window._idbPut(window.DEEP_CACHE_KEY_MONTHLY, idbMonthly).catch(function(){});
     BB.npsBafMergeLastDate(_npsMergeToday);
   }
+
+  // ── Always sync NPS keys into the in-memory cache ──────────────────────
+  // _deepLoadAsync fills window._deepWeeklyCache.weeklyMap from IDB at
+  // scan START — before this merge writes any NPS entries to IDB.  So
+  // after the IDB write the in-memory weeklyMap is still missing the NPS
+  // keys, and NPS Switch / BAF Switch / Charts all show "No NPS data" for
+  // the rest of the session even though IDB is correct.
+  // Fix: after processing, copy each NPS scheme's weekly+monthly arrays
+  // directly into the in-memory cache.  Works for both paths:
+  //   • _npsMergeAlreadyDoneToday=false → data just derived; idbWeekly has it.
+  //   • _npsMergeAlreadyDoneToday=true  → data read from IDB at top of fn;
+  //     idbWeekly already contains the keys from the previous merge today.
+  if (window._deepWeeklyCache) {
+    if (!window._deepWeeklyCache.weeklyMap)  window._deepWeeklyCache.weeklyMap  = {};
+    if (!window._deepWeeklyCache.monthlyMap) window._deepWeeklyCache.monthlyMap = {};
+    var _npsWkMap = window._deepWeeklyCache.weeklyMap;
+    var _npsMoMap = window._deepWeeklyCache.monthlyMap;
+    Object.keys(npsMap).forEach(function(code) {
+      if (_NPS_BLACKLIST.indexOf(code) !== -1) return;
+      if (!npsMap[code] || npsMap[code].length < 20) return;
+      var _sn = (typeof DD !== 'undefined' && DD.NPS && DD.NPS._schemeNames && DD.NPS._schemeNames[code]) || code;
+      var _nk = _sn.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (idbWeekly.weeklyMap[_nk])   _npsWkMap[_nk] = idbWeekly.weeklyMap[_nk];
+      if (idbMonthly.monthlyMap[_nk]) _npsMoMap[_nk] = idbMonthly.monthlyMap[_nk];
+    });
+  }
+
   return npsCount;
 };
 
@@ -4086,6 +4136,26 @@ window.hmMergeBAFIntoDailyMap = async function(onRow) {
     await window._idbPut(window.DEEP_CACHE_KEY_MONTHLY, idbMonthly).catch(function(){});
     BB.npsBafMergeLastDate(_bafMergeToday);
   }
+
+  // ── Always sync BAF keys into the in-memory cache ──────────────────────
+  // Same fix as hmMergeNPSIntoDailyMap: idbWeekly contains the BAF weekly
+  // arrays (either derived just now, or read from IDB when already merged
+  // today), so copying them into _deepWeeklyCache.weeklyMap makes the BAF
+  // Switch tab and Charts work in the SAME session without a page reload.
+  if (window._deepWeeklyCache) {
+    if (!window._deepWeeklyCache.weeklyMap)  window._deepWeeklyCache.weeklyMap  = {};
+    if (!window._deepWeeklyCache.monthlyMap) window._deepWeeklyCache.monthlyMap = {};
+    var _bafWkMap = window._deepWeeklyCache.weeklyMap;
+    var _bafMoMap = window._deepWeeklyCache.monthlyMap;
+    Object.keys(bafMap).forEach(function(code) {
+      if (!bafMap[code] || bafMap[code].length < 20) return;
+      var _fn = codeToName[code] || code;
+      var _bk = _fn.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (idbWeekly.weeklyMap[_bk])   _bafWkMap[_bk] = idbWeekly.weeklyMap[_bk];
+      if (idbMonthly.monthlyMap[_bk]) _bafMoMap[_bk] = idbMonthly.monthlyMap[_bk];
+    });
+  }
+
   return bafCount;
 };
 
@@ -4182,8 +4252,20 @@ async function _ptRunScanImpl(){
         var _npsED=new Date(parseInt(_npsLd.substring(4,8),10),parseInt(_npsLd.substring(2,4),10)-1,parseInt(_npsLd.substring(0,2),10));
         _npsDiff=Math.floor((Date.now()-_npsED.getTime())/86400000);
       }
-      if(_npsCacheCheck&&_npsDiff!=null&&_npsDiff<=1&&_npsCacheCheck.npsMap&&Object.keys(_npsCacheCheck.npsMap).length>0){
-        ptLog('✅ NPS cache is fresh (last fetched '+_npsDiff+' day(s) ago) — no download needed');
+      // BUG FIX: previously checked Object.keys(npsMap).length > 0, which
+      // accepted a map full of empty arrays (all codes failed on last fetch)
+      // as "cache is fresh" and permanently skipped re-downloading. Now we
+      // count how many codes actually have NAV rows — skip only when at
+      // least 75% of the expected 32 schemes have real data.
+      var _npsOkCount = 0;
+      if (_npsCacheCheck && _npsCacheCheck.npsMap) {
+        Object.keys(_npsCacheCheck.npsMap).forEach(function(k) {
+          if (Array.isArray(_npsCacheCheck.npsMap[k]) && _npsCacheCheck.npsMap[k].length > 0) _npsOkCount++;
+        });
+      }
+      var _npsExpected = DD.NPS._defaultCodes.length; // 32
+      if(_npsCacheCheck&&_npsDiff!=null&&_npsDiff<=1&&_npsOkCount>=Math.max(1,Math.floor(_npsExpected*0.85))){
+        ptLog('✅ NPS cache is fresh (last fetched '+_npsDiff+' day(s) ago, '+_npsOkCount+'/'+_npsExpected+' schemes) — no download needed');
       }else{
         ptLog('📊 Fetching NPS scheme NAVs...');
         await window.fetchDeepNPSHistory(null,function(dn,total,code){
@@ -4222,9 +4304,30 @@ async function _ptRunScanImpl(){
         var _bafED=new Date(parseInt(_bafLd.substring(4,8),10),parseInt(_bafLd.substring(2,4),10)-1,parseInt(_bafLd.substring(0,2),10));
         _bafDiff=Math.floor((Date.now()-_bafED.getTime())/86400000);
       }
-      if(_bafCacheCheck&&_bafDiff!=null&&_bafDiff<=1&&_bafCacheCheck.bafMap&&Object.keys(_bafCacheCheck.bafMap).length>0){
-        ptLog('✅ BAF cache is fresh (last fetched '+_bafDiff+' day(s) ago) — no download needed');
+      // BUG FIX: same empty-arrays false-positive as NPS above — count
+      // funds with actual rows.  THRESHOLD: BAF has only 4 funds and all 4
+      // are well-known actively traded ETFs — if any one returns empty it
+      // signals a real download failure that must be retried, not a
+      // legitimate "this fund has no history" case.  Require ALL 4 to have
+      // data.  The previous 75% threshold (floor(4*0.75)=3) meant that if
+      // HDFC+ICICI+ABSL succeeded but KOTAK failed, the check passed and
+      // KOTAK was silently skipped on every subsequent scan — the direct
+      // cause of "No weekly history for KOTAK Balanced Advantage - Growth".
+      var _bafOkCount = 0;
+      var _bafMissingNames = [];
+      if (_bafCacheCheck && _bafCacheCheck.bafMap) {
+        Object.keys(DD.BAF._funds).forEach(function(amc) {
+          var f = DD.BAF._funds[amc];
+          var rows = _bafCacheCheck.bafMap[f.code];
+          if (Array.isArray(rows) && rows.length > 0) { _bafOkCount++; }
+          else { _bafMissingNames.push(f.name.replace(' Balanced Advantage - Growth','')); }
+        });
+      }
+      var _bafExpected = Object.keys(DD.BAF._funds).length; // 4
+      if(_bafCacheCheck&&_bafDiff!=null&&_bafDiff<=1&&_bafOkCount>=_bafExpected){
+        ptLog('✅ BAF cache is fresh (last fetched '+_bafDiff+' day(s) ago, all '+_bafExpected+' funds) — no download needed');
       }else{
+        if (_bafMissingNames.length > 0) ptLog('⚠️ BAF: missing data for: ' + _bafMissingNames.join(', ') + ' — re-downloading all');
         ptLog('📊 Fetching BAF fund NAVs...');
         await window.fetchDeepBAFHistory(null,function(dn,total,code){
           var fundName=(DD.BAF&&DD.BAF._funds&&(function(){for(var k in DD.BAF._funds){if(DD.BAF._funds[k].code===code)return DD.BAF._funds[k].name;}return code;})())||code;
@@ -7215,6 +7318,28 @@ async function fetchDeepBAFHistory(codes, onProgress) {
     if (rows && rows.length > 0) okCount++; else emptyCount++;
     cache.bafMap[code] = _bafMergeScheme(cache.bafMap[code], rows);
   });
+
+  // ── Automatic retry (same pattern as fetchDeepNPSHistory) ──
+  // Also include codes that exist in cache.bafMap from a previous session
+  // but returned empty on THIS fetch — they need re-downloading too.
+  var _bafRetryList = list.filter(function(c) { return !fresh[c] || fresh[c].length === 0; });
+  if (_bafRetryList.length > 0) {
+    var _bafRetryNames = _bafRetryList.map(function(c) {
+      for (var k in DD.BAF._funds) { if (DD.BAF._funds[k].code === c) return DD.BAF._funds[k].name.replace(' Balanced Advantage - Growth',''); }
+      return c;
+    });
+    console.warn('[BAF] retrying', _bafRetryList.length, 'empty codes after 3 s:', _bafRetryNames.join(', '));
+    await new Promise(function(res) { setTimeout(res, 3000); });
+    var _bafRetryFresh = await DD.BAF.fetchAllHistories(_bafRetryList, null);
+    _bafRetryList.forEach(function(code) {
+      var rows = _bafRetryFresh[code];
+      if (rows && rows.length > 0) {
+        cache.bafMap[code] = _bafMergeScheme(cache.bafMap[code], rows);
+        okCount++; emptyCount = Math.max(0, emptyCount - 1);
+      }
+    });
+  }
+
   // BUG FIX: same issue and same fix as fetchDeepNPSHistory above — see
   // that comment for the full explanation. Confirmed live: this is why
   // the Kotak Balanced Advantage chart was stuck showing 20/07/2026 as
@@ -7277,6 +7402,28 @@ async function fetchDeepNPSHistory(codes, onProgress) {
     if (rows && rows.length > 0) okCount++; else emptyCount++;
     cache.npsMap[code] = _npsMergeScheme(cache.npsMap[code], rows);
   });
+
+  // ── Automatic retry for codes that returned 0 rows ──
+  // Transient issues (momentary network blip, proxy rate-limit, Brave
+  // Shields temporarily blocking) often clear in a few seconds. Retrying
+  // once here means a single slow/intermittent failure doesn't leave holes
+  // in the cache that then get "locked in" by the freshness check skipping
+  // all future downloads for the rest of the day.
+  // Only retries when SOME codes succeeded — a 100% failure likely means
+  // the API itself is down, so retrying all 32 would just add latency.
+  var _npsRetryList = list.filter(function(c) { return !fresh[c] || fresh[c].length === 0; });
+  if (_npsRetryList.length > 0 && _npsRetryList.length < list.length) {
+    console.warn('[NPS] retrying', _npsRetryList.length, 'empty codes after 3 s...');
+    await new Promise(function(res) { setTimeout(res, 3000); });
+    var _retryFresh = await DD.NPS.fetchAllHistories(_npsRetryList, null);
+    _npsRetryList.forEach(function(code) {
+      var rows = _retryFresh[code];
+      if (rows && rows.length > 0) {
+        cache.npsMap[code] = _npsMergeScheme(cache.npsMap[code], rows);
+        okCount++; emptyCount = Math.max(0, emptyCount - 1);
+      }
+    });
+  }
   // BUG FIX: this used to stamp lastUpdated with the CURRENT time
   // (new Date()) — i.e. "when we last tried to fetch" — regardless of
   // whether mfapi.in actually returned any NAV rows newer than what was
@@ -14358,4 +14505,4 @@ window.downloadNPSBAF2500 = downloadNPSBAF2500;
 
 </script>
 </body>
-</html>
+</html>
