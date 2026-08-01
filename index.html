@@ -19,7 +19,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Timeline_12A5">
+  <meta name="apple-mobile-web-app-title" content="Timeline_13D">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon.png">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
@@ -4192,19 +4192,6 @@ window.hmMergeBAFIntoDailyMap = async function(onRow) {
 
 // ── 10.6 Main Scan ──
 async function ptRunScan(){
-  // DIAG: temporary counter to see how many times a full scan (NSE fetch +
-  // compute) actually runs per session — visible in the status strip and
-  // console. Remove once tab-switch performance is diagnosed.
-  window._ptScanCallCount = (window._ptScanCallCount || 0) + 1;
-  console.log('[DIAG] ptRunScan() call #' + window._ptScanCallCount + ' at ' + new Date().toLocaleTimeString());
-  try {
-    var _diagEl = document.getElementById('pt-st');
-    if (_diagEl) {
-      _diagEl.textContent = '🔍 DIAG: full scan #' + window._ptScanCallCount + ' started ' + new Date().toLocaleTimeString();
-      _diagEl.style.color = '#c00';
-      _diagEl.style.fontWeight = 'bold';
-    }
-  } catch(e) {}
   // If a scan is already in flight (kicked off by another tab's
   // activation), return that SAME promise instead of bailing out with
   // undefined — callers like switchTab('watch')/('explore') that need to
@@ -4370,9 +4357,9 @@ async function _ptRunScanImpl(){
     }
   } catch(e) { ptLog('⚠️ BAF download failed: '+(e.message||e)); }
 
-  // ── NPS + BAF 2500-day export (Section 15, fallback) — runs AFTER
+  // ── NPS + BAF 2500-day export (Section 16, fallback) — runs AFTER
   // Step 0b/0c above, not before. Reason: this function's own cache-first
-  // fast path (see its comments in Section 15) reuses ld_deep_nps_v1 /
+  // fast path (see its comments in Section 16) reuses ld_deep_nps_v1 /
   // ld_deep_baf_v1 if those are already populated — which Step 0b/0c
   // immediately above just did. Running it here means the 32 NPS + 4 BAF
   // funds get fetched from the network ONCE per scan (by Step 0b/0c),
@@ -4383,7 +4370,7 @@ async function _ptRunScanImpl(){
   // just sequenced to avoid duplicating Step 0b/0c's work.
   try {
     if(typeof window.downloadNPSBAF2500==='function'){
-      ptEl('pt-st').innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #b8860b;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> Exporting NPS+BAF 2500-day data (Section 15)...';
+      ptEl('pt-st').innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #b8860b;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> Exporting NPS+BAF 2500-day data (Section 16)...';
       ptLog('Exporting NPS + BAF 2500-day daily data (reusing cache from above if fresh)...');
       await window.downloadNPSBAF2500(function(m){ ptLog(m); });
       ptLog('NPS + BAF 2500-day data exported');
@@ -5629,6 +5616,7 @@ async function restartFreshDownload(){
       return;
     }
     try{ localStorage.removeItem('ld_deep_weekly_history_v4'); }catch(e){}
+    try{ localStorage.removeItem('ld_deep_meta_v1'); }catch(e){} // clear canary alongside IDB
     // Also clear the NPS/BAF 2500 once-per-day export guard — a deliberate
     // Restart Fresh should re-export NPSData2500.json/BAFData2500.json
     // even if they already ran once today, since the underlying data this
@@ -6747,7 +6735,15 @@ function onTabActivated(){
       _ssp('\u26A0 Data is '+diffDays+' day(s) old \u2014 click \u26A1 ANALYZE to refresh, '+_scanEtaPhrase(), 'warn');
     }
   }else{
-    _ssp('\u26A0 No cached data \u2014 click \u26A1 DOWNLOAD to fetch 2500 days (~10 yrs) for 158 indices', 'error');
+    // IDB is empty — check the canary to distinguish "browser cleared" vs "never downloaded"
+    var _idbCanary = null;
+    try { _idbCanary = JSON.parse(localStorage.getItem('ld_deep_meta_v1') || 'null'); } catch(_) {}
+    if (_idbCanary && _idbCanary.lastDate && (_idbCanary.indexCount || 0) > 10) {
+      // Canary says data existed — IDB was cleared externally (Brave privacy sweep, memory pressure, or another tab blocked the IDB connection)
+      _ssp('\u26A0\uFE0F History wiped \u2014 previously had ' + _idbCanary.indexCount + ' indices (last date: ' + _idbCanary.lastDate + '). Brave may have cleared storage, or another tab blocked IDB. Click \u26A1 DOWNLOAD to re-fetch.', 'warn');
+    } else {
+      _ssp('\u26A0 No cached data \u2014 click \u26A1 DOWNLOAD to fetch 2500 days (~10 yrs) for 158 indices', 'error');
+    }
   }
   // Update Gemini key status
   var gkEl=psEl('pt-gk-status');
@@ -7287,6 +7283,18 @@ function deepSaveCache(cache){
   var p1 = _idbPut(DEEP_CACHE_KEY_DAILY,   { lastDate: cache.lastDate, dailyMap: cache.dailyMap });
   var p2 = _idbPut(DEEP_CACHE_KEY_WEEKLY,  { weeklyMap: cache.weeklyMap || {} });
   var p3 = _idbPut(DEEP_CACHE_KEY_MONTHLY, { monthlyMap: cache.monthlyMap || {} });
+  // Canary: write a tiny metadata fingerprint to localStorage so we can
+  // distinguish "browser cleared IndexedDB mid-session" from "never downloaded".
+  // Only ~100 bytes — safe for quota. Cleared by Restart Fresh along with IDB.
+  try {
+    if (cache.lastDate && cache.dailyMap) {
+      localStorage.setItem('ld_deep_meta_v1', JSON.stringify({
+        lastDate: cache.lastDate,
+        indexCount: Object.keys(cache.dailyMap).length,
+        ts: Date.now()
+      }));
+    }
+  } catch(_) {}
   return Promise.all([p1, p2, p3]);
 }
 
@@ -8633,7 +8641,7 @@ var _bgRefreshTimer   = null;
 // before the setTimeout is even scheduled, so the second call's guard
 // check sees it immediately and bails out correctly.
 var _bgRefreshArmed  = false;
-var BG_REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes between cycles
+var BG_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes between cycles
 
 // One background refresh cycle:
 //   1. NPS + BAF NAV data (parallel, no user prompt)
@@ -8708,6 +8716,14 @@ async function _bgAutoRefreshOnce() {
         await win.ptRunScan();
       } catch(e) { console.warn('[BG] Re-scan failed (non-fatal):', e); }
     }
+    // Step 6: Invalidate Section 15 (Tactical Transfer)'s own cached-forever
+    // NPS/BAF NAV cache — see the AUDIT FIX comment on
+    // window._invalidateTacticalCache for why this is necessary: that tab
+    // reads from the same IndexedDB data this cycle just updated, but
+    // caches it in local variables that never expired on their own.
+    if (typeof window._invalidateTacticalCache === 'function') {
+      try { window._invalidateTacticalCache(); } catch(e) {}
+    }
     _bgRefreshLastSuccessDate = _todayStr;
     if (typeof window._statusStripPush === 'function')
       window._statusStripPush('Background refresh complete -- data updated', 'good');
@@ -8722,7 +8738,7 @@ async function _bgAutoRefreshOnce() {
 
 // Start the background refresh scheduler.
 // initialDelayMs: how long to wait before the FIRST refresh (default 10 s).
-// After that, repeats every BG_REFRESH_INTERVAL_MS (30 min).
+// After that, repeats every BG_REFRESH_INTERVAL_MS (10 min).
 // Safe to call multiple times -- the timer is only created once.
 function _startBgAutoRefreshScheduler(initialDelayMs) {
   if (_bgRefreshArmed) return; // already running (or arming) — see BUG FIX note above
@@ -8835,13 +8851,9 @@ function toMonthlyCloses(entries){
   }
   return Object.keys(map).sort().map(function(k){return map[k];});
 }
-function wma(arr,n){
-  if(arr.length<n)return null;
-  var slice=arr.slice(arr.length-n);
-  var num=0,den=0;
-  for(var i=0;i<slice.length;i++){num+=slice[i]*(i+1);den+=(i+1);}
-  return den?num/den:null;
-}
+// AUDIT FIX: removed dead wma(arr,n) function that had zero call sites
+// anywhere in the file — U.calcWMA (Container U, the canonical
+// implementation) is used everywhere WMA is actually needed.
 // Fill M-RSI(9) and WMA21 columns from monthly aggregated closes
 
 // ── 11.8b CONTAINER EE — CALCULATION ENGINE (Public API) ──
@@ -9234,12 +9246,24 @@ var EE = (function() {
     var regime = 'C';
     if (wRsi >= 50 && wma20Price && price > wma20Price) regime = 'A';
     else if (wRsi >= 40 && wRsi < 50) regime = 'B';
-    var action = 'HOLD';
-    if (regime === 'A' && dRsi14 >= 40 && dRsi14 <= 50) action = 'BUY';
-    else if (regime === 'A' && dRsi14 > RSI_OVERBOUGHT) action = 'HOLD';
-    else if (regime === 'B') action = 'REDUCE';
-    else if (regime === 'C') action = 'SELL';
-    return { regime: regime, action: action };
+    return { regime: regime, action: actionForRegimeAndRsi(regime, dRsi14).action };
+  }
+  // AUDIT FIX: this was previously inlined separately inside
+  // classifyRegimeAction AND re-implemented a second time, nearly
+  // verbatim, as computeAction() in Section 14 (NPS Switch tab) — see
+  // that section's comment for the porting history. Both copies used the
+  // same 40-50 BUY zone and RSI_OVERBOUGHT threshold, but as two
+  // independently-maintained decision trees a future threshold change
+  // could easily be applied to one and not the other, silently
+  // desyncing what "BUY"/"HOLD"/"REDUCE"/"SELL" means between the two
+  // tabs. Extracted here as the single shared action-mapping function;
+  // classifyRegimeAction and computeAction (Section 14) both call this.
+  function actionForRegimeAndRsi(regime, dRsi14) {
+    if (regime === 'A' && dRsi14 >= 40 && dRsi14 <= 50) return { action: 'BUY', rec: 'STRIKE — Optimal Entry' };
+    if (regime === 'A' && dRsi14 > RSI_OVERBOUGHT) return { action: 'HOLD', rec: 'OVERHEATED — Wait for daily dip' };
+    if (regime === 'A') return { action: 'HOLD', rec: 'REGIME A — Awaiting daily pullback to 40-50' };
+    if (regime === 'B') return { action: 'REDUCE', rec: 'TRAP — Fatigue' };
+    return { action: 'SELL', rec: 'AVOID — Trust Break' };
   }
   // TSI-based trigger label (RESUMPTION/DIP ZONE/OVERHEATED/TRENDING/BEAR CROSS)
   function tsiTriggerFor(regime, dTsiPrev, dTsiCurr) {
@@ -9312,6 +9336,28 @@ var EE = (function() {
     if (!arr || arr.length < period) return null;
     var sl = arr.slice(-period);
     return sl.reduce(function(a, b) { return a + b; }, 0) / period;
+  }
+
+  // AUDIT FIX: two byte-for-byte identical rolling-sum SMA-series
+  // functions (both named differently: a local sma() in the Hilega chart
+  // render closure, and _sma() in Section 15 Tactical Transfer's chart
+  // render closure) existed independently of each other and of calcSMA
+  // above. calcSMA only returns the single trailing value, which doesn't
+  // serve chart overlays that need the full series aligned to every data
+  // point — so this is not a redundant duplicate of calcSMA, it's a
+  // genuine second implementation of the SAME series math as the two
+  // chart-local copies. Consolidated here as the one canonical version;
+  // both chart tabs now call EE.calcSMASeries() instead of keeping their
+  // own copies, so a future fix only has to happen once.
+  function calcSMASeries(data, period) {
+    var out = new Array(data.length).fill(null);
+    var sum = 0;
+    for (var i = 0; i < data.length; i++) {
+      sum += data[i];
+      if (i >= period) sum -= data[i - period];
+      if (i >= period - 1) out[i] = sum / period;
+    }
+    return out;
   }
 
   // ── From NIFTY SCANNER — Heiken Ashi candles (true if OHLC given, else
@@ -9461,7 +9507,6 @@ var EE = (function() {
     periodReturn: periodReturn,
     baPortfolioReturns: baPortfolioReturns,
     calcTSI: calcTSI,
-    classifyRegimeAction: classifyRegimeAction,
     tsiTriggerFor: tsiTriggerFor,
     actionComment: actionComment,
     triggerStatus: triggerStatus,
@@ -9469,6 +9514,9 @@ var EE = (function() {
     // for the default row-sort tiebreaker and possible future use)
     runExecutionTree: runExecutionTree,
     calcSMA: calcSMA,
+    calcSMASeries: calcSMASeries,
+    classifyRegimeAction: classifyRegimeAction,
+    actionForRegimeAndRsi: actionForRegimeAndRsi,
     computeHACandles: computeHACandles,
     computeHABandSignal: computeHABandSignal,
     // ── PERF: memo management API ──
@@ -10642,15 +10690,21 @@ async function drawHilegaMilega() {
         // SMA8 is computed on the same nav series used for the main line.
         // This mirrors the source TradingView chart's "8EMA·HA" overlay
         // in spirit: a smoothed short-term trend line under the price.)
+        // AUDIT FIX: was an independent copy of the same rolling-sum SMA
+        // math duplicated in Section 15 (Tactical Transfer)'s _sma(). Both
+        // now delegate to EE.calcSMASeries, the single canonical version.
         function sma(data, period) {
-          var out = new Array(data.length).fill(null);
-          var sum = 0;
-          for (var i = 0; i < data.length; i++) {
-            sum += data[i];
-            if (i >= period) sum -= data[i - period];
-            if (i >= period - 1) out[i] = sum / period;
-          }
-          return out;
+          return (window.EE && typeof window.EE.calcSMASeries === 'function')
+            ? window.EE.calcSMASeries(data, period)
+            : (function(d, p) { // fallback if EE hasn't loaded yet
+                var out = new Array(d.length).fill(null), sum = 0;
+                for (var i = 0; i < d.length; i++) {
+                  sum += d[i];
+                  if (i >= p) sum -= d[i - p];
+                  if (i >= p - 1) out[i] = sum / p;
+                }
+                return out;
+              })(data, period);
         }
         var sma8 = sma(navs, 8);
 
@@ -12144,10 +12198,18 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
   window.amcFunds = amcFunds;
 })();
 
-// computeAction: ported as-is from NPS_Scanner_N6-5.html. Timeline never
-// had this — ptComputeRow() computes its own inline scoring and doesn't
-// expose this specific Regime+DailyRSI decision tree.
+// computeAction: was ported as-is from NPS_Scanner_N6-5.html as an
+// independent decision tree; now delegates to EE.actionForRegimeAndRsi
+// (Section 11's Container EE), the single canonical version, so this
+// tab's BUY/HOLD/REDUCE/SELL calls can never silently drift from
+// Portfolio Snapshot's. Kept as a thin wrapper so every existing call
+// site here keeps working unchanged.
 function computeAction(regime, dRsi) {
+  if (window.EE && typeof window.EE.actionForRegimeAndRsi === 'function') {
+    return window.EE.actionForRegimeAndRsi(regime, dRsi);
+  }
+  // Fallback if EE hasn't loaded yet (should not happen in practice —
+  // Section 11 loads well before this tab is ever activated).
   if (regime === "A" && dRsi >= 40 && dRsi <= 50) return { action: "BUY", rec: "STRIKE — Optimal Entry" };
   if (regime === "A" && dRsi > RSI_OVERBOUGHT) return { action: "HOLD", rec: "OVERHEATED — Wait for daily dip" };
   if (regime === "A") return { action: "HOLD", rec: "REGIME A — Awaiting daily pullback to 40-50" };
@@ -13276,7 +13338,7 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 16: TACTICAL TRANSFER STRATEGY — Source → Intermediate → Target
+// SECTION 15: TACTICAL TRANSFER STRATEGY — Source → Intermediate → Target
 // ═══════════════════════════════════════════════════════════════════════════════
 // PURPOSE:
 //   1. Populates the fund dropdowns on the Tactical Transfer Strategy tab
@@ -13308,6 +13370,25 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
   var _bafCache = null;   // { funds: { name: {amc, code, totalAvailable, entries} } }
   var _lastEntries = null; // last rendered entries (for timeframe re-render)
   var _lastFundName = null;
+
+  // AUDIT FIX: _npsCache/_bafCache were being set once on first load and
+  // then NEVER reset for the rest of the session (see _loadNps/_loadBaf
+  // below: "if (_npsCache) return Promise.resolve(_npsCache);"). This
+  // meant that once this tab had been opened once, it kept showing the
+  // NAV data from that first load for the rest of the session — even
+  // after downloadNPSBAF2500() / the background auto-refresh engine
+  // (Section 11.7c) successfully updated the SAME underlying IndexedDB
+  // data those functions read from. The chart would silently drift out
+  // of sync with the rest of the app's already-fresh data. Exposed here
+  // so the background refresh cycle can call it after a successful
+  // update, forcing this tab's next chart draw to re-read from IDB.
+  function _invalidateTacticalCache() {
+    _npsCache = null;
+    _bafCache = null;
+    _lastEntries = null;
+    _lastFundName = null;
+  }
+  window._invalidateTacticalCache = _invalidateTacticalCache;
 
   // Local date-stamp helper: deepFmtDate() lives in a different IIFE
   // (outside this closure), so calling it here threw
@@ -13483,14 +13564,22 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
   // Stored chart objects for cursor redraw
   var _tp1 = null, _tp2 = null;
 
+  // AUDIT FIX: was an independent copy of the same rolling-sum SMA math
+  // duplicated in the Hilega chart tab's local sma(). Both now delegate
+  // to EE.calcSMASeries, the single canonical version (see that comment
+  // for the full history of this consolidation).
   function _sma(data, period) {
-    var out = new Array(data.length).fill(null), sum = 0;
-    for (var i = 0; i < data.length; i++) {
-      sum += data[i];
-      if (i >= period) sum -= data[i - period];
-      if (i >= period - 1) out[i] = sum / period;
-    }
-    return out;
+    return (window.EE && typeof window.EE.calcSMASeries === 'function')
+      ? window.EE.calcSMASeries(data, period)
+      : (function(d, p) { // fallback if EE hasn't loaded yet
+          var out = new Array(d.length).fill(null), sum = 0;
+          for (var i = 0; i < d.length; i++) {
+            sum += d[i];
+            if (i >= p) sum -= d[i - p];
+            if (i >= p - 1) out[i] = sum / p;
+          }
+          return out;
+        })(data, period);
   }
 
   // ── Pane 1: Price vs SMA(8) ──
@@ -14382,7 +14471,7 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 15: NPS + BAF 2500-DAY DAILY DATA DOWNLOADER
+// SECTION 16: NPS + BAF 2500-DAY DAILY DATA DOWNLOADER
 // ═══════════════════════════════════════════════════════════════════════════════
 // PURPOSE:
 //   Fetches the FULL NAV history for all NPS schemes (32 codes across
