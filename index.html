@@ -4441,8 +4441,16 @@ async function _ptRunScanImpl(){
   }
 
   // Step 2: If historical data missing, fetch NSE CSV via Container D
+  // FIX 3d: skip 300-day fallback when the fast 2500-day download is
+  // already running (_deepDlRunning). Running both in parallel wastes
+  // bandwidth and produces the confusing 'NSE CSV: 60/300 days' message
+  // while the real download is happening invisibly in the background.
   var csvOk=false;
   if(Object.keys(dailyMap).length<10){
+    if(window._deepDlRunning){
+      ptLog('⚡ Fast 2500-day download in progress — skipping 300-day CSV fallback');
+      ptEl('pt-st').textContent='⚡ 2500-day download running — portfolio will auto-update when done';
+    } else {
     ptEl('pt-st').textContent='[NSE CSV] Fetching...';
     ptLog('📥 NSE CSV history — fetching daily data...');
     var days=ptGenDays(PT_FETCH_DAYS);
@@ -4471,6 +4479,7 @@ async function _ptRunScanImpl(){
     }
     if(csvOk)ptLog('✅ NSE CSV download complete — '+Object.keys(dailyMap).length+' indices');
     else ptLog('⚠️ NSE CSV fetch returned no data');
+    } // end else (_deepDlRunning guard)
   }
 
   // No Yahoo fallback — only NSE data sources
@@ -5568,7 +5577,7 @@ async function downloadData(){
 async function downloadDataFast(){
   var btn=document.getElementById('pt-btn-download-fast');
   var origBtn=document.getElementById('pt-btn-download');
-  if(btn){btn.textContent='⏳ Fast DL...';btn.disabled=true;btn.style.background='#993300';}
+  if(btn){btn.textContent='⏳ Downloading...';btn.disabled=true;btn.style.background='#993300';}
   if(origBtn){origBtn.disabled=true;origBtn.style.background='#996600';}
   var st=psEl('pt-st');
   // Step 0: NPS + BAF 2500-day data (reuse existing — fast, no change needed)
@@ -5578,23 +5587,39 @@ async function downloadDataFast(){
       await window.downloadNPSBAF2500(function(m){ console.log('[DL-FAST-2500]', m); });
     }
   } catch(_e) { console.warn('[DL-FAST] NPS/BAF error:', _e); }
+  // FIX 3c: also update _showAutoAlert banner (visible on Setup tab) so
+  // user doesn't see a frozen button with a stale 'No cached data' banner.
+  // Previously only psEl('pt-st') (Portfolio status strip) was updated,
+  // which is invisible when the user is on the Setup tab.
+  var _dlAlertFn = (typeof _showAutoAlert === 'function') ? _showAutoAlert : function(){};
   if(st)st.innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #cc5500;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> ⚡ Fast downloading 2500 days (15 parallel)...';
+  _dlAlertFn('⚡ Downloading 2500 days of NSE data (fast parallel) — do not close the app…', 'warn');
   if(typeof fetchDeepWeeklyHistoryFast!=='function'){
     if(st)st.textContent='❌ Fast download function not available';
+    _dlAlertFn('❌ DOWNLOAD failed: fetchDeepWeeklyHistoryFast not loaded', 'error');
     if(btn){btn.textContent='❌ Not available';btn.disabled=false;btn.style.background='#cc0000';}
     if(origBtn){origBtn.disabled=false;origBtn.style.background='#d4880f';}
     return;
   }
+  var _dlLastAlertUpdate = 0;
   fetchDeepWeeklyHistoryFast(function(done,total){
     if(st)st.innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #cc5500;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> ⚡ Fast: '+done+'/'+total+' days...';
+    // Throttle banner updates to every 5 s so we don't spam DOM
+    var _now = Date.now();
+    if (_now - _dlLastAlertUpdate > 5000) {
+      _dlLastAlertUpdate = _now;
+      _dlAlertFn('⚡ Downloading: ' + done + '/' + total + ' days… keep app open', 'warn');
+    }
   }).then(function(cache){
     window._deepWeeklyCache=cache;
-    if(btn){btn.textContent='✅ Fast Ready';btn.disabled=false;btn.style.background='#1a8a1a';}
+    var _idxCount = cache && cache.dailyMap ? Object.keys(cache.dailyMap).length : 0;
+    if(btn){btn.textContent='✅ Ready';btn.disabled=false;btn.style.background='#1a8a1a';}
     if(origBtn){origBtn.disabled=false;origBtn.style.background='#d4880f';}
-    if(st)st.textContent='⚡ Fast download complete — '+Object.keys(cache.dailyMap).length+' indices ready. Click ⚡ ANALYZE to analyze.';
+    if(st)st.textContent='⚡ Fast download complete — '+_idxCount+' indices ready. Click ⚡ ANALYZE to analyze.';
+    _dlAlertFn('✅ Download complete — ' + _idxCount + ' indices ready. Tap Update App to run portfolio scan.', 'ok');
     setTimeout(function(){
-      if(btn){btn.textContent='⚡ DL Fast';btn.style.background='#cc5500';}
-    },3000);
+      if(btn){btn.textContent='⚡ DOWNLOAD';btn.style.background='#c55a00';}
+    },4000);
     // Auto-start background refresh after successful download
     // Fires 15 s after download completes (scan/UI settle first),
     // then runs every 30 min to keep data current without user action.
@@ -5602,9 +5627,10 @@ async function downloadDataFast(){
       window._startBgAutoRefreshScheduler(15000);
   }).catch(function(e){
     console.warn('[DL-FAST] Download failed:',e);
-    if(btn){btn.textContent='❌ Failed — Retry';btn.disabled=false;btn.style.background='#cc0000';}
+    if(btn){btn.textContent='❌ Retry';btn.disabled=false;btn.style.background='#cc0000';}
     if(origBtn){origBtn.disabled=false;origBtn.style.background='#d4880f';}
     if(st)st.textContent='Fast download failed: '+(e.message||e);
+    _dlAlertFn('❌ Download failed: '+(e.message||e)+'. Check connection and retry.', 'error');
   });
 }
 async function restartFreshDownload(){
@@ -11722,7 +11748,11 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
        restartFreshDownload() via document.getElementById('pt-btn-download')
        but the element never existed in the HTML -- so the DOWNLOAD button
        the app told users to click was never visible. Added here. -->
-  <button id="pt-btn-download" onclick="if(typeof downloadData==='function')downloadData()" title="Download 2500 days of NSE history + NPS + BAF data into app storage. Run this once on a fresh install before clicking Update App." style="background:#c55a00;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ DOWNLOAD</button>
+  <!-- id="pt-btn-download-fast" so downloadDataFast() btn reference shows
+       loading/done text. Hidden span keeps id="pt-btn-download" alive for
+       restartFreshDownload() which also looks for that id. -->
+  <span id="pt-btn-download" style="display:none" aria-hidden="true"></span>
+  <button id="pt-btn-download-fast" onclick="if(typeof downloadData==='function')downloadData()" title="Download 2500 days of NSE history + NPS + BAF data into app storage. Run once on fresh install before Update App." style="background:#c55a00;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚡ DOWNLOAD</button>
 
   <button id="pt-btn-restart-fresh" onclick="PSnap.restartFreshDownload()" title="Clear all saved download progress and start over from day 1. Deleting the checkpoint .json files in your Downloads folder does NOT do this — those are backup exports only, never read back by the app." style="background:#7a1f1f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">🗑️ Restart</button>
   <button class="ld-scan-btn" onclick="if(typeof window.ptRunScan==='function')window.ptRunScan()" title="Download 2500 days of NSE data + analyze" style="background:#d4880f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">🔄 Update App</button>
@@ -14878,8 +14908,13 @@ async function downloadNPSBAF2500(logFn) {
   // doubling network calls on every DOWNLOAD + Update App cycle.
   // Now we build code-keyed maps and save to IDB immediately so the
   // freshness check in Step 0b/0c correctly skips the redundant re-fetch.
+  // FIX A (scope fix): _npsSaveCache/_bafSaveCache live inside an IIFE
+  // (function(win){...})(window) that closes before this function.
+  // typeof _npsSaveCache was always false here, so the IDB save was
+  // silently skipped every time. Must use window._npsSaveCache which IS
+  // exported via win._npsSaveCache = _npsSaveCache at line ~9722.
   try {
-    if (typeof _npsSaveCache === 'function') {
+    if (typeof window._npsSaveCache === 'function') {
       var _npsIdbMap = {};
       Object.keys(npsResult).forEach(function(name) {
         var e = npsResult[name];
@@ -14888,13 +14923,13 @@ async function downloadNPSBAF2500(logFn) {
         }
       });
       if (Object.keys(_npsIdbMap).length > 0) {
-        await _npsSaveCache({ lastUpdated: ldTodayIstStr(), lastFetchDate: ldTodayIstStr(), npsMap: _npsIdbMap });
-        _log('NPS: ' + Object.keys(_npsIdbMap).length + ' schemes saved to IDB');
+        await window._npsSaveCache({ lastUpdated: ldTodayIstStr(), lastFetchDate: ldTodayIstStr(), npsMap: _npsIdbMap });
+        _log('NPS: ' + Object.keys(_npsIdbMap).length + ' schemes saved to IDB via window._npsSaveCache');
       }
     }
   } catch (_e1) { _log('NPS IDB save (non-fatal): ' + (_e1.message || _e1)); }
   try {
-    if (typeof _bafSaveCache === 'function') {
+    if (typeof window._bafSaveCache === 'function') {
       var _bafIdbMap = {};
       Object.keys(bafResult).forEach(function(name) {
         var e = bafResult[name];
@@ -14903,8 +14938,8 @@ async function downloadNPSBAF2500(logFn) {
         }
       });
       if (Object.keys(_bafIdbMap).length > 0) {
-        await _bafSaveCache({ lastUpdated: ldTodayIstStr(), lastFetchDate: ldTodayIstStr(), bafMap: _bafIdbMap });
-        _log('BAF: ' + Object.keys(_bafIdbMap).length + ' funds saved to IDB');
+        await window._bafSaveCache({ lastUpdated: ldTodayIstStr(), lastFetchDate: ldTodayIstStr(), bafMap: _bafIdbMap });
+        _log('BAF: ' + Object.keys(_bafIdbMap).length + ' funds saved to IDB via window._bafSaveCache');
       }
     }
   } catch (_e2) { _log('BAF IDB save (non-fatal): ' + (_e2.message || _e2)); }
