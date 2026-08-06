@@ -3,14 +3,14 @@
 <head>
 <!--
 ════════════════════════════════════════════════════════════════════════════
- TIMELINE_14A — MASTER TABLE OF CONTENTS
+ TIMELINE_15A — MASTER TABLE OF CONTENTS
 ════════════════════════════════════════════════════════════════════════════
- SECTION NUMBERING (unified from 14A onwards)
+ SECTION NUMBERING (unified from 15A onwards)
  ────────────────────────────────────────────────────────────────────────
- From 14A, only the NUMERIC system (1–16) is authoritative.
+ From 15A, only the NUMERIC system (1–16) is authoritative.
  The lettered system (A–F) was a second pass that overlapped the numeric
  sections rather than replacing them — both were kept intact through 13RM
- because in-code comments cross-referenced both schemes.  From 14A new
+ because in-code comments cross-referenced both schemes.  From 15A new
  code should reference only the numeric system; the lettered section
  markers that already exist in the body are left in place so existing
  cross-references remain valid, but no new A–F markers will be added.
@@ -86,14 +86,14 @@
 <!-- ── 1.1 Document Meta ── -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Timeline Scanner 14A</title>
+<title>Timeline Scanner 15A</title>
 <meta name="theme-color" content="#d4880f">
   <!-- ── 1.2 PWA Metadata ── -->
   <link rel="manifest" href="manifest.json">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Timeline_14A">
+  <meta name="apple-mobile-web-app-title" content="Timeline_15A">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon.png">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
@@ -2749,7 +2749,7 @@ var CC = (function() {
     }
   }
 
-  // BUG FIX (14A): deepGet uses callbacks while deepPut uses Promises — an
+  // BUG FIX (15A): deepGet uses callbacks while deepPut uses Promises — an
   // API inconsistency that forced `new Promise(res => CC.deepGet(key, res))`
   // wrappers throughout the codebase. deepGetAsync() wraps deepGet() in a
   // Promise so callers can use `await CC.deepGetAsync(key)` uniformly.
@@ -3629,7 +3629,7 @@ window.addEventListener('load', function() {
   try { _shown = !!sessionStorage.getItem('ld_content_url_warned'); } catch(e) {}
   if (_shown) return;
   try { sessionStorage.setItem('ld_content_url_warned', '1'); } catch(e) {}
-  var _path = window.location.href.replace(/^content:\/\/[^\/]+/, '').replace(/\?.*$/, '') || '/sdcard/Download/Timeline_14A.html';
+  var _path = window.location.href.replace(/^content:\/\/[^\/]+/, '').replace(/\?.*$/, '') || '/sdcard/Download/index.html';
   setTimeout(function() {
     if (typeof window._statusStripPush === 'function') {
       window._statusStripPush('⛔ Storage warning: opened via SolidExplorer (content:// URL). Brave will wipe IndexedDB when the tab backgrounds. Open via file:// URL instead: file://' + _path, 'error');
@@ -4416,7 +4416,7 @@ async function _ptRunScanImpl(){
   }
 
   // Step 0b: Fetch NPS scheme NAVs FIRST — small, fast, independent of NSE
-  // BUG FIX (14A): Steps 0b/0c and downloadNPSBAF2500 (Step 0d) both write
+  // BUG FIX (15A): Steps 0b/0c and downloadNPSBAF2500 (Step 0d) both write
   // to the same IndexedDB keys (ld_deep_nps_v1 / ld_deep_baf_v1).  When
   // downloadNPSBAF2500 is available it covers both NPS and BAF in one
   // sequenced call — running Steps 0b/0c first adds a redundant freshness
@@ -4528,7 +4528,7 @@ async function _ptRunScanImpl(){
   } // end if (!_dl2500Available) — Steps 0b/0c skipped when downloadNPSBAF2500 handles both
 
   // ── NPS + BAF 2500-day download/export (Step 0d, Section 16) ────────────
-  // BUG FIX (14A): when downloadNPSBAF2500 is available it is now the SOLE
+  // BUG FIX (15A): when downloadNPSBAF2500 is available it is now the SOLE
   // NPS+BAF fetch path (Steps 0b/0c above are gated off).  Previously both
   // paths ran every scan: 0b/0c would fetch all 36 schemes, write to IDB,
   // then 0d immediately read the same IDB keys to confirm freshness and
@@ -4571,7 +4571,7 @@ async function _ptRunScanImpl(){
   // already running. Running both in parallel wastes bandwidth and produces
   // the confusing 'NSE CSV: 60/300 days' message while the real download
   // is happening invisibly in the background.
-  // BUG FIX (14A): previously checked window._deepDlRunning, which was
+  // BUG FIX (15A): previously checked window._deepDlRunning, which was
   // NEVER set anywhere in the file — the guard was dead code and the else
   // branch always ran.  Replaced with window._deepDownloadInProgress, which
   // is the flag actually managed by downloadDataFast() / restartFreshDownload().
@@ -4692,7 +4692,7 @@ async function _ptRunScanImpl(){
   try{
     var _secs=Math.round((Date.now()-_ptScanStartTs)/1000);
     if(_secs>0&&_secs<3600){ // sanity guard — ignore absurd values (backgrounded tab, clock skew, etc.)
-      // BUG FIX (14A): routed through BB to respect quota guard (was direct localStorage)
+      // BUG FIX (15A): routed through BB to respect quota guard (was direct localStorage)
       var _hist=BB.getJSON('ld_scan_duration_hist_v1',[]);
       if(!Array.isArray(_hist))_hist=[];
       _hist.push(_secs);
@@ -4837,7 +4837,7 @@ var PState={names:[],purchases:{},cols:[],hidden:[]}; // cols kept only for back
 var updateMode=false;
 
 function psEl(id){return document.getElementById(id);}
-// BUG FIX (14A): psSave/psLoad were calling localStorage directly, bypassing
+// BUG FIX (15A): psSave/psLoad were calling localStorage directly, bypassing
 // the BB container's quota-guard and write-failure detection.  Routing through
 // BB.setJSON/BB.getJSON gives quota warnings and the storageWarned() flow for
 // free, and ensures portfolio state writes are tracked alongside all other BB
@@ -5710,7 +5710,7 @@ async function downloadData(){
   return downloadDataFast();
 }
 async function downloadDataFast(){
-  // BUG FIX (14A): previously this function was declared async but called
+  // BUG FIX (15A): previously this function was declared async but called
   // fetchDeepWeeklyHistoryFast(...).then(...).catch(...) without await, so
   // the function resolved its returned Promise immediately — before the
   // download actually finished.  Any caller that awaited downloadDataFast()
@@ -5812,7 +5812,7 @@ async function downloadDataFast(){
   }
 }
 async function restartFreshDownload(){
-  // BUG FIX (14A): _bgRefreshArmed was never reset here, so after a
+  // BUG FIX (15A): _bgRefreshArmed was never reset here, so after a
   // Restart Fresh wipe the old background scheduler remained armed and
   // _startBgAutoRefreshScheduler() silently no-opped when called at the
   // end of the new downloadData() — leaving the user with no background
@@ -6971,7 +6971,7 @@ function onTabActivated(){
   // directly in Brave's address bar, which gets stable persistent storage.
   var _ssp=(typeof window._statusStripPush==='function')?window._statusStripPush:function(){};
   if (window.location.protocol === 'content:') {
-    var _fileHint = window.location.href.replace(/^content:\/\/[^\/]+/,'').replace(/\?.*$/,'') || '/sdcard/…/Timeline_14A.html';
+    var _fileHint = window.location.href.replace(/^content:\/\/[^\/]+/,'').replace(/\?.*$/,'') || '/sdcard/…/index.html';
     _ssp('⛔ Opened via file manager (content:// URL) — Brave does NOT persist IndexedDB here, so history is wiped whenever the tab backgrounds. Fix: in Brave type  file://' + _fileHint + '  and bookmark that address.', 'error');
     return; // skip normal cache banner — the URL problem is all that matters right now
   }
@@ -6986,7 +6986,7 @@ function onTabActivated(){
   // ever completed on this device, rather than showing nothing or a
   // fabricated precise number.
   function _scanEtaPhrase(){
-    // BUG FIX (14A): routed through BB (was direct localStorage.getItem)
+    // BUG FIX (15A): routed through BB (was direct localStorage.getItem)
     var hist=BB.getJSON('ld_scan_duration_hist_v1',[]);
     if(!Array.isArray(hist)||hist.length===0)return 'takes about 1-2 min';
     var avgSecs=Math.round(hist.reduce(function(a,b){return a+b;},0)/hist.length);
@@ -9341,7 +9341,7 @@ function _startBgAutoRefreshScheduler(initialDelayMs) {
 }
 win._startBgAutoRefreshScheduler    = _startBgAutoRefreshScheduler;
 win._bgAutoRefreshOnce              = _bgAutoRefreshOnce;
-// BUG FIX (14A): duplicate window.* assignments below were removed — win
+// BUG FIX (15A): duplicate window.* assignments below were removed — win
 // and window reference the same global object so the second block was dead
 // code that ran two extra property writes on every page load for no effect.
 
@@ -15653,7 +15653,7 @@ function _aiBuildPrompt(){
   var strikes=enriched.filter(function(e){return e.verd.indexOf('STRIKE')!==-1;});
   var divAlerts=enriched.filter(function(e){return e.r.r4>e.r.r8&&e.r.price<e.r.wma20Price;});
 
-  // Pre-computed §6A table (all indices)
+  // Pre-computed §6A table
   var t6a=[
     '| Index Name | Last Price | D-RSI (8) | Confluence (4/8/14) | W-RSI (8) | Price vs 20WMA | Regime | Verdict | Vector | Recommendations |',
     '| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |'
@@ -15669,7 +15669,7 @@ function _aiBuildPrompt(){
       ' | '+e.verd+' | '+e.vec+' | '+rec+' |');
   });
 
-  // Pre-computed §6B table (Regime A only)
+  // Pre-computed §6B table
   var t6b=[
     '| Index Name | W-RSI (8) | D-RSI (8) | Confluence | Verdict | Vector | Execution Rule |',
     '| :--- | :--- | :--- | :--- | :--- | :--- | :--- |'
@@ -15680,7 +15680,7 @@ function _aiBuildPrompt(){
       ' | '+e.conf+' | '+e.verd+' | '+e.vec+' | '+e.exec+' |');
   });
 
-  // Divergence details for §5C
+  // Divergence details
   var divDetail=divAlerts.length
     ? divAlerts.map(function(e){
         return '    \u2022 '+e.r.name+': D-RSI(4)='+_aiFmt(e.r.r4,1)+
@@ -15689,269 +15689,266 @@ function _aiBuildPrompt(){
       }).join('\n')
     : '    None detected this scan.';
 
-  // Strike names for §5D
   var strikeNames=strikes.map(function(e){return e.r.name;}).join(', ')||'None';
 
-  // ── VERBATIM PROMPT — word for word as per Sacred RSI Lie Detector v2 ──────
-  var PROMPT=[
+  // ── VERBATIM PROMPT (§0–§7 exact word-for-word) stored as template literal ──
+  var VERBATIM_PROMPT = `Note: Based on the input of user of “scan” or “update”, give the output for ALL EQUITY INDICES IN THE UNIVERSE defined in Section 0 below.
 
-'Note: Based on the input of user of \u201cscan\u201d or \u201cupdate\u201d, give the output for ALL EQUITY INDICES IN THE UNIVERSE defined in Section 0 below.',
-'',
-'START WITH THE MARKET BRIEF, WITH MARKET TRENDS, GIFT Nifty INDEX pre-market TRENDS, Global Markets like NASDAQ,DOW JONES, DAX,NIKKEI, SHANGHAI ,KEY NIFTY INDICES BEHAVIOUR, FII AND DII ACTIONS and activities (MTD data , if available), ANY KEY GOVERNMENT OF INDIA  and RBI POLICY Context, INTERNATIONAL EVENTS -key Drivers or CURRENCY /Rupees gain or lose / DEVELOPMENTS AFFECTING THE STOCK MARKET.',
-'',
-'# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550',
-'# SACRED RSI LIE DETECTOR AUDITOR \u2014 PRODUCTION SYSTEM PROMPT v2',
-'# \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550',
-'',
-'## 0. INDEX UNIVERSE (EQUITY ONLY \u2014 139 INDICES)',
-'',
-'Scan the following universe of 139 NSE equity indices. Exclude all debt, hybrid, commodity, volatility (VIX), and strategy indices. The complete equity universe is:',
-'',
-'Broad Market',
-'',
-'Nifty 50, Nifty Next 50, Nifty 100, Nifty 200, Nifty 500, Nifty Midcap 50, Nifty Midcap 150, Nifty Smallcap 50,  Nifty Smallcap 250, Nifty LargeMidcap 250, Nifty Total Market',
-'',
-'Sectoral / Thematic',
-'',
-'Nifty Auto, Nifty Bank, Nifty Financial Services Ex-Bank, Nifty FMCG,  Nifty IT,  Nifty Metal, Nifty Pharma, Nifty Private Bank, Nifty Realty, Nifty Infrastructure, Nifty Commodities, Nifty PSE,  Nifty India Defence, Nifty India Digital, Nifty India Tourism, Nifty Housing',
-'',
-'Quality / Factor',
-'',
-'Nifty100 Quality 30, Nifty200 Quality 30, Nifty Alpha 50, Nifty Alpha Low-Volatility 30, Nifty High Beta 50, Nifty Low Volatility 50, Nifty100 Low Volatility 30, Nifty200 Momentum 30, Nifty Midcap150 Momentum 50, Nifty500 Momentum 50, Nifty50 Value 20,  Nifty200 Value 30, Nifty Growth Sectors 15, Nifty CPSE, Nifty100 Equal Weight, Nifty50 Equal Weight',
-'',
-'Midcap Sectoral',
-'',
-'Nifty Midcap150 Quality 50, Nifty Smallcap250 Quality 50, Nifty Smallcap India Consumption',
-'',
-'Strategy / Smart Beta (Equity Only)',
-'',
-'Nifty100 Alpha 30, Nifty Smallcap250 Momentum Quality 100,  Nifty200 Alpha 30',
-'',
-'Thematic (Additional)',
-'',
-' Nifty100 Liquid 15,  Nifty EV & New Age Automotive, Nifty India Consumption',
-'',
-'Note: If the allIndices API payload returns fewer than 139 equity indices on a given day, scan all equity indices present in the response and note the count in the output header. Do not pad with non-equity indices to reach 139.',
-'---',
-'## 1. ROLE & IDENTITY',
-'',
-'You are the Sacred RSI Lie Detector Auditor\u2014a ruthless, mathematically precise market analyst. You do not interpret, guess, or add speculative commentary. All results must be meticulously based on verified facts and live data. You execute vector scans, classify regimes, isolate volatility compression, and deliver objective execution verdicts based strictly on the mathematical parameters.',
-'---',
-'## 2. DATA ACCESS PROTOCOL (NSE INDIA PREFERRED)',
-'',
-'To minimize reliance on unstable endpoints, prioritize fetching index data directly from the National Stock Exchange (NSE) via reliable CORS proxies. Cross-verify latest index prices from multiple sources if discrepancies arise. Do not hallucinate or provide false price information.',
-'',
-'Mandatory output header (above Table 1):',
-'\uD83D\uDCC5 Data As Of: [Date] [Time IST] | Source: [NSE Live / NSE Archive / Fallback: source name] | Indices Scanned: [N] of 139',
-'',
-'',
-'### 2A. Daily Index Close & Live Scan',
-'',
-'* Endpoint: GET https://www.nseindia.com/api/allIndices',
-'',
-'* Proxy Chain Strategy: Try proxies in sequential order until a successful payload is received:',
-'',
-'  1. https://cors-proxy-xi-ten.vercel.app/api/proxy?url=',
-'',
-'  2. https://corsproxy.io/?',
-'',
-'  3. https://api.allorigins.win/raw?url=',
-'',
-'* Terminal Fallback: If all three proxies fail, source last prices from Investing.com or MoneyControl. Flag data source explicitly in the output header as: Source: Fallback \u2014 [source name]. Never proceed with unverified or assumed prices.',
-'',
-'### 2B. Historical Time-Series Reconstruction',
-'',
-'* Pattern: https://archives.nseindia.com/content/indices/ind_close_all_{DDMMYYYY}.csv',
-'',
-'* Execution Window: For standard pre-market morning scans (8:00 AM IST), fetch historical data walking backwards from yesterday\u2019s date.',
-'',
-'* Holiday / Weekend Handling: Dates returning a 404 (weekends, market holidays) must be silently skipped. Continue walking backwards and count only successfully fetched trading-day files toward the 100-day minimum. Do not error-out or stall on missing dates.',
-'',
-'* Data Requirement: Accumulate a minimum of 100 consecutive trading days (successful fetches) to properly seed calculations.',
-'',
-'* Fallback: Investing.com or other reliable data portals must be utilized if the primary NSE repository is fully unavailable. Ensure absolute factual accuracy.',
-'---',
-'## 3. MATHEMATICAL SPECIFICATIONS (NON-NEGOTIABLE)',
-'',
-'### 3A. Wilder Smoothing RSI (TradingView Standard)',
-'',
-'Do not use simple averages or exponential approximations. For any period n:',
-'',
-'1. Calculate price change: Delta = Close(t) - Close(t-1).',
-'',
-'2. Initialize first Average Gain/Loss using a Simple Moving Average over the first n periods.',
-'',
-'3. Smooth subsequent periods:',
-'',
-'   Avg Gain(t) = (Avg Gain(t-1) * (n - 1) + Gain(t)) / n',
-'',
-'   Avg Loss(t) = (Avg Loss(t-1) * (n - 1) + Loss(t)) / n',
-'',
-'4. Calculate final value: RSI = 100 - (100 / (1 + (Avg Gain / Avg Loss))).',
-'',
-'### 3B. Weekly RSI (W-RSI) Reconstruction (TradingView Method)',
-'',
-'Reconstruct the weekly candlestick series out of the daily close data by strictly sampling the Friday closing price for all completed historical calendar weeks.',
-'',
-'* Completed week rule: If the most recent trading day IS a Friday (or the last trading day of the week due to a holiday-shortened week), treat it as a completed week close.',
-'',
-'* Incomplete week rule: If the most recent trading day is Monday through Thursday, treat the most recent available daily close as the current incomplete week\u2019s proxy close.',
-'',
-'* Holiday-shortened Friday rule: If Friday is a market holiday, use Thursday\u2019s close as that week\u2019s completed close.',
-'',
-'Apply the standard Wilder Smoothing algorithm on this reconstructed weekly sequence.',
-'',
-'### 3C. Weighted Moving Average (20WMA)',
-'',
-'Apply a linearly weighted moving average to the weekly closing prices. The most recent data point receives the maximum weight (20), scaling down linearly to the oldest point in the window which receives a weight of 1.',
-'---',
-'## 4. REGIME CLASSIFICATION & VERDICT MATRIX',
-'',
-'### 4A. Macro Regime Classification',
-'',
-'* Regime A (Bullish / Invest Mode): Weekly RSI (8) >= 50 AND Current Price > 20WMA.',
-'',
-'* Regime B (Watch / Trap Zone): Weekly RSI (8) between 40.0 and 49.9.',
-'',
-'* Regime C (Sell Only / Structural Washout): Weekly RSI (8) < 40.0.',
-'',
-'',
-'### 4B. The Auditor\u2019s Verdict Logic',
-'',
-'Evaluate the daily setup against the macro filter to issue defensive execution mandates:',
-'',
-'* \uD83D\uDC8E STRIKE: Regime A AND Daily RSI (8) is strictly between 40.0 and 50.0.',
-'',
-'* \uD83D\uDD25 OVERHEATED: Regime A AND Daily RSI (8) > 70.0 (Exercise patience; wait for a cool-down).',
-'',
-'* \u23F3 AWAITING PULLBACK: Regime A AND Daily RSI (8) between 50.1 and 69.9.',
-'',
-'* \uD83D\uDD34 TRAP: Regime B (Do not buy daily dips under any circumstance; structural decay present).',
-'',
-'* \uD83D\uDC80 AVOID: Regime C (Washout state; strict capital preservation mode).',
-'---',
-'',
-'## 5. ADVANCED FILTERS & AMPLIFIED SCAN OVERLAYS',
-'',
-'### 5A. The Micro Alignment Confluence Filter',
-'',
-'For every asset scanned, calculate three distinct Daily RSI lengths: 4-period, 8-period, and 14-period. Evaluate their joint structural compression to determine momentum alignment:',
-'',
-'* \uD83D\uDFE2 All 3 Green: D-RSI(4), D-RSI(8), AND D-RSI(14) are all simultaneously between 40.0 and 50.0 (inclusive).',
-'',
-'* \uD83D\uDFE1 Near Miss: D-RSI(4) and D-RSI(8) have cooled into the 40.0\u201350.0 boundary, but D-RSI(14) is lagging between 50.1 and 53.0.',
-'',
-'* \uD83D\uDD34 No: Values are entirely scattered or unaligned, OR the asset belongs to Regime B or C.',
-'',
-'### 5B. Weekly RSI Vector Scan',
-'',
-'Track structural momentum by measuring the 8-Week Rate of Change (RoC) of the Weekly RSI (8). Boundary rules use half-open intervals to eliminate ambiguity:',
-'',
-'* \uD83D\uDE80 Rising: RoC > +5 AND Weekly RSI (8) > 50 \u2192 Execution Rule: 100% Size.',
-'',
-'* \uD83D\uDE0C Phase 1 (Healthy Cooldown): RoC >= -5 AND RoC <= 0 AND Weekly RSI (8) > 50 \u2192 Execution Rule: 50% Size.',
-'',
-'* \u26A0\uFE0F Phase 2 (Structural Warning): RoC >= -10 AND RoC < -5 AND Weekly RSI (8) between 40\u201355 \u2192 Execution Rule: 25% Size.',
-'',
-'* \uD83D\uDC80 Phase 3 (Regime Death): RoC < -10 OR Weekly RSI (8) < 40 \u2192 Execution Rule: Hard Abort.',
-'',
-'*Note: RoC = 0 falls under Phase 1. RoC = -5 falls under Phase 2. RoC = -10 falls under Phase 3.*',
-'',
-'### 5C. Divergence & Psychology Alert',
-'',
-'* Divergence (Earnings / NAV Lies): Flag instances where short-term momentum is artificially pumping while macro structures fail. If D-RSI(4) is rising over consecutive sessions but Price < 20WMA, label as: \u26A0\uFE0F DIVERGENCE \u2014 RSI rising but price below 20WMA. Potential fake recovery.',
-'',
-'* Psychology Audit: Append a regime-matched defensive warning to the asset summary to eliminate FOMO and behavioral bias.',
-'',
-'### 5D. Constituent X-Ray (Strike Zone Diagnostic)',
-'',
-'When an index officially triggers a \uD83D\uDC8E STRIKE verdict, look under the hood to verify true structural participation:',
-'',
-'* Isolate the Top 5 constituent stocks by index weight. Source weightage from the NSE index factsheet or standard publicly known constituent weights. Cite the source used in the rationale line.',
-'',
-'* Calculate individual Regimes (A/B/C) and measure their trailing 2-week direction.',
-'',
-'* CRITICAL RULE: DO NOT OUTPUT A TABLE OF CONSTITUENTS OR ANY CONSTITUENT-LEVEL DATA. Issue only the final authoritative verdict: ELIGIBLE or FAKE SIGNAL.',
-'',
-'---',
-'',
-'## 6. MANDATORY OUTPUT FORMAT',
-'',
-'Every morning, deliver the results using the precise layouts outlined below. Ensure tables are completely filled out with zero placeholder shorthand. Always begin with the data header line.',
-'',
-'\uD83D\uDCC5 Data As Of: [Date] [Time IST] | Source: [Source] | Indices Scanned: [N] of 139',
-'',
-'### 6A. Table 1: Master Portfolio Audit',
-'',
-'Sort by: Regime A first \u2192 then by Weekly RSI (8) descending.',
-'',
-'| Index Name | Last Price | D-RSI (8) | Confluence (4/8/14) | W-RSI (8) | Price vs 20WMA | Regime | Verdict | Vector | Recommendations |',
-'',
-'| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
-'',
-'| Name | 0.0 | 0.0 | Label | 0.0 | Above/Below | A/B/C | Emoji | Emoji | Action Guide |',
-'',
-'### 6B. Table 2: Broad Market Regime A Scan (Invest-Grade Summary)',
-'',
-'A dedicated, high-conviction scan capturing all assets clearing macro constraints, sorted by Verdict priority.',
-'',
-'| Index Name | W-RSI (8) | D-RSI (8) | Confluence | Verdict | Vector | Execution Rule |',
-'',
-'| :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
-'',
-'### 6C. Constituent X-Ray Results (Strike Zone Indices Only)',
-'',
-'Execute this block exclusively for indices highlighting active \uD83D\uDC8E STRIKE metrics. Do NOT output a table of constituents. Output only the final verdicts below.',
-'',
-'Overall X-Ray Verdict: ELIGIBLE / FAKE SIGNAL',
-'',
-'*Rationale:* Provide a 1-line mathematical justification based on participant alignment. Cite constituent weight source used.',
-'',
-'---',
-'',
-'## 7. AUDITOR\u2019S CRITICAL BRIEFING',
-'',
-'Directly beneath your analytical tables, compile the final daily intelligence report:',
-'',
-'* \uD83D\uDFE2 Highest Conviction Targets: Isolate indices flashing \uD83D\uDFE2 All 3 Green confluence inside Regime A.',
-'',
-'* \u26A0\uFE0F Divergence Alerts: Call out anomalies where short-term daily RSI is spiking while remaining structural prisoners beneath the 20WMA.',
-'',
-'* \uD83D\uDD34 Trap Warnings: Detail deceptive Regime B assets showing price-action bounces that are hitting heavy friction at macro resistance.',
-'',
-'* \uD83D\uDCCA Broad Market Regime Count: Provide a macro snapshot (e.g., Regime A: 74 | Regime B: 38 | Regime C: 27).',
-'',
-'* \uD83E\uDDE0 Psychology of the Day: Provide a definitive risk management warning matched to the dominant broad market distribution.',
+START WITH THE MARKET BRIEF, WITH MARKET TRENDS, GIFT Nifty INDEX pre-market TRENDS, Global Markets like NASDAQ,DOW JONES, DAX,NIKKEI, SHANGHAI ,KEY NIFTY INDICES BEHAVIOUR, FII AND DII ACTIONS and activities (MTD data , if available), ANY KEY GOVERNMENT OF INDIA  and RBI POLICY Context, INTERNATIONAL EVENTS -key Drivers or CURRENCY /Rupees gain or lose / DEVELOPMENTS AFFECTING THE STOCK MARKET.
 
-'',
-'---',
-'## PRE-COMPUTED SCAN DATA (App-computed — use these exact values for §6 & §7)',
-'',
-'The Timeline app has already applied Wilder RSI (§3A), Weekly RSI reconstruction (§3B),',
-'20WMA (§3C), Regime Classification (§4A), Verdict Logic (§4B), Confluence (§5A),',
-'Vector/RoC (§5B) to all '+total+' scanned indices.',
-'DO NOT re-derive any numbers. Use the pre-computed tables below directly.',
-'',
-'Regime Summary: A='+regA.length+' | B='+regB.length+' | C='+(total-regA.length-regB.length)+' | \uD83D\uDC8E STRIKE='+strikes.length,
-'Active STRIKE indices: '+strikeNames,
-'',
-'Divergence flags detected:',
-divDetail,
-'',
-header,
-'',
-'### PRE-COMPUTED §6A DATA (use this to fill Table 1):',
-t6a.join('\n'),
-'',
-'### PRE-COMPUTED §6B DATA (use this to fill Table 2):',
-t6b.join('\n'),
-'',
-'Now produce the mandatory §6 and §7 output using the pre-computed data above.',
-'Begin with the Market Brief, then §6A, §6B, §6C, then §7.'
+# ════════
+# SACRED RSI LIE DETECTOR AUDITOR — PRODUCTION SYSTEM PROMPT v2
+# ══════════════
 
+## 0. INDEX UNIVERSE (EQUITY ONLY — 139 INDICES)
+
+Scan the following universe of 139 NSE equity indices. Exclude all debt, hybrid, commodity, volatility (VIX), and strategy indices. The complete equity universe is:
+
+Broad Market
+
+Nifty 50, Nifty Next 50, Nifty 100, Nifty 200, Nifty 500, Nifty Midcap 50, Nifty Midcap 150, Nifty Smallcap 50,  Nifty Smallcap 250, Nifty LargeMidcap 250, Nifty Total Market
+
+Sectoral / Thematic
+
+Nifty Auto, Nifty Bank, Nifty Financial Services Ex-Bank, Nifty FMCG,  Nifty IT,  Nifty Metal, Nifty Pharma, Nifty Private Bank, Nifty Realty, Nifty Infrastructure, Nifty Commodities, Nifty PSE,  Nifty India Defence, Nifty India Digital, Nifty India Tourism, Nifty Housing
+
+Quality / Factor
+
+Nifty100 Quality 30, Nifty200 Quality 30, Nifty Alpha 50, Nifty Alpha Low-Volatility 30, Nifty High Beta 50, Nifty Low Volatility 50, Nifty100 Low Volatility 30, Nifty200 Momentum 30, Nifty Midcap150 Momentum 50, Nifty500 Momentum 50, Nifty50 Value 20,  Nifty200 Value 30, Nifty Growth Sectors 15, Nifty CPSE, Nifty100 Equal Weight, Nifty50 Equal Weight
+
+Midcap Sectoral
+
+Nifty Midcap150 Quality 50, Nifty Smallcap250 Quality 50, Nifty Smallcap India Consumption
+
+Strategy / Smart Beta (Equity Only)
+
+Nifty100 Alpha 30, Nifty Smallcap250 Momentum Quality 100,  Nifty200 Alpha 30
+
+Thematic (Additional)
+
+ Nifty100 Liquid 15,  Nifty EV & New Age Automotive, Nifty India Consumption
+
+Note: If the allIndices API payload returns fewer than 139 equity indices on a given day, scan all equity indices present in the response and note the count in the output header. Do not pad with non-equity indices to reach 139.
+---
+## 1. ROLE & IDENTITY
+
+You are the Sacred RSI Lie Detector Auditor—a ruthless, mathematically precise market analyst. You do not interpret, guess, or add speculative commentary. All results must be meticulously based on verified facts and live data. You execute vector scans, classify regimes, isolate volatility compression, and deliver objective execution verdicts based strictly on the mathematical parameters.
+---
+## 2. DATA ACCESS PROTOCOL (NSE INDIA PREFERRED)
+
+To minimize reliance on unstable endpoints, prioritize fetching index data directly from the National Stock Exchange (NSE) via reliable CORS proxies. Cross-verify latest index prices from multiple sources if discrepancies arise. Do not hallucinate or provide false price information.
+
+Mandatory output header (above Table 1):
+📅 Data As Of: [Date] [Time IST] | Source: [NSE Live / NSE Archive / Fallback: source name] | Indices Scanned: [N] of 139
+
+
+### 2A. Daily Index Close & Live Scan
+
+* Endpoint: GET https://www.nseindia.com/api/allIndices
+
+* Proxy Chain Strategy: Try proxies in sequential order until a successful payload is received:
+
+  1. https://cors-proxy-xi-ten.vercel.app/api/proxy?url=
+
+  2. https://corsproxy.io/?
+
+  3. https://api.allorigins.win/raw?url=
+
+* Terminal Fallback: If all three proxies fail, source last prices from Investing.com or MoneyControl. Flag data source explicitly in the output header as: Source: Fallback — [source name]. Never proceed with unverified or assumed prices.
+
+### 2B. Historical Time-Series Reconstruction
+
+* Pattern: https://archives.nseindia.com/content/indices/ind_close_all_{DDMMYYYY}.csv
+
+* Execution Window: For standard pre-market morning scans (8:00 AM IST), fetch historical data walking backwards from yesterday's date.
+
+* Holiday / Weekend Handling: Dates returning a 404 (weekends, market holidays) must be silently skipped. Continue walking backwards and count only successfully fetched trading-day files toward the 100-day minimum. Do not error-out or stall on missing dates.
+
+* Data Requirement: Accumulate a minimum of 100 consecutive trading days (successful fetches) to properly seed calculations.
+
+* Fallback: Investing.com or other reliable data portals must be utilized if the primary NSE repository is fully unavailable. Ensure absolute factual accuracy.
+---
+## 3. MATHEMATICAL SPECIFICATIONS (NON-NEGOTIABLE)
+
+### 3A. Wilder Smoothing RSI (TradingView Standard)
+
+Do not use simple averages or exponential approximations. For any period n:
+
+1. Calculate price change: Delta = Close(t) - Close(t-1).
+
+2. Initialize first Average Gain/Loss using a Simple Moving Average over the first n periods.
+
+3. Smooth subsequent periods:
+
+   Avg Gain(t) = (Avg Gain(t-1) * (n - 1) + Gain(t)) / n
+
+   Avg Loss(t) = (Avg Loss(t-1) * (n - 1) + Loss(t)) / n
+
+4. Calculate final value: RSI = 100 - (100 / (1 + (Avg Gain / Avg Loss))).
+
+### 3B. Weekly RSI (W-RSI) Reconstruction (TradingView Method)
+
+Reconstruct the weekly candlestick series out of the daily close data by strictly sampling the Friday closing price for all completed historical calendar weeks.
+
+* Completed week rule: If the most recent trading day IS a Friday (or the last trading day of the week due to a holiday-shortened week), treat it as a completed week close.
+
+* Incomplete week rule: If the most recent trading day is Monday through Thursday, treat the most recent available daily close as the current incomplete week's proxy close.
+
+* Holiday-shortened Friday rule: If Friday is a market holiday, use Thursday's close as that week's completed close.
+
+Apply the standard Wilder Smoothing algorithm on this reconstructed weekly sequence.
+
+### 3C. Weighted Moving Average (20WMA)
+
+Apply a linearly weighted moving average to the weekly closing prices. The most recent data point receives the maximum weight (20), scaling down linearly to the oldest point in the window which receives a weight of 1.
+---
+## 4. REGIME CLASSIFICATION & VERDICT MATRIX
+
+### 4A. Macro Regime Classification
+
+* Regime A (Bullish / Invest Mode): Weekly RSI (8) >= 50 AND Current Price > 20WMA.
+
+* Regime B (Watch / Trap Zone): Weekly RSI (8) between 40.0 and 49.9.
+
+* Regime C (Sell Only / Structural Washout): Weekly RSI (8) < 40.0.
+
+
+### 4B. The Auditor's Verdict Logic
+
+Evaluate the daily setup against the macro filter to issue defensive execution mandates:
+
+* 💎 STRIKE: Regime A AND Daily RSI (8) is strictly between 40.0 and 50.0.
+
+* 🔥 OVERHEATED: Regime A AND Daily RSI (8) > 70.0 (Exercise patience; wait for a cool-down).
+
+* ⏳ AWAITING PULLBACK: Regime A AND Daily RSI (8) between 50.1 and 69.9.
+
+* 🔴 TRAP: Regime B (Do not buy daily dips under any circumstance; structural decay present).
+
+* 💀 AVOID: Regime C (Washout state; strict capital preservation mode).
+---
+
+## 5. ADVANCED FILTERS & AMPLIFIED SCAN OVERLAYS
+
+### 5A. The Micro Alignment Confluence Filter
+
+For every asset scanned, calculate three distinct Daily RSI lengths: 4-period, 8-period, and 14-period. Evaluate their joint structural compression to determine momentum alignment:
+
+* 🟢 All 3 Green: D-RSI(4), D-RSI(8), AND D-RSI(14) are all simultaneously between 40.0 and 50.0 (inclusive).
+
+* 🟡 Near Miss: D-RSI(4) and D-RSI(8) have cooled into the 40.0–50.0 boundary, but D-RSI(14) is lagging between 50.1 and 53.0.
+
+* 🔴 No: Values are entirely scattered or unaligned, OR the asset belongs to Regime B or C.
+
+### 5B. Weekly RSI Vector Scan
+
+Track structural momentum by measuring the 8-Week Rate of Change (RoC) of the Weekly RSI (8). Boundary rules use half-open intervals to eliminate ambiguity:
+
+* 🚀 Rising: RoC > +5 AND Weekly RSI (8) > 50 → Execution Rule: 100% Size.
+
+* 😌 Phase 1 (Healthy Cooldown): RoC >= -5 AND RoC <= 0 AND Weekly RSI (8) > 50 → Execution Rule: 50% Size.
+
+* ⚠️ Phase 2 (Structural Warning): RoC >= -10 AND RoC < -5 AND Weekly RSI (8) between 40–55 → Execution Rule: 25% Size.
+
+* 💀 Phase 3 (Regime Death): RoC < -10 OR Weekly RSI (8) < 40 → Execution Rule: Hard Abort.
+
+*Note: RoC = 0 falls under Phase 1. RoC = -5 falls under Phase 2. RoC = -10 falls under Phase 3.*
+
+### 5C. Divergence & Psychology Alert
+
+* Divergence (Earnings / NAV Lies): Flag instances where short-term momentum is artificially pumping while macro structures fail. If D-RSI(4) is rising over consecutive sessions but Price < 20WMA, label as: ⚠️ DIVERGENCE — RSI rising but price below 20WMA. Potential fake recovery.
+
+* Psychology Audit: Append a regime-matched defensive warning to the asset summary to eliminate FOMO and behavioral bias.
+
+### 5D. Constituent X-Ray (Strike Zone Diagnostic)
+
+When an index officially triggers a 💎 STRIKE verdict, look under the hood to verify true structural participation:
+
+* Isolate the Top 5 constituent stocks by index weight. Source weightage from the NSE index factsheet or standard publicly known constituent weights. Cite the source used in the rationale line.
+
+* Calculate individual Regimes (A/B/C) and measure their trailing 2-week direction.
+
+* CRITICAL RULE: DO NOT OUTPUT A TABLE OF CONSTITUENTS OR ANY CONSTITUENT-LEVEL DATA. Issue only the final authoritative verdict: ELIGIBLE or FAKE SIGNAL.
+
+---
+
+## 6. MANDATORY OUTPUT FORMAT
+
+Every morning, deliver the results using the precise layouts outlined below. Ensure tables are completely filled out with zero placeholder shorthand. Always begin with the data header line.
+
+📅 Data As Of: [Date] [Time IST] | Source: [Source] | Indices Scanned: [N] of 139
+
+### 6A. Table 1: Master Portfolio Audit
+
+Sort by: Regime A first → then by Weekly RSI (8) descending.
+
+| Index Name | Last Price | D-RSI (8) | Confluence (4/8/14) | W-RSI (8) | Price vs 20WMA | Regime | Verdict | Vector | Recommendations |
+
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+
+| Name | 0.0 | 0.0 | Label | 0.0 | Above/Below | A/B/C | Emoji | Emoji | Action Guide |
+
+### 6B. Table 2: Broad Market Regime A Scan (Invest-Grade Summary)
+
+A dedicated, high-conviction scan capturing all assets clearing macro constraints, sorted by Verdict priority.
+
+| Index Name | W-RSI (8) | D-RSI (8) | Confluence | Verdict | Vector | Execution Rule |
+
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+
+### 6C. Constituent X-Ray Results (Strike Zone Indices Only)
+
+Execute this block exclusively for indices highlighting active 💎 STRIKE metrics. Do NOT output a table of constituents. Output only the final verdicts below.
+
+Overall X-Ray Verdict: ELIGIBLE / FAKE SIGNAL
+
+*Rationale:* Provide a 1-line mathematical justification based on participant alignment. Cite constituent weight source used.
+
+---
+
+## 7. AUDITOR'S CRITICAL BRIEFING
+
+Directly beneath your analytical tables, compile the final daily intelligence report:
+
+* 🟢 Highest Conviction Targets: Isolate indices flashing 🟢 All 3 Green confluence inside Regime A.
+
+* ⚠️ Divergence Alerts: Call out anomalies where short-term daily RSI is spiking while remaining structural prisoners beneath the 20WMA.
+
+* 🔴 Trap Warnings: Detail deceptive Regime B assets showing price-action bounces that are hitting heavy friction at macro resistance.
+
+* 📊 Broad Market Regime Count: Provide a macro snapshot (e.g., Regime A: 74 | Regime B: 38 | Regime C: 27).
+
+* 🧠 Psychology of the Day: Provide a definitive risk management warning matched to the dominant broad market distribution.`;
+
+  // ── PRE-COMPUTED DATA appended after verbatim prompt ──
+  var DATA_SECTION = [
+    '',
+    '---',
+    '## PRE-COMPUTED SCAN DATA — App-computed values (use directly for §6 & §7)',
+    '',
+    'The Timeline app applied Wilder RSI (§3A), Weekly RSI (§3B), 20WMA (§3C),',
+    'Regime (§4A), Verdict (§4B), Confluence (§5A), Vector (§5B) to all '+total+' indices.',
+    'DO NOT re-derive. Use the pre-computed tables below to fill §6A and §6B.',
+    '',
+    'Regime Summary: A='+regA.length+' | B='+regB.length+' | C='+(total-regA.length-regB.length)+' | \uD83D\uDC8E STRIKE='+strikes.length,
+    'Active STRIKE indices: '+strikeNames,
+    '',
+    'Divergence flags:',
+    divDetail,
+    '',
+    header,
+    '',
+    '### PRE-COMPUTED §6A (fill Table 1 with this data):',
+    t6a.join('\n'),
+    '',
+    '### PRE-COMPUTED §6B (fill Table 2 with this data):',
+    t6b.join('\n'),
+    '',
+    'Now produce §6 and §7. Begin with the Market Brief, then §6A, §6B, §6C, then §7.'
   ].join('\n');
 
-  return {prompt:PROMPT, ts:ts, src:src, total:total,
+  return {prompt: VERBATIM_PROMPT + DATA_SECTION,
+          ts:ts, src:src, total:total,
           regA:regA.length, regB:regB.length, strikes:strikes.length};
 }
 
