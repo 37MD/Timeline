@@ -10,16 +10,16 @@
 // ldBuildBackupPayload in index.html) so a version bump in one place is a
 // clear signal to bump the other too, even though they serve different
 // purposes (backup format vs. offline shell).
-const CACHE_NAME = 'timeline-scanner-v5.83';
+const CACHE_NAME = 'timeline-scanner-v5.84';
 
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
   './icons/icon-192.png',
-  './icons/icon-192-maskable.png',
+  './icons/icon-maskable-192.png',
   './icons/icon-512.png',
-  './icons/icon-512-maskable.png',
+  './icons/icon-maskable-512.png',
   './icons/icon-180.png',
   './icons/favicon.png',
   './icons/icon.svg'
