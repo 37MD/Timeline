@@ -876,28 +876,34 @@ body{}
       </div>
     </div>
 
-    <!-- ── PANE 1: Price/NAV + SMA(8) low, with HUD ── -->
-    <div id="hmPane1Wrap" style="width:100%;height:22vh;height:22dvh;min-height:110px;flex-shrink:0;position:relative;border-bottom:1px solid var(--border);background:#fff;">
-      <canvas id="hmPane1Canvas"></canvas>
-      <div id="hmHud1" style="display:none;position:absolute;pointer-events:none;background:rgba(255,255,255,0.94);backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:10px;padding:5px 9px;font-family:var(--sans);font-size:9px;line-height:1.5;color:var(--text);box-shadow:var(--shadow-sm);z-index:10;white-space:normal;top:6px;left:6px;max-width:70%;box-sizing:border-box;"></div>
-      <div id="hmNoDataBanner" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:#fff;text-align:center;padding:16px;z-index:20;">
-        <div id="hmNoDataMsg" style="font-size:13px;color:var(--text-dim);font-family:var(--sans);max-width:280px;white-space:pre-line;">No scanner data yet</div>
-        <button onclick="switchTab('pt')" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 18px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-sm);">Go to Portfolio Snapshot →</button>
+    <!-- ── PANE 1: Price/NAV + SMA(8) + SwiftEdge, with HUD strip ── -->
+    <div id="hmPane1Wrap" style="width:100%;height:22vh;height:22dvh;min-height:110px;flex-shrink:0;display:flex;flex-direction:column;border-bottom:1px solid var(--border);background:#fff;position:relative;">
+      <div style="flex:1 1 0;min-height:0;position:relative;">
+        <canvas id="hmPane1Canvas" style="display:block;width:100%;height:100%;"></canvas>
+        <div id="hmNoDataBanner" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:#fff;text-align:center;padding:16px;z-index:20;">
+          <div id="hmNoDataMsg" style="font-size:13px;color:var(--text-dim);font-family:var(--sans);max-width:280px;white-space:pre-line;">No scanner data yet</div>
+          <button onclick="switchTab('pt')" style="background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 18px;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;box-shadow:var(--shadow-sm);">Go to Portfolio Snapshot →</button>
+        </div>
       </div>
+      <div id="hmHud1" style="display:flex;align-items:center;flex-shrink:0;height:18px;padding:0 8px;background:rgba(245,245,250,0.97);border-top:1px solid var(--border);font-family:var(--sans);font-size:9px;line-height:18px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;">—</div>
     </div>
 
-    <!-- ── PANE 2: Hilega-Milega (RSI/WMA/EMA), with HUD ── -->
-    <div id="hmPane2Wrap" style="width:100%;height:26vh;height:26dvh;min-height:120px;flex-shrink:0;position:relative;border-bottom:1px solid var(--border);background:#fff;">
-      <div style="position:absolute;top:6px;right:6px;font-size:9px;font-weight:600;color:var(--text-dim);z-index:11;background:rgba(255,255,255,0.85);padding:3px 8px;border-radius:99px;box-shadow:var(--shadow-sm);">Hilega-Milega</div>
-      <canvas id="hmPane2Canvas"></canvas>
-      <div id="hmHud2" style="display:none;position:absolute;pointer-events:none;background:rgba(255,255,255,0.94);backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:10px;padding:5px 9px;font-family:var(--sans);font-size:9px;line-height:1.5;color:var(--text);box-shadow:var(--shadow-sm);z-index:10;white-space:normal;top:6px;left:6px;text-align:left;max-width:70%;box-sizing:border-box;"></div>
+    <!-- ── PANE 2: Hilega-Milega (RSI/WMA/EMA), with HUD strip ── -->
+    <div id="hmPane2Wrap" style="width:100%;height:26vh;height:26dvh;min-height:120px;flex-shrink:0;display:flex;flex-direction:column;border-bottom:1px solid var(--border);background:#fff;position:relative;">
+      <div style="position:absolute;top:5px;right:6px;font-size:9px;font-weight:600;color:var(--text-dim);z-index:11;background:rgba(255,255,255,0.85);padding:2px 7px;border-radius:99px;box-shadow:var(--shadow-sm);pointer-events:none;">Hilega-Milega</div>
+      <div style="flex:1 1 0;min-height:0;position:relative;">
+        <canvas id="hmPane2Canvas" style="display:block;width:100%;height:100%;"></canvas>
+      </div>
+      <div id="hmHud2" style="display:flex;align-items:center;flex-shrink:0;height:18px;padding:0 8px;background:rgba(245,245,250,0.97);border-top:1px solid var(--border);font-family:var(--sans);font-size:9px;line-height:18px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;">—</div>
     </div>
 
-    <!-- ── PANE 3: Relative Strength vs benchmark, with HUD ── -->
-    <div id="hmPane3Wrap" style="width:100%;height:27vh;height:27dvh;min-height:130px;flex-shrink:0;position:relative;background:#fff;">
-      <div style="position:absolute;top:6px;right:6px;font-size:9px;font-weight:600;color:var(--text-dim);z-index:11;background:rgba(255,255,255,0.85);padding:3px 8px;border-radius:99px;box-shadow:var(--shadow-sm);" id="hmPane3Label">RS vs Nifty 50</div>
-      <canvas id="hmPane3Canvas"></canvas>
-      <div id="hmHud3" style="display:none;position:absolute;pointer-events:none;background:rgba(255,255,255,0.94);backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:10px;padding:5px 9px;font-family:var(--sans);font-size:9px;line-height:1.5;color:var(--text);box-shadow:var(--shadow-sm);z-index:10;white-space:normal;top:6px;left:6px;text-align:left;max-width:70%;box-sizing:border-box;"></div>
+    <!-- ── PANE 3: Relative Strength vs benchmark / MTF, with HUD strip ── -->
+    <div id="hmPane3Wrap" style="width:100%;height:27vh;height:27dvh;min-height:130px;flex-shrink:0;display:flex;flex-direction:column;background:#fff;position:relative;">
+      <div style="position:absolute;top:5px;right:6px;font-size:9px;font-weight:600;color:var(--text-dim);z-index:11;background:rgba(255,255,255,0.85);padding:2px 7px;border-radius:99px;box-shadow:var(--shadow-sm);pointer-events:none;" id="hmPane3Label">RS vs Nifty 50</div>
+      <div style="flex:1 1 0;min-height:0;position:relative;">
+        <canvas id="hmPane3Canvas" style="display:block;width:100%;height:100%;"></canvas>
+      </div>
+      <div id="hmHud3" style="display:flex;align-items:center;flex-shrink:0;height:18px;padding:0 8px;background:rgba(245,245,250,0.97);border-top:1px solid var(--border);font-family:var(--sans);font-size:9px;line-height:18px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;">—</div>
     </div>
 
     <!-- ── Legend footer (collapsed by default — tap to expand, TradingView-style) ── -->
@@ -10965,7 +10971,7 @@ function hmHideNoDataBanner() {
 function hmClearStatBoxes(label) {
   var fl = document.getElementById('hmFundLabel'); if (fl) fl.textContent = label || '\u2014';
   ['hmHud1', 'hmHud2', 'hmHud3'].forEach(function(id) {
-    var el = document.getElementById(id); if (el) el.style.display = 'none';
+    var el = document.getElementById(id); if (el) el.innerHTML = '\u2014';
   });
 }
 // ── 13.6 Main Chart Render ──
@@ -11762,7 +11768,7 @@ async function drawHilegaMilega() {
           var chart = { pad: pad, cW: cW, cH: cH, n: n, W: W, H: H, xStep: xStep, toX: toX, toY: toY, dpr: dpr, ctx: ctx, canvas: canvas };
           try { chart.cleanImg = ctx.getImageData(0, 0, canvas.width, canvas.height); } catch (_e) { chart.cleanImg = null; }
           var hudEl = document.getElementById(paneCfg.hudId);
-          if (hudEl && paneCfg.hudFormat) { hudEl.innerHTML = paneCfg.hudFormat(lastI); hudEl.style.display = 'block'; }
+          if (hudEl && paneCfg.hudFormat) { hudEl.innerHTML = paneCfg.hudFormat(lastI); hudEl.style.display = 'flex'; }
           panesForCrosshair.push({ chart: chart, hudEl: hudEl, hudFormat: paneCfg.hudFormat });
           return chart;
         }
@@ -11783,8 +11789,12 @@ async function drawHilegaMilega() {
             var above = nv != null && sv != null && nv >= sv;
             var pCol = above ? '#1a8a1a' : '#cc0000';
             var seR = swiftEdgeRegime[idx];
-            var seLabel = seR === 'up' ? '<span style="color:#1a8a1a">SwiftEdge: Bull</span>' : seR === 'down' ? '<span style="color:#cc0000">SwiftEdge: Bear</span>' : seR === 'mid' ? '<span style="color:#7c3aed">SwiftEdge: Neutral</span>' : '';
-            return '<b>' + dt + '</b><br><span style="color:' + pCol + '">NAV: ' + (nv != null ? nv.toFixed(2) : '\u2014') + '</span> &nbsp; SMA8: ' + (sv != null ? sv.toFixed(2) : '\u2014') + (seLabel ? '<br>' + seLabel : '');
+            var seColor = seR === 'up' ? '#1a8a1a' : seR === 'down' ? '#cc0000' : seR === 'mid' ? '#7c3aed' : 'var(--text-dim)';
+            var seText = seR === 'up' ? 'Bull' : seR === 'down' ? 'Bear' : seR === 'mid' ? 'Neutral' : '';
+            return '<span style="color:var(--text-dim);margin-right:8px;">' + dt + '</span>'
+              + '<span style="color:' + pCol + ';font-weight:600;margin-right:8px;">NAV ' + (nv != null ? nv.toFixed(2) : '\u2014') + '</span>'
+              + '<span style="color:var(--text-dim);margin-right:8px;">SMA8 ' + (sv != null ? sv.toFixed(2) : '\u2014') + '</span>'
+              + (seText ? '<span style="color:' + seColor + ';font-weight:600;">' + seText + '</span>' : '');
           }
         });
         // Draw SwiftEdge SMA(48) high/low band FIRST — behind price/SMA8 —
@@ -11847,7 +11857,10 @@ async function drawHilegaMilega() {
           hLines: [{ val: 20, color: '#16a34a', dash: [4, 3] }, { val: 88, color: '#ef4444', dash: [4, 3] }, { val: 50, color: '#000004', dash: [] }],
           hudFormat: function(idx) {
             var rv = rsi[idx], wv = wma[idx], ev = ema[idx], dt = dates[idx];
-            return '<b>' + dt + '</b><br>RSI: ' + (rv != null ? rv.toFixed(1) : '\u2014') + ' &nbsp; WMA: ' + (wv != null ? wv.toFixed(1) : '\u2014') + ' &nbsp; EMA: ' + (ev != null ? ev.toFixed(1) : '\u2014');
+            return '<span style="color:var(--text-dim);margin-right:8px;">' + dt + '</span>'
+              + '<span style="color:var(--text-dim);margin-right:8px;">RSI <b style="color:var(--text);">' + (rv != null ? rv.toFixed(1) : '\u2014') + '</b></span>'
+              + '<span style="color:#e11d48;margin-right:8px;">WMA ' + (wv != null ? wv.toFixed(1) : '\u2014') + '</span>'
+              + '<span style="color:#16a34a;">EMA ' + (ev != null ? ev.toFixed(1) : '\u2014') + '</span>';
           }
         });
 
@@ -11880,11 +11893,12 @@ async function drawHilegaMilega() {
             var dt = dates[idx];
             var a1 = alpha1m[idx], a2 = alpha2m[idx], a3 = alpha3m[idx];
             var adxV = adxSeries[idx], st = rrgStatus[idx];
-            var fmt = function(v) { return v != null ? (v >= 0 ? '+' : '') + v.toFixed(2) + '%' : '\u2014'; };
-            return '<b>' + dt + '</b>' +
-              '<br>1M/2M/3M= ' + fmt(a1) + '/' + fmt(a2) + '/' + fmt(a3) +
-              '<br>ADX: ' + (adxV != null ? adxV.toFixed(1) : '\u2014') +
-              ' &nbsp; <b>' + (st || '') + '</b>';
+            var fmt = function(v) { return v != null ? (v >= 0 ? '+' : '') + v.toFixed(1) + '%' : '\u2014'; };
+            var stCol = st === 'LEADING' ? '#16a34a' : st === 'WEAKENING' ? '#ca8a04' : st === 'IMPROVING' ? '#2563eb' : st === 'LAGGING' ? '#dc2626' : '#6b7280';
+            return '<span style="color:var(--text-dim);margin-right:8px;">' + dt + '</span>'
+              + '<span style="color:var(--text-dim);margin-right:8px;">α 1M/2M/3M ' + fmt(a1) + '/' + fmt(a2) + '/' + fmt(a3) + '</span>'
+              + '<span style="color:var(--text-dim);margin-right:8px;">ADX ' + (adxV != null ? adxV.toFixed(1) : '\u2014') + '</span>'
+              + (st ? '<span style="color:' + stCol + ';font-weight:600;">' + st + '</span>' : '');
           }
         });
         // Draw RRG quadrant backgrounds + signal markers on Pane 3
@@ -11966,9 +11980,13 @@ async function drawHilegaMilega() {
           hudFormat: function(idx) {
             var dt = dates[idx];
             var upv = mtfUptrend[idx], dnv = mtfDowntrend[idx];
-            var regime = upv ? '<span style="color:#1a8a4a">Uptrend (D+W)</span>' : dnv ? '<span style="color:#cc0000">Downtrend (D+W)</span>' : '<span style="color:#888">Mixed</span>';
-            return '<b>' + dt + '</b>' +
-              '<br>' + regime;
+            var trendCol = upv ? '#1a8a4a' : dnv ? '#cc0000' : '#888';
+            var trendText = upv ? 'Uptrend (D+W)' : dnv ? 'Downtrend (D+W)' : 'Mixed';
+            var trig = mtfRsiTrigger[idx], trend = mtfRsiTrend[idx];
+            return '<span style="color:var(--text-dim);margin-right:8px;">' + dt + '</span>'
+              + '<span style="color:' + trendCol + ';font-weight:600;margin-right:8px;">' + trendText + '</span>'
+              + (trend != null ? '<span style="color:#888;margin-right:8px;">RSI(50) ' + trend.toFixed(1) + '</span>' : '')
+              + (trig != null ? '<span style="color:#888;">RSI(8) ' + trig.toFixed(1) + '</span>' : '');
           }
         });
         if (pane3Chart) {
@@ -12045,7 +12063,7 @@ async function drawHilegaMilega() {
             if (chart.cleanImg) { try { ctx.putImageData(chart.cleanImg, 0, 0); } catch (_pe) {} }
             ctx.save(); ctx.strokeStyle = '#888'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
             ctx.beginPath(); ctx.moveTo(chart.toX(idx), chart.pad.t); ctx.lineTo(chart.toX(idx), chart.H - chart.pad.b); ctx.stroke(); ctx.restore();
-            if (entry.hudEl && entry.hudFormat) { entry.hudEl.innerHTML = entry.hudFormat(idx); entry.hudEl.style.display = 'block'; }
+            if (entry.hudEl && entry.hudFormat) { entry.hudEl.innerHTML = entry.hudFormat(idx); entry.hudEl.style.display = 'flex'; }
           });
         }
         function hmClearCrosshair() {
@@ -12053,7 +12071,7 @@ async function drawHilegaMilega() {
             var chart = entry.chart;
             var ctx = chart.ctx;
             if (chart.cleanImg) { try { ctx.putImageData(chart.cleanImg, 0, 0); } catch (_pe) {} }
-            if (entry.hudEl) entry.hudEl.style.display = 'none';
+            if (entry.hudEl) { entry.hudEl.innerHTML = '\u2014'; }
           });
         }
         panesForCrosshair.forEach(function(entry) {
