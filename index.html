@@ -15948,9 +15948,24 @@ You are the AI Breadth Confirmation engine of the Sacred RSI Regime System for I
 
 The complete portfolio fund list is provided in the PRE-COMPUTED DATA section below (under "USER PORTFOLIO — SETUP PAGE FUNDS"). You MUST produce a full breadth analysis block FOR EACH FUND, one after another.
 
----
+### 📋 MANDATORY OUTPUT STRUCTURE — FOLLOW EXACTLY:
 
-**REPEAT THIS BLOCK FOR EVERY SINGLE FUND IN THE PORTFOLIO LIST:**
+**STEP 1 — LIST ALL PORTFOLIO FUNDS:**
+Before any analysis, BEGIN Section 8 by listing every fund from the "USER PORTFOLIO" block in this exact format:
+
+```
+PORTFOLIO FUNDS TO ANALYZE:
+1. [Fund Name 1]
+2. [Fund Name 2]
+...
+N. [Fund Name N]
+Total: [N] funds
+```
+
+**STEP 2 — PRODUCE A TABLE FOR EACH FUND:**
+For EVERY fund listed above (no exceptions), output the following table block. Do NOT skip any fund. Do NOT merge funds into a single table. Each fund gets its own dedicated block.
+
+---
 
 ### 📦 Fund: [FUND NAME]
 **Tracks Index:** [Index Name]
@@ -15971,6 +15986,13 @@ The complete portfolio fund list is provided in the PRE-COMPUTED DATA section be
 
 ---
 
+> ⛔ OUTPUT CHECK: Count the fund blocks you produced. If it does NOT match the total number of funds listed in STEP 1, you have FAILED. Go back and produce the missing fund blocks. Every fund MUST have its own 📦 block with a completed table.
+
+**STEP 3 — PORTFOLIO BREADTH SUMMARY:**
+After ALL fund blocks are complete, end Section 8 with a 2-sentence PORTFOLIO BREADTH SUMMARY covering the overall breadth picture across the entire portfolio.
+
+---
+
 **Verdict rules (apply to every fund above):**
 - BULL = Regime A (Weekly RSI ≥ 50) AND 10-day trend = RISING
 - 3–5 BULL stocks → ✅ INDEX BREADTH BULLISH CONFIRMED — Proceed as per SOP
@@ -15978,8 +16000,6 @@ The complete portfolio fund list is provided in the PRE-COMPUTED DATA section be
 - 0–1 BULL stocks → 🚨 BREADTH WEAK — Do not deploy Funds. It is a Lie.
 
 **9-week RSI method:** TradingView Wilder Smoothing — same as §3A/§3B.
-
-After ALL funds have been processed, end Section 8 with a 2-sentence PORTFOLIO BREADTH SUMMARY covering the overall breadth picture across the entire portfolio.
 
 ---
 
@@ -16099,7 +16119,13 @@ If ALL funds fail Condition A, state: *"No funds in the portfolio are currently 
     'DO NOT include any other indices from the §0 universe in §8 or §9.',
     fundListStr,
     '',
-    'Now produce §6 and §7, then §8, then §9. Begin with the Market Brief, then §6A, §6B, §6C, then §7 (Auditor Briefing), then §8 (Fund Breadth Analysis — ONLY for the funds listed above), then §9 (Positive Consolidation Scanner — ONLY for the funds listed above).'
+    '⛔ MANDATORY §8 OUTPUT REQUIREMENT:',
+    'You MUST begin §8 by listing ALL '+fundNamesForBreath.length+' funds above in a numbered list.',
+    'Then you MUST produce a SEPARATE 📦 Fund block with a completed Top-5 Constituents table for EACH AND EVERY fund.',
+    'The number of 📦 Fund blocks in your §8 output MUST equal '+fundNamesForBreath.length+'. If it does not, you have FAILED the task.',
+    'Do NOT summarize, merge, or skip any fund. Every fund gets its own table. No exceptions.',
+    '',
+    'Now produce §6 and §7, then §8, then §9. Begin with the Market Brief, then §6A, §6B, §6C, then §7 (Auditor Briefing), then §8 (Fund Breadth Analysis — ONLY for the funds listed above — MANDATORY per-fund tables), then §9 (Positive Consolidation Scanner — ONLY for the funds listed above).'
   ].join('\n');
 
 
