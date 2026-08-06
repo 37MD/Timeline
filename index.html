@@ -15972,15 +15972,17 @@ For EVERY fund listed above (no exceptions), output the following table block. D
 
 **Top 5 Constituents by Weight:**
 
-| # | Stock | Index Weight % | 9-Week RSI | 10-Day Trend | 21-Day % | 42-Day % | Regime | Status |
-| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| 1 | [Stock Name] | [%] | [RSI] | RISING / FALLING | [%] | [%] | A/B/C | 🐂 BULL / 🐻 BEAR |
-| 2 | ... | ... | ... | ... | ... | ... | ... | ... |
-| 3 | ... | ... | ... | ... | ... | ... | ... | ... |
-| 4 | ... | ... | ... | ... | ... | ... | ... | ... |
-| 5 | ... | ... | ... | ... | ... | ... | ... | ... |
+| # | Stock | Index Weight % | 9-Week RSI | 10-Day Trend | 21-Day % | 42-Day % | Regime | Status | PC Status |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 1 | [Stock Name] | [%] | [RSI] | RISING / FALLING | [%] | [%] | A/B/C | 🐂 BULL / 🐻 BEAR | ✅ VALID PC / ⚠️ WATCH / ❌ No Setup |
+| 2 | ... | ... | ... | ... | ... | ... | ... | ... | ... |
+| 3 | ... | ... | ... | ... | ... | ... | ... | ... | ... |
+| 4 | ... | ... | ... | ... | ... | ... | ... | ... | ... |
+| 5 | ... | ... | ... | ... | ... | ... | ... | ... | ... |
 
 **BULL Count:** [N] of 5 &nbsp;&nbsp; | &nbsp;&nbsp; **BULL Weight:** [Sum of BULL stock weights]%
+
+**PC Verdict:** [✅ VALID PC SETUP — High-conviction entry zone / ⚠️ WATCH — Partial setup, monitor / ❌ No Setup — Not near support]
 
 **VERDICT:** [✅ INDEX BREADTH BULLISH CONFIRMED — Proceed as per SOP / ⚠️ BREADTH MARGINAL — WATCH AND WAIT FOR BULLISH SIGNAL / 🚨 BREADTH WEAK — Do not deploy Funds. It is a Lie.]
 
@@ -16011,6 +16013,41 @@ After ALL fund blocks are complete, end Section 8 with a 2-sentence PORTFOLIO BR
 
 ### 9A. Objective
 Scan every fund in the PORTFOLIO FUND LIST (provided in the PRE-COMPUTED DATA section below) for high-probability **Positive Consolidation (PC)** setups forming at a confirmed **Major Support Zone**. A valid PC setup is the highest-conviction long entry signal in this strategy system.
+
+### 📋 MANDATORY OUTPUT STRUCTURE — FOLLOW EXACTLY:
+
+**STEP 1 — LIST ALL PORTFOLIO FUNDS:**
+Before any analysis, BEGIN Section 9 by listing every fund from the "USER PORTFOLIO" block in this exact format:
+
+```
+PORTFOLIO FUNDS TO SCAN FOR POSITIVE CONSOLIDATION:
+1. [Fund Name 1]
+2. [Fund Name 2]
+...
+N. [Fund Name N]
+Total: [N] funds
+```
+
+**STEP 2 — PRODUCE A TABLE FOR EACH FUND:**
+For EVERY fund listed above (no exceptions), output the following block. Do NOT skip any fund. Do NOT merge funds into a single table. Each fund gets its own dedicated block.
+
+---
+
+### 📦 Fund: [FUND NAME]
+
+| # | Current Price | 104-Wk Low | Dist. from Low (%) | Cond A (Support Zone) | Impact Candle | Confirmation Block | Rule 1 (Above) | Rule 2 (No Break) | PC Verdict |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 1 | [Price] | [104-wk low] | [%] | ✅ PASS / ❌ FAIL | Low=[X] High=[Y] | [N] candles | [N] of [total] | 0 breakdowns = PASS | ✅ VALID PC SETUP / ⚠️ WATCH / ❌ No Setup |
+
+**Zone Support Level:** [Level]
+**Final Verdict:** [✅ VALID PC SETUP / ⚠️ WATCH (Partial) / ❌ No Setup / ❌ Did not pass Condition A]
+
+---
+
+> ⛔ OUTPUT CHECK: Count the fund blocks you produced. If it does NOT match the total number of funds listed in STEP 1, you have FAILED. Go back and produce the missing fund blocks. Every fund MUST have its own 📦 block with a completed table.
+
+**STEP 3 — PC PORTFOLIO SUMMARY:**
+After ALL fund blocks are complete, end Section 9 with a 2-sentence POSITIVE CONSOLIDATION SUMMARY covering the overall PC setup picture across the entire portfolio. State how many funds are in VALID PC setup, how many in WATCH, and how many with No Setup.
 
 ### 9B. Data Source
 Fetch 2 years of daily OHLC data and weekly OHLC data for each fund's underlying NSE index:
@@ -16058,25 +16095,17 @@ If Rule 2 passes but Rule 1 is at the boundary (exactly 60%) → **WATCH ⚠️*
 
 ### 9D. Mandatory Output
 
-> ⚠️ IMPORTANT: ALL portfolio funds MUST appear in the output table below — even funds that do NOT meet the criteria. Show ❌ No Setup for those. Do NOT silently skip any fund.
+> ⚠️ IMPORTANT: ALL portfolio funds MUST appear in the output — even funds that do NOT meet the criteria. Show ❌ No Setup / ❌ Did not pass Condition A for those. Do NOT silently skip any fund.
 
-First present the **Summary Table** (one row per portfolio fund):
+> ⛔ OUTPUT CHECK: After completing all fund blocks, COUNT them. The number of 📦 Fund blocks MUST equal the number of funds listed in STEP 1. If it does not, you have FAILED. Go back and produce the missing fund blocks.
 
-| # | Fund / Index | Current NAV / Price | 104-Wk Low | Dist. from Low (%) | Cond A | PC Status | Zone Support Level |
-| :---: | :--- | :---: | :---: | :---: | :---: | :--- | :---: |
-| 1 | [Fund Name] | [Price] | [104-wk low] | [%] | ✅ PASS / ❌ FAIL | ✅ VALID PC SETUP / ⚠️ WATCH / ❌ No Setup | [Level] |
-| 2 | ... | ... | ... | ... | ... | ... | ... |
+For funds that FAIL Condition A (not near Major Support Zone), output:
+- **Cond A:** ❌ FAIL
+- **PC Verdict:** ❌ Did not pass Condition A — not near Major Support Zone
 
-Then, for each fund that passes Condition A, provide a **Detail Block**:
+For funds that PASS Condition A, output full PC analysis with Impact Candle, Confirmation Block, Rule 1, Rule 2, and final verdict.
 
-**[Fund Name] — PC Detail:**
-- Impact Candle: Date [DD-MMM], Low = [X], High = [Y]
-- Confirmation Block: [N] candles analysed
-  - Closes above Impact High: [N] of [total] ([Pass/Fail Rule 1])
-  - Closes below Impact Low: [N] ([Pass/Fail Rule 2])
-- Final Verdict: ✅ VALID PC SETUP / ⚠️ WATCH (Partial) / ❌ No Setup
-
-If ALL funds fail Condition A, state: *"No funds in the portfolio are currently near a Major Support Zone. No PC setup is possible. Capital preservation mode is advised."*`;
+If ALL funds fail Condition A, state: *"No funds in the portfolio are currently near a Major Support Zone. No PC setup is possible. Capital preservation mode is advised."*
 
 
   // ── PRE-COMPUTED DATA appended after verbatim prompt ──
@@ -16121,11 +16150,17 @@ If ALL funds fail Condition A, state: *"No funds in the portfolio are currently 
     '',
     '⛔ MANDATORY §8 OUTPUT REQUIREMENT:',
     'You MUST begin §8 by listing ALL '+fundNamesForBreath.length+' funds above in a numbered list.',
-    'Then you MUST produce a SEPARATE 📦 Fund block with a completed Top-5 Constituents table for EACH AND EVERY fund.',
+    'Then you MUST produce a SEPARATE 📦 Fund block with a completed Top-5 Constituents table (including PC Status column) for EACH AND EVERY fund.',
     'The number of 📦 Fund blocks in your §8 output MUST equal '+fundNamesForBreath.length+'. If it does not, you have FAILED the task.',
     'Do NOT summarize, merge, or skip any fund. Every fund gets its own table. No exceptions.',
     '',
-    'Now produce §6 and §7, then §8, then §9. Begin with the Market Brief, then §6A, §6B, §6C, then §7 (Auditor Briefing), then §8 (Fund Breadth Analysis — ONLY for the funds listed above — MANDATORY per-fund tables), then §9 (Positive Consolidation Scanner — ONLY for the funds listed above).'
+    '⛔ MANDATORY §9 OUTPUT REQUIREMENT:',
+    'You MUST begin §9 by listing ALL '+fundNamesForBreath.length+' funds above in a numbered list.',
+    'Then you MUST produce a SEPARATE 📦 Fund block with a completed PC analysis table for EACH AND EVERY fund.',
+    'The number of 📦 Fund blocks in your §9 output MUST equal '+fundNamesForBreath.length+'. If it does not, you have FAILED the task.',
+    'Do NOT summarize, merge, or skip any fund. Every fund gets its own table. No exceptions.',
+    '',
+    'Now produce §6 and §7, then §8, then §9. Begin with the Market Brief, then §6A, §6B, §6C, then §7 (Auditor Briefing), then §8 (Fund Breadth Analysis — ONLY for the funds listed above — MANDATORY per-fund tables with PC Status column), then §9 (Positive Consolidation Scanner — ONLY for the funds listed above — MANDATORY per-fund tables).'
   ].join('\n');
 
 
