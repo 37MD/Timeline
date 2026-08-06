@@ -15954,14 +15954,14 @@ The complete portfolio fund list is provided in the PRE-COMPUTED DATA section be
 **STEP 1 — LIST ALL PORTFOLIO FUNDS:**
 Before any analysis, BEGIN Section 8 by listing every fund from the "USER PORTFOLIO" block in this exact format:
 
-```
+\`\`\`
 PORTFOLIO FUNDS TO ANALYZE:
 1. [Fund Name 1]
 2. [Fund Name 2]
 ...
 N. [Fund Name N]
 Total: [N] funds
-```
+\`\`\`
 
 **STEP 2 — PRODUCE A TABLE FOR EACH FUND:**
 For EVERY fund listed above (no exceptions), output the following table block. Do NOT skip any fund. Do NOT merge funds into a single table. Each fund gets its own dedicated block.
@@ -16020,14 +16020,14 @@ Scan every fund in the PORTFOLIO FUND LIST (provided in the PRE-COMPUTED DATA se
 **STEP 1 — LIST ALL PORTFOLIO FUNDS:**
 Before any analysis, BEGIN Section 9 by listing every fund from the "USER PORTFOLIO" block in this exact format:
 
-```
+\`\`\`
 PORTFOLIO FUNDS TO SCAN FOR POSITIVE CONSOLIDATION:
 1. [Fund Name 1]
 2. [Fund Name 2]
 ...
 N. [Fund Name N]
 Total: [N] funds
-```
+\`\`\`
 
 **STEP 2 — PRODUCE A TABLE FOR EACH FUND:**
 For EVERY fund listed above (no exceptions), output the following block. Do NOT skip any fund. Do NOT merge funds into a single table. Each fund gets its own dedicated block.
@@ -16052,7 +16052,7 @@ After ALL fund blocks are complete, end Section 9 with a 2-sentence POSITIVE CON
 
 ### 9B. Data Source
 Fetch 2 years of daily OHLC data and weekly OHLC data for each fund's underlying NSE index:
-- **Primary**: NSE archives — `https://archives.nseindia.com/content/indices/ind_close_all_{DDMMYYYY}.csv`
+- **Primary**: NSE archives — \`https://archives.nseindia.com/content/indices/ind_close_all_{DDMMYYYY}.csv\`
 - **Proxy chain** (if direct access blocked): same chain as §2A above
 - **Fallback**: Investing.com or MoneyControl — flag the source explicitly per fund
 - If data cannot be fetched for a fund, state: *"Data unavailable for [Fund Name] — skipped."*
@@ -16070,7 +16070,7 @@ The fund must be trading AT or NEAR a confirmed Major Support level. Apply this 
 
 - A swing low qualifies if it is the lowest daily close in any rolling 20-trading-day window within the past 12 months.
 - If NEITHER A1 nor A2 is satisfied → **discard the fund immediately**. Do NOT evaluate Condition B.
-- Record the qualifying support level as `Zone Support Level` for the output table.
+- Record the qualifying support level as \`Zone Support Level\` for the output table.
 
 ---
 **CONDITION B — Positive Consolidation Trigger**
@@ -16108,6 +16108,7 @@ For funds that PASS Condition A, output full PC analysis with Impact Candle, Con
 
 If ALL funds fail Condition A, state: *"No funds in the portfolio are currently near a Major Support Zone. No PC setup is possible. Capital preservation mode is advised."*
 
+`;  // ── end VERBATIM_PROMPT ──
 
   // ── PRE-COMPUTED DATA appended after verbatim prompt ──
   // §8 & §9: Use ONLY the funds the user added in Setup — NOT all 139 scanned indices.
@@ -16253,9 +16254,19 @@ function _aiRender(text){
 
 
 // ── 17D. Gemini call — K1 → K2 cascade on 429 ───────────────────────────────
-// gemini-3-flash excluded: returns 404 on v1beta (confirmed 2026-08-04)
-var _AI_MODELS=['gemini-3.1-flash-lite','gemini-3.5-flash','gemini-3.1-pro-preview'];
+// Model IDs verified from ai.google.dev/gemini-api/docs/models — 2026-08-07
+// Cascade order: fastest/cheapest first → most capable last
+// gemini-2.0/2.5 retired June 2026. gemini-3-flash (no suffix) → 404; use gemini-3-flash-preview.
+var _AI_MODELS=[
+  'gemini-3.6-flash',          // ✅ Stable — newest, fastest, balanced (primary)
+  'gemini-3.5-flash',          // ✅ Stable — frontier agentic performance
+  'gemini-3.5-flash-lite',     // ✅ Stable — fastest 3.5, cost-effective fallback
+  'gemini-3.1-flash-lite',     // ✅ Stable — still live, budget tier
+  'gemini-3-flash-preview',    // ✅ Preview — corrected name (was missing -preview suffix)
+  'gemini-3.1-pro-preview'     // ✅ Preview — most capable, use last
+];
 var _AI_BASE='https://generativelanguage.googleapis.com/v1beta/models/';
+
 
 async function _aiCallWithKey(key, keyLabel, model, promptText){
   var url=_AI_BASE+model+':generateContent?key='+encodeURIComponent(key);
