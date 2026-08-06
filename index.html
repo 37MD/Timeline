@@ -15548,10 +15548,10 @@ window.downloadNPSBAF2500 = downloadNPSBAF2500;
 <div id="ai-modal" role="dialog" aria-modal="true" aria-label="AI Market Analyst">
   <div id="ai-modal-header">
     <span id="ai-modal-title">🤖 AI Market Analyst</span>
-    <span id="ai-modal-meta"></span>
+    <span id="ai-modal-meta" id="ai-modal-meta-text"></span>
     <button id="ai-modal-close" title="Close">✕</button>
   </div>
-  <div id="ai-data-bar">Loading scan data…</div>
+  <div id="ai-data-bar" id="ai-data-bar-text">Loading scan data…</div>
   <div id="ai-modal-body">
     <div id="ai-spinner" style="display:none">
       <div style="font-size:28px;margin-bottom:12px">🤖</div>
@@ -15606,12 +15606,11 @@ function _aiVector(r){
     try{
       var old=U.calcRSI(r.wCloses.slice(0,r.wCloses.length-8),8);
       if(old&&old.length){ var roc=w-old[old.length-1];
-        if(roc>5&&w>50)    return '\uD83D\uDE80 Rising';          // RoC>5 & W-RSI>50
-        if(roc>-5&&roc<=0&&w>50)  return '\uD83D\uDE0C Phase 1'; // RoC∈(-5,0] & W-RSI>50 (RoC=0→Phase1 per spec)
-        if(roc<=-10||w<40) return '\uD83D\uDC80 Phase 3';         // RoC≤-10 or W-RSI<40 (RoC=-10→Phase3 per spec)
-        if(roc>-10&&roc<=-5&&w>=40&&w<=55) return '\u26A0\uFE0F Phase 2'; // RoC∈[-10,-5] & W-RSI 40-55 (RoC=-5→Phase2 per spec)
-        if(roc<=-5&&w>55)  return '\u26A0\uFE0F Phase 2';         // catch-all: RoC≤-5 with high W-RSI (was unhandled → Phase1)
-        if(roc>0&&w>50)    return '\uD83D\uDE80 Rising';          // RoC∈(0,5] fallback
+        if(roc>5&&w>50)   return '\uD83D\uDE80 Rising';
+        if(roc>=-5&&roc<=0&&w>50)  return '\uD83D\uDE0C Phase 1';
+        if(roc>=-10&&roc<-5&&w>=40&&w<=55) return '\u26A0\uFE0F Phase 2';
+        if(roc<-10||w<40) return '\uD83D\uDC80 Phase 3';
+        if(roc>0&&w>50)   return '\uD83D\uDE80 Rising';
         return '\uD83D\uDE0C Phase 1';
       }
     }catch(e){}
@@ -15634,7 +15633,7 @@ function _aiVerdict(r){
   if(r.regime==='A'){ var d=r.r8;
     if(d!=null&&d>40&&d<50)  return '\uD83D\uDC8E STRIKE';
     if(d!=null&&d>70)        return '\uD83D\uDD25 OVERHEATED';
-    if(d!=null&&d>50&&d<70) return '\u23F3 AWAITING PULLBACK'; // §4B: 50.1–69.9 (d=50 and d=70 are gap values)
+    if(d!=null&&d>=50&&d<=70)return '\u23F3 AWAITING PULLBACK';
     return 'RSI\u003C40';
   }
   return r.regime==='B'?'\uD83D\uDD34 TRAP':'\uD83D\uDC80 AVOID';
@@ -16110,13 +16109,10 @@ If ALL funds fail Condition A, state: *"No funds in the portfolio are currently 
 
 
   // ── PRE-COMPUTED DATA appended after verbatim prompt ──
-  // §8 & §9: Use ONLY the funds the user added in Setup — NOT all 139 scanned indices.
-  // FIX: PState is closure-private to Script Block 9's IIFE and invisible here. Read the
-  // same data via BB.getJSON (window.BB is globally accessible) using the identical
-  // localStorage key that psSave() writes to.
-  var _psData = (typeof BB !== 'undefined') ? BB.getJSON('ld_pt_snapshot_v1', null) : null;
-  var fundNamesForBreath = (_psData && Array.isArray(_psData.names) && _psData.names.length)
-    ? _psData.names.filter(Boolean)
+  // §8 & §9: Use ONLY the funds the user added in Setup (PState.names) — NOT all 139 scanned indices.
+  // PState is a global var (line 4842 of this file) holding exactly what the user pinned in the Setup tab.
+  var fundNamesForBreath = (typeof PState !== 'undefined' && Array.isArray(PState.names) && PState.names.length)
+    ? PState.names.filter(Boolean)
     : [];
   var fundListStr = fundNamesForBreath.length
     ? fundNamesForBreath.map(function(n, i){ return (i+1)+'. '+n; }).join('\n')
@@ -16177,7 +16173,6 @@ If ALL funds fail Condition A, state: *"No funds in the portfolio are currently 
 // ── 17E. Response renderer -- WHITE background, intelligent typography ─────────
 function _aiRender(text){
   if(!text) return '<p style="color:#6b7280;font-style:italic">No response received.</p>';
-  text=text.replace(/\r\n/g,'\n'); // normalise CRLF → LF so table regex works on all Gemini responses
   text=text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   // Pipe tables -> clean white HTML tables
