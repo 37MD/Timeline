@@ -15940,37 +15940,46 @@ Directly beneath your analytical tables, compile the final daily intelligence re
 
 ---
 
-## 8. FUND BREADTH ANALYSIS
+## 8. FUND BREADTH ANALYSIS — PER-FUND BREAKDOWN
 
 You are the AI Breadth Confirmation engine of the Sacred RSI Regime System for Indian equity funds.
 
-The portfolio fund list is provided in the PRE-COMPUTED DATA section below (under "PORTFOLIO FUND LIST FOR §8"). For each fund in that list:
+> ⛔ STRICT RULE: Process EVERY fund listed in the "USER PORTFOLIO — SETUP PAGE FUNDS" block below. Do NOT skip any fund. If data is unavailable, state it explicitly in that fund's row.
 
-1. Identify the correct index the fund tracks from its name.
+The complete portfolio fund list is provided in the PRE-COMPUTED DATA section below (under "USER PORTFOLIO — SETUP PAGE FUNDS"). You MUST produce a full breadth analysis block FOR EACH FUND, one after another.
 
-2. Search the web for the TOP 5 constituents by weight of that index.
+---
 
-3. For each of the 5 constituent stocks, find:
-   - Current 9-week RSI (TradingView Wilder Smoothing method — same as §3A/§3B above)
-   - 10-day price trend: RISING (price higher than 10 days ago) or FALLING
-   - 21-day price growth (%)
-   - 42-day price growth (%)
+**REPEAT THIS BLOCK FOR EVERY SINGLE FUND IN THE PORTFOLIO LIST:**
 
-4. Assign regime to each stock:
-   - **A** → Weekly RSI ≥ 50
-   - **B** → Weekly RSI 40–49
-   - **C** → Weekly RSI < 40
+### 📦 Fund: [FUND NAME]
+**Tracks Index:** [Index Name]
 
-5. BULL = Regime A AND RISING trend. All others = BEAR.
+**Top 5 Constituents by Weight:**
 
-6. Count BULL stocks and sum their index weights.
+| # | Stock | Index Weight % | 9-Week RSI | 10-Day Trend | 21-Day % | 42-Day % | Regime | Status |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 1 | [Stock Name] | [%] | [RSI] | RISING / FALLING | [%] | [%] | A/B/C | 🐂 BULL / 🐻 BEAR |
+| 2 | ... | ... | ... | ... | ... | ... | ... | ... |
+| 3 | ... | ... | ... | ... | ... | ... | ... | ... |
+| 4 | ... | ... | ... | ... | ... | ... | ... | ... |
+| 5 | ... | ... | ... | ... | ... | ... | ... | ... |
 
-**VERDICT per fund:**
-- 3–5 BULL → ✅ INDEX BREADTH BULLISH CONFIRMED — Proceed as per SOP
-- 2 BULL → ⚠️ BREADTH MARGINAL — WATCH AND WAIT FOR BULLISH SIGNAL
-- 0–1 BULL → 🚨 BREADTH WEAK — Do not deploy Funds. It is a Lie.
+**BULL Count:** [N] of 5 &nbsp;&nbsp; | &nbsp;&nbsp; **BULL Weight:** [Sum of BULL stock weights]%
 
-Always end Section 8 with 2 sentences of macro context covering the overall breadth picture across the portfolio.
+**VERDICT:** [✅ INDEX BREADTH BULLISH CONFIRMED — Proceed as per SOP / ⚠️ BREADTH MARGINAL — WATCH AND WAIT FOR BULLISH SIGNAL / 🚨 BREADTH WEAK — Do not deploy Funds. It is a Lie.]
+
+---
+
+**Verdict rules (apply to every fund above):**
+- BULL = Regime A (Weekly RSI ≥ 50) AND 10-day trend = RISING
+- 3–5 BULL stocks → ✅ INDEX BREADTH BULLISH CONFIRMED — Proceed as per SOP
+- 2 BULL stocks → ⚠️ BREADTH MARGINAL — WATCH AND WAIT FOR BULLISH SIGNAL
+- 0–1 BULL stocks → 🚨 BREADTH WEAK — Do not deploy Funds. It is a Lie.
+
+**9-week RSI method:** TradingView Wilder Smoothing — same as §3A/§3B.
+
+After ALL funds have been processed, end Section 8 with a 2-sentence PORTFOLIO BREADTH SUMMARY covering the overall breadth picture across the entire portfolio.
 
 ---
 
@@ -16027,16 +16036,28 @@ Both Rule 1 AND Rule 2 must pass simultaneously → **VALID PC SETUP ✅**
 If either rule fails → **No Setup ❌**
 If Rule 2 passes but Rule 1 is at the boundary (exactly 60%) → **WATCH ⚠️** (partial setup, monitor next session)
 
-### 9D. Output Format
+### 9D. Mandatory Output
 
-Present a clean Markdown table. DO NOT display any Python code, raw data, or intermediate calculation steps. Show ONLY the final results table below:
+> ⚠️ IMPORTANT: ALL portfolio funds MUST appear in the output table below — even funds that do NOT meet the criteria. Show ❌ No Setup for those. Do NOT silently skip any fund.
 
-| Fund / Index | Current Price | Dist. from Major Low (%) | PC Status | Zone Support Level |
-| :--- | :---: | :---: | :--- | :---: |
+First present the **Summary Table** (one row per portfolio fund):
 
-- **PC Status**: ✅ VALID PC SETUP &nbsp;|&nbsp; ⚠️ WATCH (Partial) &nbsp;|&nbsp; ❌ No Setup
-- Add a single sentence of context per fund (regime from §6A, vector from §6B if applicable)
-- If ZERO funds satisfy both conditions, state: *"No funds are currently showing a valid Positive Consolidation setup at Major Support. Capital preservation mode is advised."*`;
+| # | Fund / Index | Current NAV / Price | 104-Wk Low | Dist. from Low (%) | Cond A | PC Status | Zone Support Level |
+| :---: | :--- | :---: | :---: | :---: | :---: | :--- | :---: |
+| 1 | [Fund Name] | [Price] | [104-wk low] | [%] | ✅ PASS / ❌ FAIL | ✅ VALID PC SETUP / ⚠️ WATCH / ❌ No Setup | [Level] |
+| 2 | ... | ... | ... | ... | ... | ... | ... |
+
+Then, for each fund that passes Condition A, provide a **Detail Block**:
+
+**[Fund Name] — PC Detail:**
+- Impact Candle: Date [DD-MMM], Low = [X], High = [Y]
+- Confirmation Block: [N] candles analysed
+  - Closes above Impact High: [N] of [total] ([Pass/Fail Rule 1])
+  - Closes below Impact Low: [N] ([Pass/Fail Rule 2])
+- Final Verdict: ✅ VALID PC SETUP / ⚠️ WATCH (Partial) / ❌ No Setup
+
+If ALL funds fail Condition A, state: *"No funds in the portfolio are currently near a Major Support Zone. No PC setup is possible. Capital preservation mode is advised."*`;
+
 
   // ── PRE-COMPUTED DATA appended after verbatim prompt ──
   // §8 & §9: Use ONLY the funds the user added in Setup (PState.names) — NOT all 139 scanned indices.
