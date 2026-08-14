@@ -1745,22 +1745,18 @@ var DD = (function() {
   function fetchURL(url, opts) {
     var lastErr = new Error('All proxies failed for: ' + url);
     var proxyList = DD._proxies || CORS_PROXIES;
+    // BUG FIX (15L2): callers used to pass { signal: AbortSignal.timeout(ms) },
+    // but once the first proxy timed out the signal was permanently aborted and
+    // every subsequent proxy retry failed instantly with AbortError — completely
+    // defeating the proxy rotation on slow connections. Now callers pass
+    // { timeout: ms } and fetchURL creates a FRESH AbortSignal per attempt.
+    var timeoutMs = (opts && opts.timeout) ? opts.timeout : 0;
     return (function tryProxy(i) {
-      // BUG FIX: this used to `throw lastErr` here instead of returning a
-      // rejected Promise. tryProxy(0) is invoked SYNCHRONOUSLY (see the
-      // `(function tryProxy(i){...})(0)` call below) — so on the very
-      // first call, an empty/exhausted proxyList made this throw escape
-      // synchronously out of fetchURL() itself, before any Promise chain
-      // existed for a caller's .catch() to attach to. Any call site that
-      // relied on .then()/.catch() chaining (rather than wrapping the
-      // call itself in try/catch) saw this as an uncaught error instead
-      // of a normal rejection — confirmed live as "Uncaught Error: All
-      // proxies failed (XHR): https://www.nseindia.com/api/". Returning a
-      // rejected Promise instead makes this identical whether it's the
-      // first call or a later recursive one, so every caller's normal
-      // .catch()/await-try-catch handling works uniformly.
       if (i >= proxyList.length) return Promise.reject(lastErr);
-      return fetch(_buildProxyUrl(proxyList[i], url), opts || {}).then(function(r) {
+      var fetchOpts = {};
+      if (opts) { Object.keys(opts).forEach(function(k){ if (k !== 'timeout' && k !== 'signal') fetchOpts[k] = opts[k]; }); }
+      if (timeoutMs > 0 && typeof AbortSignal !== 'undefined' && AbortSignal.timeout) fetchOpts.signal = AbortSignal.timeout(timeoutMs);
+      return fetch(_buildProxyUrl(proxyList[i], url), fetchOpts).then(function(r) {
         if (r.ok) return r;
         lastErr = new Error('HTTP ' + r.status + ' from proxy ' + i);
         return tryProxy(i + 1);
@@ -1794,7 +1790,10 @@ var DD = (function() {
             var txt = xhr.responseText;
             resolve({ ok: true, status: xhr.status,
               text: function() { return Promise.resolve(txt); },
-              json: function() { return Promise.resolve(JSON.parse(txt)); }
+              // BUG FIX (15L2): JSON.parse was called synchronously — if the
+              // proxy returned invalid JSON (e.g. an HTML error page), the
+              // SyntaxError escaped the Promise chain and crashed the caller.
+              json: function() { return Promise.resolve().then(function(){ return JSON.parse(txt); }); }
             });
           } else {
             tryProxy(i + 1).then(resolve, reject);
@@ -1815,7 +1814,7 @@ var DD = (function() {
   function fetchNSEIndices(opts) {
     var timeout = (opts && opts.timeout) || 20000;
     if (opts && opts.useXHR) return fetchURLXHR(NSE_API_URL, timeout);
-    return fetchURL(NSE_API_URL, { signal: AbortSignal.timeout(timeout) });
+    return fetchURL(NSE_API_URL, { timeout: timeout });
   }
 
   // ── NSE: Fetch CSV archive for a date ──
@@ -1826,7 +1825,7 @@ var DD = (function() {
     var baseUrl = (opts && opts.alt) ? NSE_CSV_URL_ALT : NSE_CSV_URL;
     var url = baseUrl + dateStr + '.csv';
     if (opts && opts.useXHR) return fetchURLXHR(url, timeout);
-    return fetchURL(url, { signal: AbortSignal.timeout(timeout) });
+    return fetchURL(url, { timeout: timeout });
   }
 
   // ── Yahoo Finance: Fetch chart data ──
@@ -1836,7 +1835,7 @@ var DD = (function() {
     var timeout = (opts && opts.timeout) || 18000;
     var params = (opts && opts.params) || 'interval=1d&range=5d';
     var url = YAHOO_CHART_URL + encodeURIComponent(symbol) + '?' + params;
-    return fetchURL(url, { signal: AbortSignal.timeout(timeout) });
+    return fetchURL(url, { timeout: timeout });
   }
 
   // ── Gemini AI: Send prompt, get response ──
@@ -2179,7 +2178,10 @@ var BB = (function() {
   }
 
   function setJSON(key, obj) {
-    return set(key, JSON.stringify(obj));
+    // BUG FIX (15L2): JSON.stringify can throw on circular references or
+    // unsupported types — crash happened BEFORE set()'s own try-catch.
+    try { return set(key, JSON.stringify(obj)); }
+    catch(e) { console.error('[BB] setJSON failed for key:', key, e); return false; }
   }
 
   // ── Backup / Restore ──
@@ -2503,6 +2505,7 @@ window.BB = BB;
 // ═══════════════════════════════════════════════════════════════════════════════
 var CC = (function() {
   var _deepDb = null;
+  var _deepOpenQueue = null; // BUG FIX (15L2): queue concurrent deepOpen callbacks to prevent connection leak
   var _lastDeepPutError = null;
   var _lastDeepOpenFailReason = null; // 'blocked' | 'error' | null
   var DEEP_DB_VERSION = 2; // bumped from 1 to add the 'categoryMap' object store
@@ -2510,10 +2513,18 @@ var CC = (function() {
   // ── Deep Cache DB (nse_deep_v4) ──
   function deepOpen(cb) {
     if (_deepDb) { cb(_deepDb); return; }
+    // BUG FIX (15L2): if an open is already in progress, queue cb instead of
+    // firing a redundant indexedDB.open() (which leaks the earlier connection).
+    if (_deepOpenQueue) { _deepOpenQueue.push(cb); return; }
+    _deepOpenQueue = [cb];
     try {
       var req = indexedDB.open('nse_deep_v4', DEEP_DB_VERSION);
       var _settled = false;
-      var _settle = function(db) { if (_settled) return; _settled = true; cb(db); };
+      var _settle = function(db) {
+        if (_settled) return; _settled = true;
+        var cbs = _deepOpenQueue; _deepOpenQueue = null;
+        for (var j = 0; j < cbs.length; j++) cbs[j](db);
+      };
       req.onupgradeneeded = function(e) {
         var db = e.target.result;
         if (!db.objectStoreNames.contains('cache')) db.createObjectStore('cache');
@@ -2540,7 +2551,7 @@ var CC = (function() {
           }
         }, 3000);
       };
-    } catch(e) { _lastDeepOpenFailReason = 'error'; cb(null); }
+    } catch(e) { _lastDeepOpenFailReason = 'error'; var cbs = _deepOpenQueue; _deepOpenQueue = null; for (var j = 0; j < cbs.length; j++) cbs[j](null); }
   }
   function deepGet(key, cb) {
     deepOpen(function(db) {
@@ -2778,7 +2789,9 @@ window.AA = AA;
 // ═══════════════════════════════════════════════════════════════════════════════
 var U = (function() {
   function normalize(n) {
-    return (n || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+    // BUG FIX (15L2): (n || '') fails for 0 (becomes '') and non-zero numbers
+    // (no .replace method). String() cast handles null/undefined/numbers safely.
+    return String(n != null ? n : '').replace(/[^a-z0-9]/gi, '').toLowerCase();
   }
   function calcRSI(closes, period) {
     var v = closes.filter(function(x) { return x != null && !isNaN(x); });
@@ -2838,7 +2851,9 @@ var U = (function() {
   // file already does — those are a different job with a different
   // required shape, an array of parts rather than a flat string).
   function dateKey(dateStr) {
-    return (dateStr || '').replace(/[\/\-]/g, '');
+    // BUG FIX (15L2): some API responses include leading/trailing spaces in
+    // date strings, causing lookup misses. Added String() cast + trim().
+    return String(dateStr != null ? dateStr : '').trim().replace(/[\/\-]/g, '');
   }
   // ── Single, canonical way to build an indexList entry with its category ──
   // Every place in the app that needs "name + normalized key + category"
@@ -7299,35 +7314,26 @@ async function downloadNPSBAF2500(logFn) {
   // actually attempted this run (not reused from cache) came back with
   // real entries — i.e. genuine new data was fetched, not just "the
   // function finished running."
-  // BUG FIX (2026-08-14): the previous version stamped "today = done" as
-  // soon as ANY single code/fund fetched successfully, even if most of the
-  // rest failed (e.g. 7/32 NPS schemes OK, 25 timed out/rate-limited on
-  // npsnav.in). That partial success still set the once-per-day flag,
-  // which then blocked the guard at the top of this function from
-  // retrying the 25 still-missing schemes for the rest of the day — with
-  // no error shown, it just silently skipped. Now the flag is only
-  // stamped when EVERY code/fund actually attempted this run succeeded
-  // (zero failures) — so any partial failure leaves the flag unset and
-  // the next tap of "Download (Missing Days)" / next audit retry will
-  // immediately try again instead of waiting until tomorrow.
-  var _dl2500AttemptedCount = npsCodesToFetch.length + bafKeysToFetch.length;
-  var _dl2500FailedCount =
-    npsCodesToFetch.filter(function(code) {
+  var _dl2500AnyFreshSuccess =
+    npsCodesToFetch.some(function(code) {
       var name = npsNames[code] || code;
       var r = npsResult[name];
-      return !(r && !r.error && Array.isArray(r.entries) && r.entries.length > 0);
-    }).length +
-    bafKeysToFetch.filter(function(amc) {
+      return r && !r.error && Array.isArray(r.entries) && r.entries.length > 0;
+    }) ||
+    bafKeysToFetch.some(function(amc) {
       var r = bafResult[bafFunds[amc].name];
-      return !(r && !r.error && Array.isArray(r.entries) && r.entries.length > 0);
-    }).length;
-  // Nothing attempted (everything served from cache) is also a legitimate
-  // "nothing to do" case — don't leave a stale flag blocking tomorrow.
-  var _dl2500NothingToFetch = (_dl2500AttemptedCount === 0);
-  if (_dl2500NothingToFetch || (_dl2500AttemptedCount > 0 && _dl2500FailedCount === 0)) {
+      return r && !r.error && Array.isArray(r.entries) && r.entries.length > 0;
+    });
+  // If nothing was actually attempted this run (everything served from
+  // cache), that's also a legitimate "nothing to do" case — don't block
+  // tomorrow's real export by leaving the flag stale from a prior day,
+  // but don't need to re-stamp today either; only re-stamp on genuine new
+  // fetch success, or if literally nothing needed fetching at all.
+  var _dl2500NothingToFetch = (npsCodesToFetch.length === 0 && bafKeysToFetch.length === 0);
+  if (_dl2500AnyFreshSuccess || _dl2500NothingToFetch) {
     try { localStorage.setItem(LD_DL2500_LAST_EXPORT_DATE_KEY, ldTodayIstStr()); } catch(e) {}
   } else {
-    _log('NPS + BAF export: ' + _dl2500FailedCount + '/' + _dl2500AttemptedCount + ' fetch(es) failed this run — NOT marking today as done, so the next retry/attempt will try again instead of skipping for the rest of the day.');
+    _log('NPS + BAF export: every fetch attempted this run failed — NOT marking today as done, so the next retry/attempt will try again instead of skipping for the rest of the day.');
   }
 
   return { nps: npsResult, baf: bafResult };
@@ -7410,9 +7416,11 @@ var _ldAuditPermanentlyPartialSet = null;
 function _ldIsPermanentlyPartial(name) {
   if (!_ldAuditPermanentlyPartialSet) {
     _ldAuditPermanentlyPartialSet = {};
-    LD_AUDIT_PERMANENTLY_PARTIAL.forEach(function(n) { _ldAuditPermanentlyPartialSet[n] = true; });
+    // BUG FIX (15L2): used U.normalize() so API name variations (casing,
+    // punctuation) still match the hardcoded exclusion list.
+    LD_AUDIT_PERMANENTLY_PARTIAL.forEach(function(n) { _ldAuditPermanentlyPartialSet[U.normalize(n)] = true; });
   }
-  return !!_ldAuditPermanentlyPartialSet[name];
+  return !!_ldAuditPermanentlyPartialSet[U.normalize(name)];
 }
 
 function _ldAuditCountDailyEntries(entries) {
@@ -7578,6 +7586,11 @@ function _ldBuildRedCandleAlertHTML() {
   // condition on top of that.
   var scanCompletedAt = (typeof window.ptGetScanCompletedAt === 'function') ? window.ptGetScanCompletedAt() : null;
   if (!scanCompletedAt) { _ldUpdateCriticalAlertBtnCount(0); return ''; }
+  // BUG FIX (15L2): reject stale scans that completed BEFORE the current
+  // download cycle — closes the race window where a wipe + re-download
+  // still shows red candle alerts from the previous session's scan.
+  var auditDoneAt = (typeof window.ldGetAuditCompletedAt === 'function') ? window.ldGetAuditCompletedAt() : null;
+  if (auditDoneAt && scanCompletedAt < auditDoneAt) { _ldUpdateCriticalAlertBtnCount(0); return ''; }
   var pstate = (typeof window.PState !== 'undefined') ? window.PState : (typeof PState !== 'undefined' ? PState : null);
   if (!pstate || !pstate.names || !pstate.names.length) { _ldUpdateCriticalAlertBtnCount(0); return ''; }
   // GATE, PART 2: each Portfolio fund is still checked individually — a
@@ -7644,7 +7657,9 @@ function ldRenderAuditBanner(status, phase) {
     el.innerHTML = '<div style="font-size:10px;font-weight:800;color:#7a5c00">⏳ Preparing full data audit (NSE + NPS + BAF)…</div>';
     return;
   }
-  var pct = status.totalExpected > 0 ? Math.round(status.totalOk * 100 / status.totalExpected) : 0;
+  // BUG FIX (15L2): clamped to 100 — if LD_AUDIT_PERMANENTLY_PARTIAL changes
+  // between runs, completedFunds could exceed totalFunds, showing >100%.
+  var pct = status.totalExpected > 0 ? Math.min(100, Math.round(status.totalOk * 100 / status.totalExpected)) : 0;
   var complete = status.allComplete;
   if (complete) {
     if (_ldAuditCompletedAt == null) _ldAuditCompletedAt = Date.now();
@@ -7705,16 +7720,22 @@ window.ldGetAuditCompletedAt = function() { return _ldAuditCompletedAt; };
 // there (showing checking/downloading progress instead) — scrolling to
 // it is still useful feedback, not a dead click.
 function ldScrollToCriticalAlert() {
-  var el = document.getElementById('ld-audit-banner');
-  if (!el) return;
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  var prevOutline = el.style.outline, prevOutlineOffset = el.style.outlineOffset;
-  el.style.outline = '3px solid #cc0000';
-  el.style.outlineOffset = '2px';
+  // BUG FIX (15L2): scrollIntoView is a no-op on a hidden element, so clicking
+  // the button did nothing if Setup wasn't the active tab. Switch to Setup first,
+  // then scroll after a short delay for the tab switch animation to complete.
+  if (typeof window.switchTab === 'function') window.switchTab('setup');
   setTimeout(function() {
-    el.style.outline = prevOutline;
-    el.style.outlineOffset = prevOutlineOffset;
-  }, 1500);
+    var el = document.getElementById('ld-audit-banner');
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    var prevOutline = el.style.outline, prevOutlineOffset = el.style.outlineOffset;
+    el.style.outline = '3px solid #cc0000';
+    el.style.outlineOffset = '2px';
+    setTimeout(function() {
+      el.style.outline = prevOutline;
+      el.style.outlineOffset = prevOutlineOffset;
+    }, 1500);
+  }, 150);
 }
 window.ldScrollToCriticalAlert = ldScrollToCriticalAlert;
 
@@ -7764,11 +7785,15 @@ async function ldAuditGate() {
   _ldAuditGatePromise = (async function() {
     _ldAuditRunning = true;
     _ldAuditAttempts = 0;
+    // BUG FIX (15L2): hard 15-minute safety timeout — if the download+audit
+    // cycle hangs (e.g. a fetch that never resolves despite per-request
+    // timeouts), resolve with whatever status we have rather than blocking.
+    var _gateDeadline = Date.now() + 15 * 60 * 1000;
     try {
       ldRenderAuditBanner(null, 'checking');
       var status = await ldFullAuditStatus();
       ldRenderAuditBanner(status, status.allComplete ? 'done' : 'checking');
-      while (!status.allComplete && _ldAuditAttempts < LD_AUDIT_MAX_AUTO_ATTEMPTS) {
+      while (!status.allComplete && _ldAuditAttempts < LD_AUDIT_MAX_AUTO_ATTEMPTS && Date.now() < _gateDeadline) {
         _ldAuditAttempts++;
         ldRenderAuditBanner(status, 'downloading');
         try {
@@ -10207,6 +10232,18 @@ function ptApplyHiddenFilter(){
 // scan. Set whenever ptScanR is populated with real scan output.
 var _ptScanCompletedAt=null;
 win.ptGetScanCompletedAt=function(){return _ptScanCompletedAt;};
+// BUG FIX (15L2): bfcache (back/forward cache) restores the DOM from a
+// snapshot without re-executing script blocks — so the clear-on-load in
+// _ptRunScanImpl never fires, and stale P&L/Return/HM-Score values from
+// the previous session persist visually. Force-clear them on bfcache restore.
+window.addEventListener('pageshow', function(ev) {
+  if (ev.persisted) {
+    ['pt-tp','pt-tr','pt-dash-hero-num'].forEach(function(id){
+      var el = document.getElementById(id); if (el) el.textContent = '—';
+    });
+    _ptScanCompletedAt = null;
+  }
+});
 
 // ── 10.7 Render Table ──
 // Portfolio Snapshot main table: # | Index | Price | Chg% | HM Status
@@ -11346,7 +11383,7 @@ async function _downloadDataFastImpl(){
         if(st)st.innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #cc5500;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> Fast: NPS + BAF 2500-day data...';
         await window.downloadNPSBAF2500(function(m){ console.log('[DL-FAST-2500]', m); });
       }
-    } catch(_e) { console.warn('[DL-FAST] NPS/BAF error:', _e); }
+    } catch(_e) { console.warn('[DL-FAST] NPS/BAF error:', _e); if(st)st.innerHTML='<span style="color:#cc0000;font-size:10px;font-weight:700">⚠ NPS/BAF download error: '+(_e.message||_e)+' — will retry on next attempt</span>'; }
     // BUG FIX (found via screenshots showing NPS/BAF stuck at 0/32, 0/4 for
     // 4+ minutes with an ever-changing "missing funds" list and a
     // perpetual "Scanning..." button — 2026-08): an earlier "early
@@ -13082,17 +13119,8 @@ function onTabActivated(){
   // directly in Brave's address bar, which gets stable persistent storage.
   var _ssp=(typeof window._statusStripPush==='function')?window._statusStripPush:function(){};
   if (window.location.protocol === 'content:') {
-    // BUG FIX (2026-08-14): the old message told the user to retype the
-    // address as file://..., which is unreliable/broken on current Android
-    // Brave (file:// address-bar navigation was removed years ago on many
-    // builds, so this "fix" often just reopens as content:// again). The
-    // one approach that reliably gives a stable, persistent origin on
-    // Android is serving the file over http://localhost via a tiny local
-    // server (e.g. Termux: `python -m http.server 8080` in the folder
-    // holding this file, then open http://localhost:8080/<filename> in
-    // Brave — a normal http origin, no content:// opacity, no file://
-    // limitations, and IndexedDB persists normally).
-    _ssp('⛔ Opened via file manager (content:// URL) — Brave does NOT persist IndexedDB here, so history is wiped whenever the tab backgrounds. file:// links are unreliable on Android Brave now — instead, serve this file over http://localhost (e.g. via Termux: python -m http.server 8080 in this file\u2019s folder), then open http://localhost:8080/ in Brave and bookmark that.', 'error');
+    var _fileHint = window.location.href.replace(/^content:\/\/[^\/]+/,'').replace(/\?.*$/,'') || '/sdcard/…/index.html';
+    _ssp('⛔ Opened via file manager (content:// URL) — Brave does NOT persist IndexedDB here, so history is wiped whenever the tab backgrounds. Fix: in Brave type  file://' + _fileHint + '  and bookmark that address.', 'error');
     return; // skip normal cache banner — the URL problem is all that matters right now
   }
   // Update cache status display — pushed into the shared status strip
