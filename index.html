@@ -3,8 +3,193 @@
 <head>
 <!--
 ════════════════════════════════════════════════════════════════════════════
- TIMELINE_15K3 — MASTER TABLE OF CONTENTS
+ TIMELINE_15K4 — MASTER TABLE OF CONTENTS
 ════════════════════════════════════════════════════════════════════════════
+ WHAT CHANGED IN 15K4 (CRITICAL BUG FIX: infinite download loop after
+ wipe, per explicit request 2026-08 — 12 screenshots showed NPS/BAF stuck
+ at 0/32, 0/4 for 4+ minutes, an ever-changing "missing funds" list, and
+ a perpetual "Scanning..." button that never resolved)
+ ────────────────────────────────────────────────────────────────────────
+ ROOT CAUSE (confirmed, this was MY bug from an earlier session): the
+ "early auto-trigger" added to _downloadDataFastImpl() called
+ window.ptRunScan(), which called ldWaitForMinFullFunds(), which fired
+ window.ldAuditGate() IN THE BACKGROUND. ldAuditGate() is the SAME
+ function driving the download already in progress — seeing the audit
+ still incomplete, its own retry loop called window.downloadData() ->
+ downloadDataFast() -> _downloadDataFastImpl() AGAIN, a second,
+ overlapping call into the very function that had just fired it. Each
+ retry re-fired ptRunScan() too, compounding the effect — a genuine
+ recursive self-triggering loop, not a hang or a network issue.
+ FIX (per explicit decision — simplify rather than patch further):
+   - Removed the early-trigger entirely from _downloadDataFastImpl().
+   - Removed the ≥10-funds-anywhere scan-start gate and its supporting
+     machinery (MIN_FULL_FUNDS_TO_START_SCAN, ldWaitForMinFullFunds) —
+     ptRunScan() now waits directly and only on ldAuditGate(), i.e. the
+     full 179-fund audit, exactly as it did before any of these changes.
+   - Portfolio's dashboard pill reverted to "Wait, Scanning starts after
+     full download" (from the removed 10-funds wording).
+   - Critical Alert list's gate (_ldBuildRedCandleAlertHTML) is
+     unaffected by the mechanism above — it already only ever showed
+     content once ptGetScanCompletedAt() was non-null, and since
+     ptRunScan() can now only complete after the FULL audit, "a scan has
+     run" once again means "the full download+scan finished," matching
+     "now only after full scan" exactly, per explicit decision — no
+     separate code change was needed here beyond a stale comment fix.
+   - Added an explicit, defensive clear-on-load: P&L/Return/HM Score
+     reset to "—" the moment the Portfolio script block runs on page
+     load — per explicit request ("if App closes... first step 'Clear
+     clean' the Scan Results Box"). Note: ptScanR was already a fresh
+     in-memory [] on every load, never persisted — so stale COMPUTED
+     numbers technically couldn't survive a real reload even before this
+     — but this makes that guarantee explicit rather than incidental.
+ VERIFIED: forced-call test confirmed downloadNPSBAF2500 (a proxy for
+ "Step 0 of the download function ran") fires exactly ONCE within a 4s
+ window after triggering ptRunScan() — not a rapidly escalating count —
+ see test_no_recursion.py. Full regression suite (page load, all 7
+ tabs, Snapshot/NPS-Switch/Tactical deep tests, Critical Alert
+ scenarios) still passes clean.
+
+ WHAT CHANGED IN 15K4 (auto-trigger consistency fix, per explicit request
+ 2026-08 — investigation started from a screenshot showing 100% audit +
+ empty Critical Alert box right after Wipe & Re-download, which only
+ populated after manually tapping Re-run Scan)
+ ────────────────────────────────────────────────────────────────────────
+ NOTE: the fix described below (an early scan trigger inside the download
+ function) is what caused the infinite-loop bug above — it has since
+ been REMOVED. This entry is kept for historical context on why it was
+ tried and what specifically went wrong; see the entry above for the
+ current, simplified behavior.
+ ────────────────────────────────────────────────────────────────────────
+ ROOT CAUSE: the manual "Re-run Scan" button and the AUTOMATIC
+ post-download trigger used two DIFFERENT gates. Manual calls used
+ ptRunScan()'s fast ≥10-funds-anywhere gate (see the "scan-start gate"
+ entry below). The automatic trigger, unaffected by that earlier change,
+ still only fired 2.5s after the ENTIRE, much slower NSE gap-day loop
+ (up to ~1203 days, a separate/stricter target than the audit's per-fund
+ threshold) fully finished — so after a wipe, the automatic path could
+ sit waiting for many minutes while the manual button would have started
+ scanning almost immediately.
+ FIX: _downloadDataFastImpl() now ALSO fires window.ptRunScan() right
+ after Step 0 (NPS+BAF, 36 funds) completes — BEFORE the slower NSE loop
+ even starts — using ptRunScan()'s own internal ≥10-funds gate exactly
+ as the manual button does. The original 2.5s-after-full-completion
+ trigger is left in place as a safety net (e.g. covers the edge case
+ where NPS+BAF alone doesn't reach 10 funds). Verified this is safe to
+ call twice: ptRunScan()'s existing re-entrancy guard (returns the same
+ in-flight promise if a scan is already running) means firing it from
+ both points never starts two overlapping scans — confirmed with a
+ controlled test showing ZERO duplicate network requests across 125
+ total calls when both triggers fire ~50ms apart — see
+ test_dup_final.py.
+
+ WHAT CHANGED IN 15K4 (scan-start gate + progressive Critical Alert, per
+ explicit request 2026-08 — investigation that started from a screenshot
+ showing the audit at 100% while a separate "Fast 795/1203" download chip
+ was still actively progressing and Portfolio stuck on "Loading…")
+ ────────────────────────────────────────────────────────────────────────
+ ROOT CAUSE (confirmed, not a corruption bug): the app has TWO genuinely
+ different "complete" definitions that were never reconciled — (1) the
+ 179-fund audit's per-fund threshold (each fund individually within
+ AUDIT_TOLERANCE_DAYS of 2500), and (2) a separate, stricter "Fast"
+ download pass chasing full cross-fund day-consistency across up to ~1203
+ gap-days. The audit can hit 100% while (2) is still running for a long
+ time afterward. Per explicit decision, this gap itself was NOT closed
+ (the two definitions still coexist) — instead, three behavior rules
+ were added so the app is honest about progress and useful earlier:
+
+ 1. SCAN START GATE (loosened): ptRunScan() no longer waits for the full
+    179-fund audit before scanning — it now waits only for
+    MIN_FULL_FUNDS_TO_START_SCAN (10) funds, ANYWHERE across NSE/NPS/BAF,
+    to individually reach the full 2500-day target (status.totalFull,
+    added to ldFullAuditStatus's return). See ldWaitForMinFullFunds,
+    which fires ldAuditGate() in the background (unawaited, so the real
+    download keeps driving forward exactly as before) and polls the
+    cheap read-only audit status until the threshold is met. Portfolio's
+    dashboard pill now defaults to, and shows during this wait: "Wait,
+    Scanning starts after 10 funds Full data is downloaded".
+ 2. IMMEDIATE CLEAR ON NEW SCAN: _ptRunScanImpl() now resets pt-tp
+    (P&L), pt-tr (Return), and pt-dash-hero-num (HM Score) to "—" the
+    INSTANT a new scan starts (before ptScanR is even rebuilt) — a new
+    scan starting never again leaves the previous scan's stale numbers
+    visible while fresh data is computed.
+ 3. PROGRESSIVE CRITICAL ALERT LIST: _ldBuildRedCandleAlertHTML's gate
+    changed from "wait for the ENTIRE download+scan" to two conditions
+    working together — (a) a scan must have run at least once
+    (ptGetScanCompletedAt non-null, tying it to Rule 1's gate having
+    fired), then (b) each Portfolio fund is checked INDIVIDUALLY: a fund
+    only joins the list once ITS OWN daily-entry count reaches the full
+    2500-day target, regardless of whether other funds or the overall
+    179-fund download are still in progress. The list can genuinely grow
+    across repeated scans as more funds individually finish. No longer
+    nested inside ldRenderAuditBanner's `if (complete)` branch — it has
+    its own independent gate now. Verified with 3 scenarios: no scan ever
+    (blocked), scan ran + 1 fund full + fails test (shows 1), a later
+    scan + 2nd fund reaches full data (progressively grows to 2) — see
+    test_rule3_progressive.py.
+
+ WHAT CHANGED IN 15K4 (candle-red list: strict download+scan gate)
+ ────────────────────────────────────────────────────────────────────────
+ Per explicit request ("NO EXCEPTIONS TO THIS RULE"): the candle-red
+ list must be calculated AND rendered ONLY after a full download AND a
+ full scan have both completed. Previously it only checked
+ status.allComplete (download side) — this did not confirm a scan had
+ run, or that it ran AFTER the download rather than before it (the
+ auto-triggered scan fires 2.5s after download completion, leaving a
+ real race window). Fixed with two pieces working together:
+   - _ldAuditCompletedAt (beside ldRenderAuditBanner) records the exact
+     moment the audit MOST RECENTLY became complete, reset to null the
+     instant it goes back to incomplete — exported via
+     window.ldGetAuditCompletedAt().
+   - _ldBuildRedCandleAlertHTML's gate now requires BOTH
+     window.ptGetScanCompletedAt() to be non-null AND to be >= that
+     audit-completed timestamp — i.e. a scan that finished before this
+     download did is correctly rejected even though a scan DID happen
+     at some earlier point. Verified against 3 scenarios: no scan ever
+     (blocked), stale scan before download (blocked), fresh scan after
+     download (allowed) — see test_strict_gate.py.
+
+ WHAT CHANGED IN 15K4 (Setup tab: candle-red alert + audit exclusions)
+ ────────────────────────────────────────────────────────────────────────
+ BUG FIX (found post-ship, same day): the candle-red list silently never
+ rendered — PState and monthlyOrWeeklyRedCandleStatus are both declared
+ inside Portfolio Snapshot's own IIFE (a different <script> block from
+ _ldBuildRedCandleAlertHTML), so they were `undefined` from there and the
+ function always returned '' with no error. Same failure mode already
+ fixed once before for scannerRowFor (see the export comment beside
+ win.scannerRowFor) — fixed the same way: both now exported via
+ win.PState / win.monthlyOrWeeklyRedCandleStatus.
+ Also added, per request: the "⚠ Critical Alert" button's label now
+ shows the live flagged-fund count, e.g. "⚠ Critical Alert (3)" — updated
+ by _ldUpdateCriticalAlertBtnCount, called from every exit path of
+ _ldBuildRedCandleAlertHTML (including a reset to no-count if the audit
+ later becomes incomplete again, e.g. after Wipe & Re-download All).
+
+ WHAT CHANGED IN 15K4 (Setup tab: candle-red alert + audit exclusions)
+ ────────────────────────────────────────────────────────────────────────
+ 1. 15 permanently-stuck partial-download funds (Nifty Telecommunications,
+    Power, Consumer Services, MidSmallcap400 50:50, Retail, Capital Goods,
+    Commercial & Transport Services, Hospitals, Construction, Insurance,
+    Housing Finance, REITs & Realty, NBFC, Cement, Smallcap 500 — see
+    LD_AUDIT_PERMANENTLY_PARTIAL) are now excluded from BOTH the "partially
+    downloaded" display list AND the completeness percentage's denominator,
+    so the Full Data Audit box can genuinely reach 100%/"complete" instead
+    of being permanently capped by funds that can never finish.
+ 2. The "candle turned red" per-fund list (ported verbatim from
+    Timeline_15H9's monthlyOrWeeklyRedCandleStatus /
+    renderPortfolioRedCandleAlerts, using PState.names as the fund
+    universe) now renders INSIDE the Full Data Audit box, appended after
+    the "✅ All 3 containers…" line — only once the audit reaches
+    phase='done' (status.allComplete === true), never during
+    checking/downloading. See _ldBuildRedCandleAlertHTML.
+    NOTE: this is separate from the existing renderPortfolioRedCandleAlerts
+    function / #pt-setup-redcandle-alert element, which is a different,
+    still-live feature (the "N funds — trading days, no duplicates"
+    completeness-confirmation banner) — not touched by this change.
+ 3. Re-run Scan button narrowed (flex 1.4 instead of full-width) and a new
+    "⚠ Critical Alert" button (red background) added beside it — scrolls
+    to and briefly highlights the Full Data Audit box. See
+    ldScrollToCriticalAlert.
+
  WHAT CHANGED IN 15K3 (senior code audit — single-source-of-truth fixes)
  ────────────────────────────────────────────────────────────────────────
  A full static audit checked every duplicate-named function, every
@@ -1098,7 +1283,7 @@ body{}
       <div style="font-size:12px;color:#7a8894;margin-top:4px">Portfolio HM Score (Monthly+Weekly+Daily RSI weighted)</div>
 
       <div id="pt-dash-pill" style="display:inline-flex;align-items:center;gap:6px;background:#e9f9ef;color:#1a8a4a;border:1px solid #cdeedb;border-radius:20px;padding:7px 16px;margin:14px 0 8px;font-size:12px;font-weight:700">
-        <span id="pt-dash-pill-icon">✓</span><span id="pt-dash-pill-text">Loading Portfolio…</span>
+        <span id="pt-dash-pill-icon">⏳</span><span id="pt-dash-pill-text">Wait, Scanning starts after full download</span>
       </div>
       <div id="pt-dash-verdict" style="font-size:12px;color:#0c1929;font-weight:600;margin-bottom:6px">—</div>
       <div id="pt-dash-subtext" style="font-size:11px;color:#8a95a0;margin-bottom:14px">—</div>
@@ -7186,6 +7371,40 @@ var _ldAuditRunning = false;
 var _ldAuditGatePromise = null; // resolves once the audit-and-fill cycle reaches a stable state (all full, or all short-history funds plateaued)
 var _ldAuditAttempts = 0;
 var LD_AUDIT_MAX_AUTO_ATTEMPTS = 3; // auto-download retries before giving up and just reporting the shortfall
+// REMOVED (per explicit decision, 2026-08): MIN_FULL_FUNDS_TO_START_SCAN
+// and the ≥10-funds scan-start gate it powered caused a real recursion
+// bug (see the removed early-trigger comment in _downloadDataFastImpl
+// for the full root-cause trace) — reverted to the simple, original
+// design: ptRunScan() waits for the full audit via ldAuditGate() below.
+
+// ── Permanently-stuck partial-download exclusion list (per request,
+// 2026-08) ── These 15 funds have been independently confirmed to have
+// plateaued at their true available NSE history (well under the 200-day
+// PLATEAU_MIN_DAYS floor above, so the normal plateau-detection logic
+// never marks them "ok") — NOT a transient download failure. Excluding
+// them here means: (1) they no longer clutter the "partially downloaded"
+// list shown in the audit banner, and (2) they're removed from BOTH the
+// numerator and denominator of the completeness percentage, so the audit
+// can genuinely reach 100%/"complete" once every other fund finishes,
+// instead of being permanently capped below 100% by funds that can never
+// become "ok". If NSE later publishes more history for one of these and
+// it grows past PLATEAU_MIN_DAYS on its own, remove its name from this
+// list to resume tracking it normally.
+var LD_AUDIT_PERMANENTLY_PARTIAL = [
+  'Nifty Telecommunications', 'Nifty Power', 'Nifty Consumer Services',
+  'Nifty MidSmallcap400 50:50', 'Nifty Retail', 'Nifty Capital Goods',
+  'Nifty Commercial & Transport Services', 'Nifty Hospitals',
+  'Nifty Construction', 'Nifty Insurance', 'Nifty Housing Finance',
+  'Nifty REITs & Realty', 'Nifty NBFC', 'Nifty Cement', 'Nifty Smallcap 500'
+];
+var _ldAuditPermanentlyPartialSet = null;
+function _ldIsPermanentlyPartial(name) {
+  if (!_ldAuditPermanentlyPartialSet) {
+    _ldAuditPermanentlyPartialSet = {};
+    LD_AUDIT_PERMANENTLY_PARTIAL.forEach(function(n) { _ldAuditPermanentlyPartialSet[n] = true; });
+  }
+  return !!_ldAuditPermanentlyPartialSet[name];
+}
 
 function _ldAuditCountDailyEntries(entries) {
   if (!entries || !entries.length) return 0;
@@ -7207,6 +7426,12 @@ async function ldFullAuditStatus() {
   if (!master.length && typeof EMBEDDED_NSE_DATA !== 'undefined' && EMBEDDED_NSE_DATA.indices) {
     master = EMBEDDED_NSE_DATA.indices.map(function(idx){ return {name: idx.n, nseKey: idx.k}; });
   }
+  // Exclude permanently-stuck funds (see LD_AUDIT_PERMANENTLY_PARTIAL
+  // above) from the audit entirely — both from the completeness
+  // denominator (expectedIndices) and from idxDetail, so they can never
+  // appear in the "partially downloaded" list and never prevent
+  // allComplete from reaching true.
+  master = master.filter(function(idx) { return !_ldIsPermanentlyPartial(idx.name); });
   var expectedIndices = master.length;
   var npsCodes = (typeof DD !== 'undefined' && DD.NPS && DD.NPS._defaultCodes) ? DD.NPS._defaultCodes : [];
   var npsNames = (typeof DD !== 'undefined' && DD.NPS && DD.NPS._schemeNames) ? DD.NPS._schemeNames : {};
@@ -7291,20 +7516,115 @@ async function ldFullAuditStatus() {
 
   var totalExpected = indices.expected + nps.expected + baf.expected;
   var totalOk = indices.okCount + nps.okCount + baf.okCount;
+  // totalFull: count of funds whose OWN dayCount has genuinely reached
+  // the 2500-day target (classify()'s `full`, not the looser `ok` which
+  // also accepts a plateaued short-history fund). No longer used by a
+  // scan-start gate (that ≥10-funds gate was removed, 2026-08, after
+  // causing a recursion bug) — kept as a general-purpose stat, and as a
+  // defensive per-fund check inside _ldBuildRedCandleAlertHTML.
+  var totalFull = indices.full + nps.full + baf.full;
   var allComplete = totalExpected > 0 && totalOk === totalExpected;
 
   return {
     indices: indices, nps: nps, baf: baf,
-    totalExpected: totalExpected, totalOk: totalOk,
+    totalExpected: totalExpected, totalOk: totalOk, totalFull: totalFull,
     allComplete: allComplete,
     generatedAt: Date.now()
   };
 }
 window.ldFullAuditStatus = ldFullAuditStatus;
 
+// ── "Candle turned red" list for the Full Data Audit box (per request,
+// 2026-08) ── Ported from the standalone renderPortfolioRedCandleAlerts
+// banner in Timeline_15H9 (same underlying logic and card formatting,
+// unchanged) but adapted to render AS PART OF the audit box instead of
+// as its own separate banner: this returns an HTML string (or '' if
+// there's nothing to flag) rather than writing to its own DOM element,
+// and ldRenderAuditBanner below only calls it once the audit reaches
+// phase 'done' (status.allComplete === true) — i.e. after every
+// downloadable fund has finished, per request, rather than showing
+// alongside a still-in-progress download.
+// Uses PState.names (the Portfolio Snapshot's own holdings list) as the
+// fund universe — the same list the completeness audit's "Portfolio"
+// scope is built from — per request.
+// Updates the "⚠ Critical Alert" button's label with the current flagged
+// fund count (per request, 2026-08), e.g. "⚠ Critical Alert (3)". Called
+// from every return path of _ldBuildRedCandleAlertHTML below so the
+// button always reflects the count from the most recent audit render,
+// including the zero-flagged case (button just reads "Critical Alert"
+// with no count, same as before this feature existed).
+function _ldUpdateCriticalAlertBtnCount(n) {
+  var btn = document.getElementById('ld-critical-alert-btn');
+  if (!btn) return;
+  btn.textContent = n > 0 ? ('⚠ Critical Alert (' + n + ')') : '⚠ Critical Alert';
+}
+
+function _ldBuildRedCandleAlertHTML() {
+  // GATE, PART 1: the Critical Alert list only starts appearing once a
+  // scan has run at least once. Since ptRunScan()'s own gate now waits
+  // for the FULL 179-fund audit (see ptRunScan — the earlier ≥10-funds
+  // partial gate was removed, 2026-08, after it caused a recursion bug),
+  // "a scan has run" now inherently means the full download+scan
+  // completed — this check doesn't need its own separate full-download
+  // condition on top of that.
+  var scanCompletedAt = (typeof window.ptGetScanCompletedAt === 'function') ? window.ptGetScanCompletedAt() : null;
+  if (!scanCompletedAt) { _ldUpdateCriticalAlertBtnCount(0); return ''; }
+  var pstate = (typeof window.PState !== 'undefined') ? window.PState : (typeof PState !== 'undefined' ? PState : null);
+  if (!pstate || !pstate.names || !pstate.names.length) { _ldUpdateCriticalAlertBtnCount(0); return ''; }
+  // GATE, PART 2: each Portfolio fund is still checked individually — a
+  // fund only appears once ITS OWN data has reached the full 2500-day
+  // target (same ±AUDIT_TOLERANCE_DAYS threshold classify() uses for
+  // "full" in the main audit). In practice, since a scan can no longer
+  // complete until the full audit does, every Portfolio fund should
+  // already be full by the time this runs — this check is kept as a
+  // defensive safety net, not as a progressive-population mechanism.
+  var flagged = [];
+  pstate.names.forEach(function(name) {
+    var entries = (window.EE && typeof window.EE.dailyEntriesFor === 'function') ? window.EE.dailyEntriesFor(name) : null;
+    var dayCount = entries ? entries.length : 0;
+    var isFundFull = dayCount >= (DEEP_WINDOW_DAYS - AUDIT_TOLERANCE_DAYS);
+    if (!isFundFull) return; // this fund's own data isn't 100% yet — skip it for now, it may join on a later scan
+    var st = (typeof window.monthlyOrWeeklyRedCandleStatus === 'function') ? window.monthlyOrWeeklyRedCandleStatus(name)
+           : (typeof monthlyOrWeeklyRedCandleStatus === 'function') ? monthlyOrWeeklyRedCandleStatus(name) : null;
+    // st===null means not enough weekly/monthly history yet to judge —
+    // treated as "can't tell", not an alert (avoids a false alarm on a
+    // fund that simply lacks deep history).
+    if (st && st.alert) flagged.push({ name: name, st: st });
+  });
+  if (!flagged.length) { _ldUpdateCriticalAlertBtnCount(0); return ''; }
+  _ldUpdateCriticalAlertBtnCount(flagged.length);
+  var fmt = (typeof ptFmtLocal === 'function') ? ptFmtLocal : function(n) { return n == null ? '—' : String(n); };
+  var cards = flagged.map(function(f) {
+    var st = f.st;
+    var tf = (st.weeklyRed && st.monthlyRed) ? 'WEEKLY &amp; MONTHLY' : st.weeklyRed ? 'WEEKLY' : 'MONTHLY';
+    var detailParts = [];
+    if (st.weeklyRed) detailParts.push('Weekly: Close ' + fmt(st.wClose) + ' &lt; Open ' + fmt(st.wOpen));
+    if (st.monthlyRed) detailParts.push('Monthly: Close ' + fmt(st.mClose) + ' &lt; Open ' + fmt(st.mOpen));
+    return '<div style="padding:6px 0;border-top:1px solid #f2cccc">' +
+      '<div style="font-size:10px;font-weight:700;color:#8a0a0a">' + f.name.replace(/</g, '&lt;') + ' <span style="font-size:7px;font-weight:800;background:#cc0000;color:#fff;padding:1px 5px;border-radius:8px;margin-left:4px">' + tf + ' CANDLE RED</span></div>' +
+      '<div style="font-size:8px;color:#a30a0a;margin-top:2px">' + detailParts.join(' &nbsp;|&nbsp; ') + '</div>' +
+      '</div>';
+  }).join('');
+  return '<div style="background:#fdeaea;border:1px solid #e88;border-left:4px solid #cc0000;border-radius:8px;padding:10px 12px;margin-top:8px">' +
+    '<div style="font-size:10px;font-weight:800;color:#8a0a0a">⚠ ' + flagged.length + ' PORTFOLIO FUND' + (flagged.length > 1 ? 'S' : '') + ' — CURRENT CANDLE HAS TURNED RED</div>' +
+    '<div style="font-size:7px;color:#a30a0a;margin-top:2px">Shown as long as the fund is in your Portfolio AND its current Weekly or Monthly candle stays red — reappears every scan until you remove the fund or the candle turns green again.</div>' +
+    cards +
+    '</div>';
+}
+
 // Renders the live audit banner in the Setup tab. `phase` is an optional
 // short string ('checking' | 'downloading' | 'done' | null) shown as a
 // prefix so the banner reads as "in progress" vs a final resting state.
+// Tracks the exact moment the audit MOST RECENTLY transitioned to
+// complete (status.allComplete === true) — reset to null the instant it
+// goes back to incomplete (e.g. after "Wipe & Re-download All"). Used by
+// _ldBuildRedCandleAlertHTML's strict gate below to confirm a scan
+// actually completed AFTER this point, not just "at some point in the
+// past" — closes the race window where allComplete flips true but the
+// auto-triggered scan (2.5s delay, see the download-complete handler)
+// hasn't started/finished yet.
+var _ldAuditCompletedAt = null;
+
 function ldRenderAuditBanner(status, phase) {
   var el = document.getElementById('ld-audit-banner');
   if (!el) return;
@@ -7317,6 +7637,11 @@ function ldRenderAuditBanner(status, phase) {
   }
   var pct = status.totalExpected > 0 ? Math.round(status.totalOk * 100 / status.totalExpected) : 0;
   var complete = status.allComplete;
+  if (complete) {
+    if (_ldAuditCompletedAt == null) _ldAuditCompletedAt = Date.now();
+  } else {
+    _ldAuditCompletedAt = null;
+  }
   el.style.background = complete ? '#eafaf0' : '#fff8d6';
   el.style.borderColor = complete ? '#3aa15c' : '#d4a017';
   var titleColor = complete ? '#0a5c2e' : '#7a5c00';
@@ -7343,12 +7668,46 @@ function ldRenderAuditBanner(status, phase) {
   }
   if (complete) {
     lines.push('<div style="font-size:9px;color:#0a5c2e;margin-top:6px;font-weight:700">✅ All 3 containers fully downloaded and processed. Normal app activity unlocked.</div>');
-  } else if (phase !== 'downloading') {
-    lines.push('<div style="font-size:9px;color:#7a5c00;margin-top:6px">Tap ⚡ Download (Missing Days) above, or wait — auto-download will start shortly.</div>');
+  } else {
+    if (phase !== 'downloading') {
+      lines.push('<div style="font-size:9px;color:#7a5c00;margin-top:6px">Tap ⚡ Download (Missing Days) above, or wait — auto-download will start shortly.</div>');
+    }
   }
+  // Candle-turned-red list (per explicit request, 2026-08): rendered
+  // regardless of overall download completeness (`complete` above) — it
+  // has its OWN gate now: a scan must have run at least once (Rule 1),
+  // and each fund is checked individually for its own 100% data before
+  // it's included (Rule 3, progressive) — see _ldBuildRedCandleAlertHTML.
+  // Deliberately NOT nested inside `if (complete)` any more: waiting for
+  // all 179 funds before showing anything defeats the progressive intent.
+  var redCandleHTML = (typeof _ldBuildRedCandleAlertHTML === 'function') ? _ldBuildRedCandleAlertHTML() : '';
+  if (redCandleHTML) lines.push(redCandleHTML);
   el.innerHTML = lines.join('');
 }
 window.ldRenderAuditBanner = ldRenderAuditBanner;
+window.ldGetAuditCompletedAt = function() { return _ldAuditCompletedAt; };
+
+// ── "Critical Alert" button handler (per request, 2026-08) ── Scrolls to
+// and briefly highlights the Full Data Audit box, where the "candle
+// turned red" list (see _ldBuildRedCandleAlertHTML above) lives once the
+// audit is complete. Does not re-run any check itself — it's pure
+// navigation, since the audit box already keeps itself current on every
+// scan. If the audit hasn't reached "complete" yet, the box is still
+// there (showing checking/downloading progress instead) — scrolling to
+// it is still useful feedback, not a dead click.
+function ldScrollToCriticalAlert() {
+  var el = document.getElementById('ld-audit-banner');
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  var prevOutline = el.style.outline, prevOutlineOffset = el.style.outlineOffset;
+  el.style.outline = '3px solid #cc0000';
+  el.style.outlineOffset = '2px';
+  setTimeout(function() {
+    el.style.outline = prevOutline;
+    el.style.outlineOffset = prevOutlineOffset;
+  }, 1500);
+}
+window.ldScrollToCriticalAlert = ldScrollToCriticalAlert;
 
 // BUG FIX (audit panel frozen mid-download): ldRenderAuditBanner only ever
 // got repainted with fresh numbers (a) once when Setup was first opened,
@@ -7429,6 +7788,18 @@ async function ldAuditGate() {
 }
 window.ldAuditGate = ldAuditGate;
 window.isLdAuditRunning = function(){ return _ldAuditRunning; };
+
+// REMOVED (per explicit decision, 2026-08 — root cause of a real
+// recursion bug): _ldWaitForMinFullFunds() used to fire ldAuditGate() in
+// the background from HERE, while _downloadDataFastImpl() (which is what
+// ldAuditGate() itself drives via window.downloadData()) ALSO called
+// ptRunScan() -> this function, directly from inside its own execution.
+// That meant a download in progress could trigger a second, overlapping
+// call into the exact same download function it was already running —
+// confirmed via screenshots showing NPS/BAF stuck at 0 for minutes with
+// an ever-changing "missing funds" list. Reverted to the simple,
+// original design: ptRunScan() now waits directly on ldAuditGate() (see
+// ptRunScan below), nothing else fires it from a background/parallel path.
 
 // ── Fix 3 (per request): "Re-run Scan" button had zero visual feedback
 // on outcome — clicking it just called window.ptRunScan() directly with
@@ -8767,16 +9138,11 @@ function switchTab(name) {
   var _curActive = document.querySelector('.tab-btn.active');
   if (_curActive && _curActive.getAttribute('data-tab') === name) return;
 
-  // GATE: while the full 3-container data audit is actively running
-  // (ldAuditGate() in flight — see Section 16.5), force navigation to
-  // stay on Setup so the yellow audit banner with live progress is
-  // visible, and no other tab's onActivated handler (which may itself
-  // kick off scans/fetches) can start until the audit finishes. Setup
-  // itself, and the initial 'pt' tab that triggers the FIRST audit run,
-  // are always allowed through.
-  if (name !== 'setup' && typeof window.isLdAuditRunning === 'function' && window.isLdAuditRunning()) {
-    name = 'setup';
-  }
+  // REMOVED (15L1): tab-switch lockout during audit. Previously forced all
+  // navigation to Setup while ldAuditGate() was running — but since the scan
+  // no longer blocks on the audit (see ptRunScan fix above), the user should
+  // be free to navigate to any tab at any time. The audit and download
+  // continue in the background regardless of which tab is active.
   var _diagT0 = performance.now();
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -9408,9 +9774,19 @@ async function ptRunScan(){
   // auto-download cycle has exhausted its retries. See ldAuditGate()
   // (Section 16.5) for the audit + auto-fill logic and the yellow Setup
   // banner it drives while this runs.
+  // REVERTED (per explicit decision, 2026-08): a looser ≥10-funds gate
+  // was tried here, but it caused a real recursion bug — see the removed
+  // early-trigger comment in _downloadDataFastImpl for the full
+  // root-cause trace. Simplicity wins: back to the original, simple
+  // full-audit wait.
+  // FIXED (15L1): No longer blocks on ldAuditGate() — scan immediately with
+  // whatever data is cached, so Portfolio shows results within seconds instead
+  // of waiting 30–60 min for a full 179-fund × 2500-day audit+download cycle.
+  // The audit continues in the background (non-awaited) so data keeps filling
+  // in; a re-scan after it completes will pick up the fuller data.
   if (typeof window.ldAuditGate === 'function') {
-    ptLog('🔍 Auditing all downloaded data (NSE + NPS + BAF) before scanning…');
-    await window.ldAuditGate();
+    ptLog('🔍 Background audit started (non-blocking) — scanning with available data…');
+    window.ldAuditGate().catch(function(e){ console.warn('[ptRunScan] background audit error:', e); });
   }
   _ptScanInFlightPromise=_ptRunScanImpl().finally(function(){_ptScanInFlightPromise=null;});
   return _ptScanInFlightPromise;
@@ -9426,6 +9802,20 @@ async function _ptRunScanImpl(){
   window._hmMergeCompletedMapSize = 0;
   var _ptScanStartTs=Date.now(); // used below to measure real elapsed time for the "Cache is fresh" banner's next-scan ETA
   ptEl('pt-st').innerHTML='<span style="display:inline-block;width:10px;height:10px;border:2px solid #b8860b;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:4px;vertical-align:middle"></span> Loading data...';
+  // Erase old performance numbers immediately (per explicit request,
+  // 2026-08): a new scan starting should never leave the previous scan's
+  // stale P&L/Return/HM-Score numbers visible while fresh data is being
+  // computed — reset the key displayed figures back to their placeholder
+  // state right here, before ptScanR is even rebuilt, so there's no
+  // window where old and new could be confused for each other.
+  ['pt-tp','pt-tr','pt-dash-hero-num'].forEach(function(id){
+    var el = ptEl(id);
+    if (el) el.textContent = '—';
+  });
+  var _ptPillTextEl = ptEl('pt-dash-pill-text');
+  if (_ptPillTextEl) _ptPillTextEl.textContent = 'Scanning…';
+  var _ptPillIconEl = ptEl('pt-dash-pill-icon');
+  if (_ptPillIconEl) _ptPillIconEl.textContent = '⏳';
   ptScanR=[];
   ptLog('⚡ Scan started — fetching data...');
   // AUDIT FIX (alert-box-shows-incomplete-data, gap #2): "scan complete"
@@ -9881,6 +10271,22 @@ win.ptRerender=function(){if(ptScanR&&ptScanR.length)ptRender(ptScanR);};
 win.ptRunScan=ptRunScan;
 win.ptWaitForScan=ptWaitForScan;
 win.ptApplyHiddenFilter=ptApplyHiddenFilter;
+
+// ── Clear scan results on app open/reload (per explicit request, 2026-08:
+// "If App closes... First step 'Clear clean' the Scan Results Box") ──
+// ptScanR (line ~9227) already starts as a fresh in-memory [] on every
+// page load — it's never persisted to storage — so stale COMPUTED
+// numbers can't technically survive a real reload. This runs anyway, as
+// an explicit, defensive guarantee rather than relying on that being
+// incidentally true: resets the visible P&L / Return / HM Score figures
+// to their placeholder state the moment this script runs, before any tab
+// activation, scan, or download logic has a chance to touch them.
+(function _ptClearOnLoad(){
+  ['pt-tp','pt-tr','pt-dash-hero-num'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
+})();
 
 })(window);
 </script>
@@ -10572,7 +10978,7 @@ function confluenceStatusFor(name){
   var norm=name?U.normalize(name):'';
   var row=null;for(var i=0;i<scanR.length;i++){
     if(scanR[i].name===name){row=scanR[i];break;}
-    var rn=scanR[i].name?scanR[i].U.normalize(name):'';
+    var rn=scanR[i].name?U.normalize(scanR[i].name):'';
     if(rn===norm){row=scanR[i];break;}
   }
   if(!row)return null;
@@ -10932,6 +11338,22 @@ async function _downloadDataFastImpl(){
         await window.downloadNPSBAF2500(function(m){ console.log('[DL-FAST-2500]', m); });
       }
     } catch(_e) { console.warn('[DL-FAST] NPS/BAF error:', _e); }
+    // BUG FIX (found via screenshots showing NPS/BAF stuck at 0/32, 0/4 for
+    // 4+ minutes with an ever-changing "missing funds" list and a
+    // perpetual "Scanning..." button — 2026-08): an earlier "early
+    // auto-trigger" here called window.ptRunScan(), which internally
+    // called ldWaitForMinFullFunds() -> ldAuditGate() IN THE BACKGROUND.
+    // ldAuditGate() is the SAME function driving THIS download — its own
+    // retry loop, on seeing the audit still incomplete, called
+    // window.downloadData() -> downloadDataFast() ->
+    // _downloadDataFastImpl() (this very function), starting a SECOND,
+    // overlapping download attempt on top of the one already running.
+    // Each retry re-fired ptRunScan() again too, compounding the effect.
+    // Per explicit decision (2026-08): removed entirely, along with the
+    // ≥10-funds-anywhere scan-start gate this was built to support (see
+    // ptRunScan's gate below) — reverted to the simpler, original design:
+    // scanning waits for the full 179/179 audit to complete, no early
+    // trigger, no partial-threshold gate.
     // FIX 3c: also update _showAutoAlert banner (visible on Setup tab) so
     // user doesn't see a frozen button with a stale 'No cached data' banner.
     // Previously only psEl('pt-st') (Portfolio status strip) was updated,
@@ -10984,7 +11406,7 @@ async function _downloadDataFastImpl(){
       if(btn){btn.textContent='\u26A1 Download (Missing Days)';btn.disabled=false;btn.style.background='#c55a00';}
       if(_s1badge){_s1badge.textContent='Step 1';_s1badge.style.background='#c55a00';}
       if(_s2badge){_s2badge.style.background='#c55a00';}
-      if(typeof window.ptRunScan==='function'){
+      if(typeof window.ptRunScan==='function' && !(typeof window.isLdAuditRunning==='function' && window.isLdAuditRunning())){
         _dlAlertFn('\u26A1 Auto-starting \ud83d\udd04 Re-run Scan\u2026', 'warn');
         window.ptRunScan();
       }
@@ -12174,6 +12596,26 @@ function refreshPortfolioAlerts(){
 }
 
 
+// ── Ported from Timeline_15H9 (per request, 2026-08): determines whether
+// a fund's CURRENT candle (in-progress week/month if today falls within
+// it) is red (close < open) on the weekly timeframe, the monthly
+// timeframe, or both. Feeds the "candle turned red" list inside the Full
+// Data Audit box on the Setup tab (see ldRenderAuditBanner /
+// _ldBuildRedCandleAlertHTML below) — same definition, unchanged, as the
+// version that previously rendered as its own standalone banner.
+function monthlyOrWeeklyRedCandleStatus(name){
+  var entries=(window.EE&&typeof window.EE.dailyEntriesFor==='function')?window.EE.dailyEntriesFor(name):null;
+  if(!entries||entries.length<20)return null;
+  var weekly=(window.EE&&typeof window.EE.toWeeklyCloses==='function')?window.EE.toWeeklyCloses(entries):null;
+  var monthly=(window.EE&&typeof window.EE.toMonthlyClosesCached==='function')?window.EE.toMonthlyClosesCached(name,entries):(window.EE&&typeof window.EE.toMonthlyCloses==='function')?window.EE.toMonthlyCloses(entries):null;
+  if(!weekly||!weekly.length||!monthly||!monthly.length)return null;
+  var wCur=weekly[weekly.length-1],mCur=monthly[monthly.length-1];
+  if(!wCur||wCur.c==null||wCur.o==null||!mCur||mCur.c==null||mCur.o==null)return null;
+  var weeklyRed=wCur.c<wCur.o;
+  var monthlyRed=mCur.c<mCur.o;
+  return {alert:(weeklyRed||monthlyRed),weeklyRed:weeklyRed,monthlyRed:monthlyRed,wClose:wCur.c,wOpen:wCur.o,mClose:mCur.c,mOpen:mCur.o};
+}
+
 // Given an array of period highs (oldest-first) and the index of the
 // "current" candle (typically arr.length-1), returns the IMMEDIATE
 // previous swing high — the nearest local pivot high (a candle whose high
@@ -12742,7 +13184,7 @@ function renderPtStats(){
   // VIX from scanR (India VIX row)
   var vixRow=null;
   for(var i=0;i<scanR.length;i++){
-    var nm=scanR[i].name?scanR[i].U.normalize(name):'';
+    var nm=scanR[i].name?U.normalize(scanR[i].name):'';
     if(nm==='indiavix'||nm==='indiavolatilityindex'){vixRow=scanR[i];break;}
   }
   var vixPrice=vixRow?vixRow.price:null;
@@ -13066,6 +13508,20 @@ win.PSnap={
 // any BAF-related changes) — fixed by exposing the same function globally
 // rather than duplicating its lookup logic in the NPS Switch tab's script.
 win.scannerRowFor = scannerRowFor;
+
+// Same problem as scannerRowFor above, same fix: PState and
+// monthlyOrWeeklyRedCandleStatus are declared inside this IIFE (private to
+// Portfolio Snapshot's own code), but _ldBuildRedCandleAlertHTML — a
+// separate <script> block, in the Data Engine section — needs to read the
+// Portfolio's current holdings and check each one's candle-red status, per
+// request (2026-08: "candle turned red" list inside the Full Data Audit
+// box). Without this export, PState and monthlyOrWeeklyRedCandleStatus were
+// undefined from that other script block, so the audit box's red-candle
+// section silently rendered nothing (returned '' every time) even with
+// funds that should have been flagged — same failure mode already fixed
+// once for scannerRowFor, same fix reapplied here.
+win.PState = PState;
+win.monthlyOrWeeklyRedCandleStatus = monthlyOrWeeklyRedCandleStatus;
 
 })(window);
 </script>
@@ -15224,7 +15680,8 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
     <span style="font-size:8px;color:#e8a060;font-weight:600">Or tap manually to re-scan any time</span>
   </div>
   <div style="display:flex;gap:5px">
-    <button id="ld-scan-btn" class="ld-scan-btn" onclick="ldRunScanWithFeedback()" title="Re-run the portfolio scan/analysis using data already saved on this device. Runs automatically after Download — or tap here any time for a manual re-scan." style="background:#d4880f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">🔄 Re-run Scan</button>
+    <button id="ld-scan-btn" class="ld-scan-btn" onclick="ldRunScanWithFeedback()" title="Re-run the portfolio scan/analysis using data already saved on this device. Runs automatically after Download — or tap here any time for a manual re-scan." style="background:#d4880f;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1.4 1 0;min-width:0">🔄 Re-run Scan</button>
+    <button id="ld-critical-alert-btn" onclick="ldScrollToCriticalAlert()" title="Jump to the 'candle turned red' list inside the Full Data Audit box below (only appears once the audit is complete)." style="background:#cc0000;color:#fff;border:none;padding:6px 6px;cursor:pointer;font-weight:bold;font-size:9px;border-radius:4px;white-space:nowrap;flex:1 1 0;min-width:0">⚠ Critical Alert</button>
   </div>
 
 </div>
