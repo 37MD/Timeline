@@ -15324,17 +15324,66 @@ async function drawHilegaMilega() {
           }
         });
 
-        // ── HM VERTICAL SIGNAL LINES — BUY/SELL across all 3 timeframes ──
-        // Ported from the TradingView Hilega-Milega MTF Strategy.
-        // Draws vertical lines on Pane 2 (RSI/WMA/EMA) at signal points:
-        //   SOLID GREEN  = signal_buy (Monthly BUY + Weekly BUY + Daily cross-up)
-        //   SOLID RED    = signal_monthly_hard_sell (Monthly cross-under)
-        //   DASHED GREEN = weekly_buy_cross
-        //   DASHED RED   = weekly_sell_cross
+        // ════════════════════════════════════════════════════════════════════════
+        // HILEGA-MILEGA MTF STRATEGY — Multi-Timeframe Signal Overlay
+        // ════════════════════════════════════════════════════════════════════════
+        //
+        // Ported from TradingView Pine Script (HilegaMilegaSource.txt).
+        // Draws 3 visual layers on Pane 2 (RSI/WMA/EMA pane):
+        //
+        //   LAYER 1: Background color shading  — MTF state at a glance
+        //   LAYER 2: Vertical signal lines      — crossover events per timeframe
+        //   LAYER 3: Letter labels (D/W/M)      — timeframe identifier per line
+        //
+        // ── PINE SCRIPT REFERENCE (inputs) ──
+        //   RSI length  = 9      (rsiLen)
+        //   EMA length  = 3      (emaLen)  — "fast" / "price"
+        //   WMA length  = 21     (wmaLen)  — "slow" / "strength"
+        //
+        // ── PINE SCRIPT SIGNAL RULES ──
+        //   signal_buy              = monthly_buy_mode AND weekly_buy_mode AND daily_buy_cross
+        //   signal_monthly_hard_sell = monthly_sell_cross
+        //   signal_hard_sell        = (monthly_buy_mode == false) AND daily_sell_cross
+        //   signal_watch            = monthly_buy_mode AND (weekly_buy_mode == false)
+        //
+        // ── KEY: lookahead=barmerge.lookahead_on ──
+        //   Pine Script's request.security with lookahead_on causes the signal
+        //   for a higher timeframe to fire on the FIRST bar of that period,
+        //   not the last. We replicate this by mapping weekly/monthly dates to
+        //   the first viewData bar within the same week/month.
+        //
+        // ── KEY: Array Indexing ──
+        //   - ema/wma are truncated to length n (visible slice) before this block.
+        //   - Signal arrays (_dailyBuyX, _weeklyBuyCrossIdx, etc.) store
+        //     VIEWDATA indices (full-series positions), NOT sliced positions.
+        //   - When drawing, convert: pi = dxi - slicedIdx  (0-based pane position)
+        //
+        // ── VISUAL STYLE GUIDE ──
+        //   Timeframe  Line Style      Color (Buy)   Color (Sell)   Width
+        //   ─────────  ──────────────  ────────────  ────────────   ─────
+        //   Daily      Dotted [2,3]    #4ade80       #f87171        1
+        //   Weekly     Dashed [4,3]    #16a34a       #dc2626        1
+        //   Monthly    Solid  []       #16a34a       #dc2626        2
+        //
+        //   Labels: "D" = Daily, "W" = Weekly, "M" = Monthly
+        //   Buy labels → green, positioned at bottom of pane
+        //   Sell labels → red, positioned at top of pane
+        //
+        // ════════════════════════════════════════════════════════════════════════
         if (pane2Chart) {
           try {
             var p2 = pane2Chart, ctx2 = p2.ctx;
-            // ── Helpers ──
+
+            // ────────────────────────────────────────────────────────────────
+            // SECTION A: HELPER FUNCTIONS
+            // ────────────────────────────────────────────────────────────────
+
+            // _hmCrossDetect(a, b, type) → Boolean[]
+            //   Detects crossovers between two arrays.
+            //   'up'   → a crosses ABOVE b  (a[i]>b[i] && a[i-1]<=b[i-1])
+            //   'down' → a crosses BELOW b  (a[i]<b[i] && a[i-1]>=b[i-1])
+            //   Returns array of same length; r[i] = true on crossover bar.
+            //   Null values are skipped (no crossover when either series is null).
             function _hmCrossDetect(a, b, type) {
               var r = new Array(a.length).fill(false);
               for (var i = 1; i < a.length; i++) {
@@ -15343,7 +15392,14 @@ async function drawHilegaMilega() {
               }
               return r;
             }
+
+            // _hmDdmmyyyyKey(d) → string
+            //   Converts "DD/MM/YYYY" date string to sortable "YYYYMMDD" key.
             function _hmDdmmyyyyKey(d) { var p = d.split('/'); return p[2]+p[1]+p[0]; }
+
+            // _hmDateToIdx(target, arr, from) → number
+            //   Finds first index in arr where date >= target (using YYYYMMDD key).
+            //   Returns -1 if not found. Used for date-to-index mapping.
             function _hmDateToIdx(target, arr, from) {
               var tk = _hmDdmmyyyyKey(target);
               for (var i = (from||0); i < arr.length; i++) {
@@ -15351,6 +15407,13 @@ async function drawHilegaMilega() {
               }
               return -1;
             }
+
+            // _hmLatestAt(dailyIdx, parsedArr, toDailyMap) → number|null
+            //   Finds the LATEST period index in parsedArr (weekly or monthly)
+            //   whose mapped daily index is valid (>=0) and <= dailyIdx.
+            //   Used to look up buy/sell mode at a specific daily position.
+            //   Example: Given dailyIdx=500, finds the most recent weekly bar
+            //   whose first-in-week date maps to a viewData index <= 500.
             function _hmLatestAt(dailyIdx, parsedArr, toDailyMap) {
               var best = null;
               for (var i = 0; i < parsedArr.length; i++) {
@@ -15358,6 +15421,10 @@ async function drawHilegaMilega() {
               }
               return best;
             }
+
+            // _hmDrawVLine(ctx, chart, paneIdx, color, width, dash)
+            //   Draws a single vertical line across Pane 2 at horizontal position paneIdx.
+            //   dash: [] = solid, [2,3] = dotted, [4,3] = dashed.
             function _hmDrawVLine(ctx, chart, paneIdx, color, width, dash) {
               ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = width;
               ctx.setLineDash(dash || []);
@@ -15367,10 +15434,27 @@ async function drawHilegaMilega() {
               ctx.stroke(); ctx.restore();
             }
 
-            // ── 1. Daily EMA(3)/WMA(21) crossovers ──
-            // Compute directly from the chart's own EMA/WMA (derived from viewData),
-            // so daily signals always align with the visible chart lines.
-            // Index i in ema/wma == index i in viewData (1:1 mapping).
+            // ────────────────────────────────────────────────────────────────
+            // SECTION B: SIGNAL DETECTION — All 3 Timeframes
+            // ────────────────────────────────────────────────────────────────
+            //
+            // Each section produces arrays of VIEWDATA indices where crossovers
+            // occur. These indices are used for both line drawing and label
+            // placement in Section C and D below.
+
+            // ── B1. DAILY EMA(3)/WMA(21) CROSSOVERS ──
+            //
+            // Source: Computed directly from the chart's own ema/wma arrays
+            //         (derived from viewData NAV values via RSI→EMA/WMA).
+            //
+            // IMPORTANT: ema/wma are truncated to length n (the visible slice)
+            // before this block runs (see lines ~14696-14701). Therefore:
+            //   - _hmCrossDetect returns array of length n
+            //   - Loop iterates 0..n (sliced positions)
+            //   - Stores (i + slicedIdx) as the full viewData index
+            //
+            // This guarantees daily signals align exactly with the visible
+            // EMA(3) and WMA(21) lines on the chart.
             var _dailyBuyX = [], _dailySellX = [];
             var _dBx = _hmCrossDetect(ema, wma, 'up');
             var _dSx = _hmCrossDetect(ema, wma, 'down');
@@ -15379,10 +15463,25 @@ async function drawHilegaMilega() {
               if (_dSx[_di]) _dailySellX.push(_di + slicedIdx);
             }
 
-            // ── 2. Weekly EMA/WMA signals ──
-            // NOTE: Pine Script uses request.security("W", ..., lookahead=barmerge.lookahead_on)
-            // With lookahead_on, the weekly signal fires at the FIRST daily bar of the week,
-            // not the last. Map weekly end-of-week dates to the first viewData bar in the same week.
+            // ── B2. WEEKLY EMA/WMA SIGNALS ──
+            //
+            // Source: DB_weeklyDatabase → parseEntry → RSI(9) → WMA(21)/EMA(3)
+            //         (independently computed from weekly NAV series)
+            //
+            // LOOKAHEAD MAPPING:
+            //   Pine Script: request.security("W", ..., lookahead=barmerge.lookahead_on)
+            //   Effect: Weekly signal fires on the FIRST daily bar of the week,
+            //   not the last. To replicate:
+            //     1. Each weekly entry has an end-of-week date (YYYY/MM/DD)
+            //     2. Compute the week window: [date - 6 days, date]
+            //     3. Find the FIRST viewData bar within that window
+            //     4. Map the weekly crossover to that first bar's viewData index
+            //
+            // WEEKLY BUY MODE:
+            //   true  if EMA(3) > WMA(21) on that weekly bar
+            //   false if EMA(3) < WMA(21)
+            //   null  if insufficient data
+            //   Used by _wBuyAt() for background shading lookup.
             var _wEnt = resolveKey(DB_weeklyDatabase, key, origName);
             var _weeklyBuyCrossIdx = [], _weeklySellCrossIdx = [];
             var _weeklyBuyMode = null, _weeklyParsed = null, _weeklyToDaily = {};
@@ -15397,6 +15496,7 @@ async function drawHilegaMilega() {
                 _weeklyBuyMode[_wi] = _wEma[_wi]!=null && _wWma[_wi]!=null ? _wEma[_wi] > _wWma[_wi] : null;
               var _wBx = _hmCrossDetect(_wEma, _wWma, 'up');
               var _wSx = _hmCrossDetect(_wEma, _wWma, 'down');
+              // Map each weekly entry to the first viewData bar in the same 7-day window
               for (var _wi2 = 0; _wi2 < _weeklyParsed.length; _wi2++) {
                 var _wDate = _weeklyParsed[_wi2].date;
                 var _wP = _wDate.split('/');
@@ -15408,16 +15508,27 @@ async function drawHilegaMilega() {
                   var _vdMs = new Date(+_vdP[2], +_vdP[1]-1, +_vdP[0]).getTime();
                   if (_vdMs >= _wStartMs && _vdMs <= _wEndMs) { _wFirstIdx = _wi3; break; }
                 }
-                _weeklyToDaily[_wi2] = _wFirstIdx;
+                _weeklyToDaily[_wi2] = _wFirstIdx;  // -1 if no matching viewData bar
                 if (_wBx[_wi2] && _wFirstIdx >= 0) _weeklyBuyCrossIdx.push(_wFirstIdx);
                 if (_wSx[_wi2] && _wFirstIdx >= 0) _weeklySellCrossIdx.push(_wFirstIdx);
               }
             }
 
-            // ── 3. Monthly EMA/WMA signals ──
-            // NOTE: Pine Script uses request.security("M", ..., lookahead=barmerge.lookahead_on)
-            // With lookahead_on, the monthly signal fires at the FIRST daily bar of the month,
-            // not the last. So we map monthly dates to the first viewData bar in the same YYYYMM.
+            // ── B3. MONTHLY EMA/WMA SIGNALS ──
+            //
+            // Source: DB_monthlyDatabase → parseEntry → RSI(9) → WMA(21)/EMA(3)
+            //         (independently computed from monthly NAV series)
+            //
+            // LOOKAHEAD MAPPING:
+            //   Pine Script: request.security("M", ..., lookahead=barmerge.lookahead_on)
+            //   Effect: Monthly signal fires on the FIRST daily bar of the month.
+            //   To replicate:
+            //     1. Each monthly entry has a date; extract YYYYMM key
+            //     2. Find the FIRST viewData bar whose YYYYMM matches
+            //     3. Map the monthly crossover to that first bar's viewData index
+            //
+            // MONTHLY BUY MODE:
+            //   Same logic as weekly — used by _mBuyAt() for background shading.
             var _mEnt = resolveKey(DB_monthlyDatabase, key, origName);
             var _monthlyBuyMode = null, _monthlyParsed = null, _monthlyToDaily = {};
             var _monthlyHardSellIdx = [], _monthlyBuyCrossIdx = [];
@@ -15432,6 +15543,7 @@ async function drawHilegaMilega() {
                 _monthlyBuyMode[_mi] = _mEma[_mi]!=null && _mWma[_mi]!=null ? _mEma[_mi] > _mWma[_mi] : null;
               var _mBx = _hmCrossDetect(_mEma, _mWma, 'up');
               var _mSx = _hmCrossDetect(_mEma, _mWma, 'down');
+              // Map each monthly entry to the first viewData bar in the same YYYYMM
               for (var _mi2 = 0; _mi2 < _monthlyParsed.length; _mi2++) {
                 var _mDate = _monthlyParsed[_mi2].date;
                 var _mP = _mDate.split('/');
@@ -15441,13 +15553,20 @@ async function drawHilegaMilega() {
                   var _fP = viewData[_fi].date.split('/');
                   if (_fP[2] + _fP[1] === _mYM) { _mFirstIdx = _fi; break; }
                 }
-                _monthlyToDaily[_mi2] = _mFirstIdx;
+                _monthlyToDaily[_mi2] = _mFirstIdx;  // -1 if no matching viewData bar
                 if (_mBx[_mi2] && _mFirstIdx >= 0) _monthlyBuyCrossIdx.push(_mFirstIdx);
                 if (_mSx[_mi2] && _mFirstIdx >= 0) _monthlyHardSellIdx.push(_mFirstIdx);
               }
             }
 
-            // ── Lookup: monthly/weekly buy mode at a given daily index ──
+            // ── B4. BUY MODE LOOKUP FUNCTIONS ──
+            //
+            // Given a daily viewData index, returns whether the monthly/weekly
+            // timeframe is in BUY mode (EMA > WMA) at that point.
+            //
+            // Uses _hmLatestAt to find the most recent weekly/monthly period
+            // that maps to a daily index <= the given index, then checks its
+            // buy mode flag.
             function _mBuyAt(di) {
               if (!_monthlyBuyMode || !_monthlyParsed) return false;
               var li = _hmLatestAt(di, _monthlyParsed, _monthlyToDaily);
@@ -15459,8 +15578,19 @@ async function drawHilegaMilega() {
               return li!=null ? (_weeklyBuyMode[li]===true) : false;
             }
 
-            // ── BACKGROUND COLOR SHADING — MTF state indicator ──
-            // Green: monthly+weekly both BUY | Orange: monthly BUY, weekly SELL (watch) | Red: monthly SELL
+            // ────────────────────────────────────────────────────────────────
+            // SECTION C: BACKGROUND COLOR SHADING — MTF State Indicator
+            // ────────────────────────────────────────────────────────────────
+            //
+            // Paints the background of Pane 2 to show the combined
+            // monthly+weekly state at a glance (matches Pine Script bgcolor):
+            //
+            //   Color         Condition                      Pine Script Equivalent
+            //   ────────────  ─────────────────────────────  ──────────────────────
+            //   Green (10%)   monthly=BUY AND weekly=BUY     bg_color = green
+            //   Orange (10%)  monthly=BUY AND weekly=SELL     bg_color = orange (watch)
+            //   Red (12%)     monthly=SELL                    bg_color = red
+            //
             for (var _bgi = 0; _bgi < n; _bgi++) {
               var _dgi = _bgi + slicedIdx;
               var _mbg = _mBuyAt(_dgi);
@@ -15476,46 +15606,63 @@ async function drawHilegaMilega() {
               }
             }
 
-            // ── VERTICAL LINES on Pane 2 ──
-            // Colors: Daily=light, Weekly=dark, Monthly=dark+thick
-            // Rule: Every line MUST have a matching M/W/D label
+            // ────────────────────────────────────────────────────────────────
+            // SECTION D: VERTICAL SIGNAL LINES
+            // ────────────────────────────────────────────────────────────────
             //
-            // A. DOTTED GREEN — daily_buy (no gate, all daily crosses show)
+            // Each crossover event gets a vertical line on Pane 2.
+            // Lines are drawn from top to bottom of the pane.
+            //
+            // All signals are UNGATED — every crossover shows regardless of
+            // other timeframes' state (matches Pine Script plot behavior).
+            //
+            // dxi = viewData index (full series)
+            // pi  = pane position = dxi - slicedIdx (0-based, for toX())
+            //
+            // ┌─────────────┬──────────┬───────────┬──────────┬───────┐
+            // │ Timeframe   │ Style    │ Color Buy │ Color Sell│ Width │
+            // ├─────────────┼──────────┼───────────┼──────────┼───────┤
+            // │ Daily       │ Dotted   │ #4ade80   │ #f87171  │ 1     │
+            // │ Weekly      │ Dashed   │ #16a34a   │ #dc2626  │ 1     │
+            // │ Monthly     │ Solid    │ #16a34a   │ #dc2626  │ 2     │
+            // └─────────────┴──────────┴───────────┴──────────┴───────┘
+
+            // D1. DOTTED GREEN — Daily buy crossover (EMA crosses above WMA)
             _dailyBuyX.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
               if (pi < 0 || pi >= n) return;
               _hmDrawVLine(ctx2, p2, pi, '#4ade80', 1, [2, 3]);
             });
-            // A2. DOTTED RED — daily_sell (no gate, all daily crosses show)
+            // D2. DOTTED RED — Daily sell crossover (EMA crosses below WMA)
             _dailySellX.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
               if (pi < 0 || pi >= n) return;
               _hmDrawVLine(ctx2, p2, pi, '#f87171', 1, [2, 3]);
             });
-            // C. DASHED GREEN — weekly_buy_cross
+            // D3. DASHED GREEN — Weekly buy crossover
             _weeklyBuyCrossIdx.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
               if (pi < 0 || pi >= n) return;
               _hmDrawVLine(ctx2, p2, pi, '#16a34a', 1, [4, 3]);
             });
-            // D. DASHED RED — weekly_sell_cross
+            // D4. DASHED RED — Weekly sell crossover
             _weeklySellCrossIdx.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
               if (pi < 0 || pi >= n) return;
               _hmDrawVLine(ctx2, p2, pi, '#dc2626', 1, [4, 3]);
             });
-            // E. SOLID RED — monthly_hard_sell (monthly cross-under)
+            // D5. SOLID RED — Monthly hard sell (monthly EMA crosses below WMA)
             _monthlyHardSellIdx.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
               if (pi < 0 || pi >= n) return;
               _hmDrawVLine(ctx2, p2, pi, '#dc2626', 2, []);
             });
-            // E2. SOLID GREEN — monthly_buy_cross (monthly cross-over)
+            // D6. SOLID GREEN — Monthly buy cross (monthly EMA crosses above WMA)
             _monthlyBuyCrossIdx.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
@@ -15523,10 +15670,31 @@ async function drawHilegaMilega() {
               _hmDrawVLine(ctx2, p2, pi, '#16a34a', 2, []);
             });
 
-            // ── LETTER LABELS — every line has a matching label ──
+            // ────────────────────────────────────────────────────────────────
+            // SECTION E: LETTER LABELS (D / W / M)
+            // ────────────────────────────────────────────────────────────────
+            //
+            // Every vertical line MUST have a matching letter label to
+            // identify which timeframe generated the signal.
+            //
+            // Positioning:
+            //   Buy labels  → green, BOTTOM of pane  (y = pad.t + cH - 6)
+            //   Sell labels → red,    TOP of pane    (y = pad.t + 12)
+            //
+            // ┌──────┬─────────┬────────────────────────────────┐
+            // │ Label│ Position│ Meaning                          │
+            // ├──────┼─────────┼────────────────────────────────┤
+            // │ D    │ Bottom  │ Daily buy  (EMA crossed above)  │
+            // │ D    │ Top     │ Daily sell (EMA crossed below)  │
+            // │ W    │ Bottom  │ Weekly buy cross                 │
+            // │ W    │ Top     │ Weekly sell cross                │
+            // │ M    │ Top     │ Monthly hard sell                │
+            // │ M    │ Top     │ Monthly buy cross                │
+            // └──────┴─────────┴────────────────────────────────┘
             ctx2.font = 'bold 11px monospace';
             ctx2.textAlign = 'center';
-            // F. "D" GREEN (bottom) — daily buy (no gate)
+
+            // E1. "D" GREEN (bottom) — Daily buy crossover
             _dailyBuyX.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
@@ -15535,7 +15703,7 @@ async function drawHilegaMilega() {
               ctx2.fillStyle = '#4ade80';
               ctx2.fillText('D', mx, my);
             });
-            // G. "D" RED (top) — daily sell (no gate)
+            // E2. "D" RED (top) — Daily sell crossover
             _dailySellX.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
@@ -15544,7 +15712,7 @@ async function drawHilegaMilega() {
               ctx2.fillStyle = '#f87171';
               ctx2.fillText('D', mx, my);
             });
-            // H. "M" RED (top) — monthly hard sell
+            // E3. "M" RED (top) — Monthly hard sell
             _monthlyHardSellIdx.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
@@ -15553,7 +15721,7 @@ async function drawHilegaMilega() {
               ctx2.fillStyle = '#dc2626';
               ctx2.fillText('M', mx, my);
             });
-            // H2. "M" GREEN (top) — monthly buy cross
+            // E4. "M" GREEN (top) — Monthly buy cross
             _monthlyBuyCrossIdx.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
@@ -15562,7 +15730,7 @@ async function drawHilegaMilega() {
               ctx2.fillStyle = '#16a34a';
               ctx2.fillText('M', mx, my);
             });
-            // I. "W" RED (top) — weekly sell cross
+            // E5. "W" RED (top) — Weekly sell cross
             _weeklySellCrossIdx.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
@@ -15571,7 +15739,7 @@ async function drawHilegaMilega() {
               ctx2.fillStyle = '#dc2626';
               ctx2.fillText('W', mx, my);
             });
-            // J. "W" GREEN (bottom) — weekly buy cross
+            // E6. "W" GREEN (bottom) — Weekly buy cross
             _weeklyBuyCrossIdx.forEach(function(dxi) {
               if (dxi < slicedIdx || dxi >= viewData.length) return;
               var pi = dxi - slicedIdx;
@@ -15580,8 +15748,11 @@ async function drawHilegaMilega() {
               ctx2.fillStyle = '#16a34a';
               ctx2.fillText('W', mx, my);
             });
+
+            // ── DEBUG LOG (enable with window._HM_DEBUG = true) ──
             if (window._HM_DEBUG) console.log('[HM SIGNALS] dailyBuy=' + _dailyBuyX.length + ' dailySell=' + _dailySellX.length + ' weeklyBuy=' + _weeklyBuyCrossIdx.length + ' weeklySell=' + _weeklySellCrossIdx.length + ' monthlyBuy=' + _monthlyBuyCrossIdx.length + ' monthlySell=' + _monthlyHardSellIdx.length + ' slicedIdx=' + slicedIdx + ' viewLen=' + viewData.length);
-            // Update clean image for crosshair restore
+
+            // Snapshot Pane 2 for crosshair restore (avoids re-rendering labels)
             try { p2.cleanImg = ctx2.getImageData(0, 0, p2.canvas.width, p2.canvas.height); } catch(_e) {}
           } catch (_vslErr) { /* non-critical — visual enhancement only */ }
         }
