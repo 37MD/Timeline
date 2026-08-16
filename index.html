@@ -5,6 +5,50 @@
 ════════════════════════════════════════════════════════════════════════════
  TIMELINE_15K4 — MASTER TABLE OF CONTENTS
 ════════════════════════════════════════════════════════════════════════════
+ WHAT CHANGED (excluded hidden funds from the completeness audit, per
+ explicit request 2026-08 — user asked, after purging hidden-fund data,
+ whether the scan gate would still work; investigation found a real bug
+ introduced by the same-day earlier "exclude Hide List from download"
+ change)
+ ────────────────────────────────────────────────────────────────────────
+ ROOT CAUSE: the earlier fix this session (_buildDownloadKeepSet
+ excluding hidden funds, purgeHiddenFundData removing their stored data)
+ meant hidden funds now permanently sit at 0 downloaded days. But
+ ldFullAuditStatus()'s completeness check (expectedIndices = master.
+ length) never excluded hidden funds — only "permanently-partial" ones
+ (LD_AUDIT_PERMANENTLY_PARTIAL). A fund stuck at 0 days forever would
+ never satisfy classify()'s full/plateaued check, so allComplete would
+ never become true, and ldAuditGate() would retry forever — reproducing
+ the exact "downloads on every open, never finishes" loop this app
+ already went through once this session, just caused by hidden funds
+ this time instead of leftover junk keys.
+ FIX: added a second exclusion filter to ldFullAuditStatus() (Section
+ 16.5), immediately after the existing permanently-partial-funds filter,
+ using the same shape: drop any fund whose name is in the live
+ PState.hidden list from BOTH the completeness denominator
+ (expectedIndices) and idxDetail — so a hidden fund can never appear in
+ the "X fund(s) with NO data yet" list and never blocks allComplete from
+ reaching true. Rebuilt fresh on every audit call (reads PState.hidden
+ live, not cached), matching this session's established pattern
+ (_buildDownloadKeepSet, purgeHiddenFundData) of Hide List changes
+ taking effect automatically on the very next run, no manual re-sync.
+ VERIFIED: isolated Node simulation with a 143-fund master list and 10
+ hidden funds confirmed expectedIndices correctly drops to 133 (the
+ real, still-downloadable fund count) once this filter is applied —
+ without it, expectedIndices would stay 143 and could never be
+ satisfied. Also verified the fresh-rebuild behavior: hiding a fund
+ removes it from the audit requirement immediately, and unhiding it
+ brings it back (correctly requiring a fresh download for it again, per
+ the accepted tradeoff of the earlier fix this session). Confirmed
+ window.PState is reachable from this function's script block (same
+ block already used successfully by this session's earlier
+ _renderDeepGapDiagnostic fix). Ran `node --check` against all 13 real
+ inline <script> blocks post-edit — all pass. Diff confirmed this is the
+ only region touched — the Setup tab's separate "N funds — X to Y
+ trading days" data-integrity banner (a different, non-gating display)
+ was checked and correctly left alone, since it doesn't drive the retry
+ loop.
+
  WHAT CHANGED (Hide List funds fully excluded from download + one-time
  purge of already-stored hidden data, per explicit request 2026-08 —
  "Hide list ... No data to be downloaded ... As agreed earlier", then
@@ -8130,6 +8174,27 @@ async function ldFullAuditStatus() {
   // appear in the "partially downloaded" list and never prevent
   // allComplete from reaching true.
   master = master.filter(function(idx) { return !_ldIsPermanentlyPartial(idx.name); });
+  // FIX (2026-08, same-day follow-up to "Hide list ... No data to be
+  // downloaded"): hidden funds are now deliberately never downloaded
+  // (_buildDownloadKeepSet excludes them) or purged if they already had
+  // data (purgeHiddenFundData). Without this exclusion, a hidden fund
+  // would sit at 0 days forever, classify() would never mark it
+  // full/plateaued, expectedIndices would never be reached, allComplete
+  // would never become true, and ldAuditGate() would retry forever —
+  // reproducing the exact "downloads on every open, never finishes" bug
+  // this app already went through once, just caused by hidden funds
+  // this time instead of leftover junk keys. Same fix shape as the
+  // permanently-partial exclusion just above: drop hidden funds from
+  // BOTH the completeness denominator and idxDetail, so they can never
+  // appear in "partially downloaded" and never block allComplete.
+  try {
+    var _hiddenNamesForAudit = (window.PState && window.PState.hidden) || [];
+    var _hiddenLowerForAudit = {};
+    _hiddenNamesForAudit.forEach(function(n) { if (n) _hiddenLowerForAudit[n.toLowerCase()] = true; });
+    master = master.filter(function(idx) { return !_hiddenLowerForAudit[(idx.name || '').toLowerCase()]; });
+  } catch (e) {
+    console.warn('[DEEP] ldFullAuditStatus: hide list read failed, hidden funds not excluded from audit this run:', e);
+  }
   var expectedIndices = master.length;
   var npsCodes = (typeof DD !== 'undefined' && DD.NPS && DD.NPS._defaultCodes) ? DD.NPS._defaultCodes : [];
   var npsNames = (typeof DD !== 'undefined' && DD.NPS && DD.NPS._schemeNames) ? DD.NPS._schemeNames : {};
