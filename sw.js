@@ -10,7 +10,18 @@
 // ldBuildBackupPayload in index.html) so a version bump in one place is a
 // clear signal to bump the other too, even though they serve different
 // purposes (backup format vs. offline shell).
-const CACHE_NAME = 'timeline-scanner-v6.03';
+//
+// 2026-08-19: bumped v6.03 -> v6.04. The v6.03 tag was set in index.html
+// alongside sw.js during the Indigo Pulse dark-theme UI redesign, but
+// because this is a cache-first service worker, a same-named CACHE_NAME
+// does NOT guarantee a fresh index.html is served on next load — the old
+// cached copy is served instantly and only refreshed in the background
+// for the *next* visit (stale-while-revalidate). Bumping the cache name
+// forces the activate handler below to delete the old cache outright and
+// re-fetch everything fresh on this deploy, so the dark-theme rebuild
+// actually reaches the phone on the next app open instead of silently
+// serving the old light-mode index.html for one more session.
+const CACHE_NAME = 'timeline-scanner-v6.04';
 
 const APP_SHELL = [
   './',
