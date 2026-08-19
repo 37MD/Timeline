@@ -18664,34 +18664,34 @@ return { open: openHilegaTab, draw: drawHilegaMilega };
          The two never overwrite each other — a timeframe change updates
          section 1 without invalidating a prior backtest's section 2, and
          vice versa. ── -->
-    <div id="tactical-takeaway-wrap" style="display:none;margin-top:8px;border:1.5px solid var(--n-accent,#22c58b);border-radius:8px;padding:10px 12px;background:#f3faf7;">
+    <div id="tactical-takeaway-wrap" style="display:none;margin-top:10px;border:1px solid var(--green);border-radius:var(--radius);padding:12px 14px;background:var(--green-dim);">
       <div id="tactical-takeaway-reading-block" style="display:none;">
-        <div style="font-size:9px;font-weight:700;color:var(--n-accent,#22c58b);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Current Reading</div>
-        <div id="tactical-takeaway-reading-body" style="font-size:11.5px;line-height:1.5;color:#f1f2f8;"></div>
+        <div style="font-size:9px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Current Reading</div>
+        <div id="tactical-takeaway-reading-body" style="font-size:11.5px;line-height:1.5;color:var(--text);"></div>
       </div>
       <div id="tactical-takeaway-bt-block" style="display:none;margin-top:8px;">
-        <div style="font-size:9px;font-weight:700;color:var(--n-accent,#22c58b);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;border-top:1px solid #d5ece3;padding-top:8px;">BackTest Takeaway</div>
-        <div id="tactical-takeaway-body" style="font-size:11.5px;line-height:1.5;color:#f1f2f8;"></div>
+        <div style="font-size:9px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;border-top:1px solid rgba(34,197,139,0.25);padding-top:8px;">BackTest Takeaway</div>
+        <div id="tactical-takeaway-body" style="font-size:11.5px;line-height:1.5;color:var(--text);"></div>
       </div>
     </div>
 
     <!-- ── Chart area: Price vs SMA(8) + Hilega Milega — rendered independently ── -->
     <div id="tactical-chart-wrap" style="display:none;margin-top:8px;border:1px solid var(--border,#242739);border-radius:8px;overflow:hidden;background:var(--n-card,#12141f);">
-      <div id="tactical-chart-label" style="font-size:10px;font-weight:700;color:#333;padding:6px 8px 0;text-align:center;"></div>
+      <div id="tactical-chart-label" style="font-size:10px;font-weight:700;color:var(--text);padding:6px 8px 0;text-align:center;"></div>
       <div style="position:relative;width:100%;height:160px;">
         <canvas id="tactical-chart-canvas" style="width:100%;height:100%;display:block;"></canvas>
       </div>
-      <div id="tactical-chart-hud" style="font-size:9px;color:#666;padding:2px 8px 3px;text-align:center;"></div>
+      <div id="tactical-chart-hud" style="font-size:9px;color:var(--text-faint);padding:2px 8px 3px;text-align:center;"></div>
       <div style="position:relative;width:100%;height:120px;border-top:1px solid var(--border,#242739);">
         <canvas id="tactical-hm-canvas" style="width:100%;height:100%;display:block;"></canvas>
       </div>
-      <div id="tactical-hm-hud" style="font-size:9px;color:#666;padding:2px 8px 3px;text-align:center;"></div>
+      <div id="tactical-hm-hud" style="font-size:9px;color:var(--text-faint);padding:2px 8px 3px;text-align:center;"></div>
     </div>
 
     <!-- ── BackTest Table ── -->
     <div id="tactical-bt-wrap" style="display:none;margin-top:8px;border:1px solid var(--border,#242739);border-radius:8px;overflow:hidden;background:var(--n-card,#12141f);">
       <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;padding:6px 8px 4px;gap:2px;">
-        <div style="font-size:10px;font-weight:700;color:#333;">BackTest Results<span id="tactical-bt-summary"></span></div>
+        <div style="font-size:10px;font-weight:700;color:var(--text);">BackTest Results<span id="tactical-bt-summary"></span></div>
       </div>
       <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
         <table id="tactical-bt-table" style="width:100%;border-collapse:collapse;font-size:9px;font-family:monospace;">
