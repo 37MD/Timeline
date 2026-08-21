@@ -5,6 +5,121 @@
 ════════════════════════════════════════════════════════════════════════════
  TIMELINE_15K4 — MASTER TABLE OF CONTENTS
 ════════════════════════════════════════════════════════════════════════════
+ WHAT CHANGED (AGENTS.md audit — SW/manifest filename + simulator bugs — 2026-08-21)
+ ────────────────────────────────────────────────────────────────────────
+ BUG 1 (sw.js + manifest.json — CRITICAL): APP_SHELL and start_url pointed
+ to './index.html', but the actual app file is Timeline_18H.html. There is
+ no index.html in the root folder. Each cache.add().catch() was silently
+ swallowing the 404 at install time, leaving the shell uncached. The offline
+ navigation fallback also returned './index.html' (another 404). Fixed:
+ replaced all three wrong references with './Timeline_18H.html', bumped
+ CACHE_NAME to v6.05 (forces old broken cache deletion on next SW update),
+ and updated manifest.json start_url to match.
+ BUG 2 (intDrawManualVLines — Simulator): The function used Chart.getChart()
+ to find the Interactive HM pane charts, but those panes are drawn with the
+ Hilega engine's own raw canvas2D drawPane() — they are NOT Chart.js instances.
+ Chart.getChart() always returned null, so the if(!chart||!chart.chartArea)
+ guard immediately returned, and BUY/SELL vertical lines were never drawn on
+ any HM pane during an Interactive session. Fixed: replaced Chart.getChart()
+ with direct raw-canvas drawing using window._hmPanes (already populated by
+ drawHilegaMilega for the Interactive canvases) and window._hmChart.dates
+ for date→index mapping. Updates chart.cleanImg after drawing so the
+ crosshair restore (putImageData) still includes the trade lines.
+ BUG 3 (intRenderChart — Simulator): intRenderChart() saved/restored
+ window._hmHist/Code/Period/TfDays but NOT window._hmPanes or window._hmChart.
+ After an Interactive render, window._hmPanes pointed to the overlay's hidden
+ canvases. Closing the simulator and mousing over Charts drew the crosshair
+ on those off-screen canvases (silently failing) instead of the real Charts
+ panes — crosshair appeared broken until Charts re-rendered. Fixed: save and
+ restore window._hmPanes and window._hmChart in the same try/finally block.
+ BUG 4 (dead variable — simClose): _intPriceChart was declared null and the
+ simClose() destroy guard was a permanent no-op (variable never assigned after
+ the pre-2026-08-21 single-canvas prototype was replaced by drawHilegaMilega).
+ Removed the dead declaration and the dead guard. No behavior change.
+ VERIFIED: node --check on all 14 inline <script> blocks passes. Regime-Fear
+ penalty capping (node arithmetic test) confirmed -100 max. intDrawManualVLines
+ raw-canvas path confirmed with synthetic _hmPanes object in node. Charts
+ crosshair confirmed restored correctly after intRenderChart() by checking
+ save/restore symmetry in the finally block. Blast-radius: changes are
+ isolated to sw.js, manifest.json, and the Section 13.11 block only; no
+ shared containers (U/EE/DD/BB/CC) or other tabs touched.
+
+ WHAT CHANGED (Process Audit — Hilega double-green buys give +30 — 2026-08-22)
+ ────────────────────────────────────────────────────────────────────────
+ ROOT CAUSE: Owner requested good buys that occur AFTER both Weekly and
+ Monthly Hilega Milega are green (EMA>WMA) should earn more marks than a
+ plain Regime-Hope dip buy.
+
+ FIX: In intRunAudit(), added isHmGreenUpTo(period, asOfStr) helper (caches
+ per-date, uses weeklyMap/monthlyMap + EE.calcRSISeries/WMA/EMA, last
+ EMA>WMA check — same definition as Hilega vertical lines). For each BUY
+ in Regime Hope with valid signal (dr<40 or Δ< -15), now checks
+ weeklyGreen && monthlyGreen. If both true, scoreEntry +=30 (vs 20) and
+ ghmGoodExtra++ (displayed as “· of which W+M Hilega green (+30)”).
+ Premature/bad/contra scoring unchanged. Description line updated to
+ document +30 vs +20. Delegates to canonical EE math (AGENTS §6).
+
+ VERIFIED: Synthetic session with 50-bar weekly/monthly maps all rising
+ (EMA>WMA true) → BUY on signal gave +30 and ghmGoodExtra=1; same BUY with
+ monthly red (decreasing map) gave +20 and 0 extra. Playwright checks
+ confirm tag and stat line appear only when double-green.
+
+ WHAT CHANGED (Simulation — Interactive first + Simulation Actions vertical lines + layout — 2026-08-22)
+ ────────────────────────────────────────────────────────────────────────
+ ROOT CAUSE (feature requests + bug):
+ 1) Backtest/Interactive tabs were Backtest-first; owner requested Interactive
+    first (left) and Backtest renamed to Simulation Actions (captures BUY/SELL).
+ 2) Top unified bar had 4 stats boxes (Dly/Wly/Regime/Convic) at 84px; owner
+    requested +80% width for Dly/Wly/Regime and Conviction moved to Net Worth
+    row far-right (4-col). Previous 84px + 116+154 button widths overflowed
+    at 393px if naively enlarged.
+ 3) Weekly/Monthly period buttons stayed grey (neutral) while Daily showed
+    red — simUpdatePeriodButtonColors() filtered weekly/monthly maps by the
+    simulated curIdx date (asOfStr), which early in a session has <30 weekly
+    bars → returned null → grey. Should reflect full-history signal like Daily.
+ 4) Simulation Actions chart had no vertical BUY/SELL markers; owner requested
+    red/green vertical lines matching Hilega monthly (solid #16a34a/#dc2626)
+    and daily (dotted #4ade80/#f87171) with 10%/25%/50%/SELL ALL labels.
+ 5) Bottom actions had New Session on its own row; owner requested it beside
+    End & Review with trimmed Sell All/End & Review widths.
+
+ FIX:
+  - Swapped tab order in #sim-overlay header: Interactive (left, active) /
+    Simulation Actions (right, renamed from BACKTEST). Swapped default
+    visibility (#simInteractiveWrap flex, #simBacktestWrap none) and
+    #simStatsGroup default grid.
+  - Increased simStatsGroup from 84px/4 cols to 151px/3 cols (84*1.8, +80%)
+    and inner padding/font (1px→2px, 7px→9px) to visually enlarge; trimmed
+    period/tf buttons to 32/24px (from 36/28) and unified gap/padding to
+    1px/2px so total 32*3+24*5+151=~367 <393 (verified no overflow 393/360
+    via Playwright). Net Worth row changed from flex 3 to grid 4×1fr
+    (Conviction far-right, font 6/10px) to keep 97.5px cols.
+  - Made simPeriodFloor/Ceil/Clamp thin delegating wrappers to hmPeriodFloor/
+    hmPeriodCeil/hmClampTfDays (AGENTS.md §1) instead of parallel
+    reimplementation — preserves single source of truth.
+  - Removed asOfStr filter in simUpdatePeriodButtonColors(); now uses full
+    daily/weekly/monthlyMap history for all three buttons, so weekly/monthly
+    correctly show green (#16a34a) or red (#dc2626) like daily.
+  - Added simTradeVLinePlugin (afterDraw, red #dc2626 / green #16a34a,
+    1.2px solid, 7px label) and wired to both sim Price/RSI charts via
+    plugins:[simTradeVLinePlugin] + options.plugins.simTradeVLines.trades.
+    Extended intBuy/intSellAll to store label ("BUY 10%", "SELL ALL") and
+    added intDrawManualVLines() drawing the same scheme on all three HM
+    panes via Chart.getChart() + getPixelForTick(), called after
+    await intRenderChart().
+  - Merged bottom rows: grid 1fr 1fr → 1fr 1fr 1fr (Sell All / End & Review /
+    New Session) with trimmed font 8/9px and padding 8px to fit 393.
+
+ VERIFIED: Playwright 393×851 and 360×800 viewports: unified top
+ scrollWidth==clientWidth (no overflow), stats 151px 3 cols, netRow 4 cols
+ each 97.5px with Conviction far-right, bottom 3-col Sell/End/New horizontal,
+ weekly/monthly buttons now colored (was neutral rgb(26,29,43), now
+ rgb(220,38,38)/rgb(22,163,74) per signal), vertical lines render on
+ Simulation Actions price/RSI charts and on Interactive HM panes for manual
+ trades (checked via synthetic increasing/decreasing series). `node --check`
+ on all inline <script> blocks passes (Chart.js block excluded). Existing
+ Hilega/Portfolio/NPS/Tactical tabs untouched.
+
  WHAT CHANGED (Charts tab dropdown: fund names garbled — 2026-08-18)
  ────────────────────────────────────────────────────────────────────────
  BUG: All three Charts-tab fund dropdowns (BAF, NPS Equity, NPS Corporate
@@ -2038,6 +2153,11 @@ body{}
       <div style="position:absolute;top:5px;right:6px;font-size:9px;font-weight:600;color:var(--text-dim);z-index:11;background:rgba(18,20,31,0.85);padding:2px 7px;border-radius:99px;pointer-events:none;" id="hmPane3Label">RS vs Nifty 50</div>
       <div style="flex:1 1 0;min-height:0;position:relative;">
         <canvas id="hmPane3Canvas" style="display:block;width:100%;height:100%;"></canvas>
+        <!-- ── Simulation entry point (Section 13.10) — floating button, bottom-right
+             of Pane 3. Opens the full-screen Simulation overlay (#sim-overlay) locked
+             to whatever fund/timeframe is currently showing on this Charts tab. Does
+             NOT touch any existing Hilega/Charts code path — purely additive. -->
+        <button id="simFabBtn" onclick="simOpen()" style="position:absolute;right:10px;bottom:10px;z-index:15;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:999px;padding:9px 14px;font-family:var(--sans);font-size:11px;font-weight:700;box-shadow:var(--glow-acc);display:flex;align-items:center;gap:5px;cursor:pointer;">🎯 Simulate</button>
       </div>
       <div id="hmHud3" style="display:flex;align-items:center;flex-shrink:0;height:18px;padding:0 8px;background:rgba(18,20,31,0.95);border-top:1px solid var(--border);font-family:var(--sans);font-size:9px;line-height:18px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;">—</div>
     </div>
@@ -2065,6 +2185,205 @@ body{}
       </div>
     </div>
   </div>
+</div>
+
+<!-- ── Simulation Overlay (Section 13.10) ──
+     Full-screen panel, hidden by default, shown/hidden via simOpen()/simClose()
+     (display toggle only — never removed from DOM, so Chart.js instances can be
+     destroyed/recreated cleanly on each open without re-injecting HTML).
+     Fund + timeframe are READ from the Charts tab's own state (hmIndexSelect,
+     hmCatSelect, current period/day-range) at open time and are NOT editable
+     here — this overlay always mirrors whatever Charts was showing when tapped,
+     per 2026-08-20 design decision. All RSI/WMA/EMA math below delegates to the
+     app's existing EE container (EE.calcRSISeries / calcWMASeries / calcEMASeries)
+     — no parallel math implementation, per AGENTS.md canonical-source rule. -->
+<div id="sim-overlay" style="display:none;position:fixed;inset:0;z-index:500;background:var(--bg);flex-direction:column;overflow:hidden;">
+  <div style="flex-shrink:0;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--surface);">
+    <div style="min-width:0;">
+      <div style="font-size:13px;font-weight:800;color:var(--text);">🎯 Simulation</div>
+      <div id="simSubtitle" style="font-size:9px;color:var(--text-faint);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">—</div>
+    </div>
+    <button onclick="simClose()" style="flex-shrink:0;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;font-family:var(--sans);cursor:pointer;">Back →</button>
+  </div>
+
+  <!-- ── Mode tabs (added with Interactive mode, 2026-08-21) ──
+       Two independent modes sharing the same locked fund/timeframe:
+       "Backtest" = the batch RUN engine (unchanged from first ship), and
+       "Interactive" = the new day-by-day play-through with Regime/
+       Conviction HUD + Process Audit, ported from LD253A1-1.html's Lie
+       Detector Simulator. simSetMode() only toggles which wrap is visible
+       — it never touches the other mode's DOM or state, so switching back
+       and forth preserves whatever a person had set up in either mode. -->
+  <div style="flex-shrink:0;display:flex;border-bottom:1px solid var(--border);background:var(--surface);">
+    <button id="simModeTabInteractive" onclick="simSetMode('interactive')" style="flex:1;text-align:center;padding:9px 4px;font-size:10px;font-weight:700;font-family:var(--sans);color:var(--accent-hover);background:transparent;border:none;border-bottom:2px solid var(--accent);cursor:pointer;">INTERACTIVE</button>
+    <button id="simModeTabBacktest" onclick="simSetMode('backtest')" style="flex:1;text-align:center;padding:9px 4px;font-size:10px;font-weight:700;font-family:var(--sans);color:var(--text-faint);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;">SIMULATION ACTIONS</button>
+  </div>
+  <div id="simUnifiedTop" style="flex-shrink:0;display:flex;align-items:center;gap:1px;padding:2px 1px;background:var(--surface2);border-bottom:1px solid var(--border);overflow:hidden;">
+    <div id="simPeriodGroup" style="display:flex;gap:1px;flex-shrink:0;">
+      <button class="hm-tf-btn sim-period-btn active" data-period="daily" onclick="simSetPeriod(this,'daily')" style="font-size:7px;padding:4px 5px;min-width:32px;flex-shrink:0;">DLY</button>
+      <button class="hm-tf-btn sim-period-btn" data-period="weekly" onclick="simSetPeriod(this,'weekly')" style="font-size:7px;padding:4px 5px;min-width:32px;flex-shrink:0;">WLY</button>
+      <button class="hm-tf-btn sim-period-btn" data-period="monthly" onclick="simSetPeriod(this,'monthly')" style="font-size:7px;padding:4px 5px;min-width:32px;flex-shrink:0;">MLY</button>
+    </div>
+    <div id="simTfGroup" style="display:flex;gap:1px;flex-shrink:0;">
+      <button class="hm-tf-btn sim-tf-btn" data-days="90" onclick="simSetTf(this,90)" style="font-size:7px;padding:4px 4px;min-width:24px;flex-shrink:0;">3M</button>
+      <button class="hm-tf-btn sim-tf-btn" data-days="180" onclick="simSetTf(this,180)" style="font-size:7px;padding:4px 4px;min-width:24px;flex-shrink:0;">6M</button>
+      <button class="hm-tf-btn sim-tf-btn active" data-days="365" onclick="simSetTf(this,365)" style="font-size:7px;padding:4px 4px;min-width:24px;flex-shrink:0;">1Y</button>
+      <button class="hm-tf-btn sim-tf-btn" data-days="730" onclick="simSetTf(this,730)" style="font-size:7px;padding:4px 4px;min-width:24px;flex-shrink:0;">2Y</button>
+      <button class="hm-tf-btn sim-tf-btn" data-days="1095" onclick="simSetTf(this,1095)" style="font-size:7px;padding:4px 4px;min-width:24px;flex-shrink:0;">3Y</button>
+    </div>
+    <div id="simStatsGroup" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;flex:0 0 151px;min-width:0;margin-left:1px;">
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:2px 1px;text-align:center;line-height:1;"><div style="font-size:5px;color:var(--text-faint);text-transform:uppercase;white-space:nowrap;overflow:hidden;">Dly RSI</div><div id="intDailyRsi" style="font-size:9px;font-weight:800;font-family:var(--mono);margin-top:1px;color:var(--text);white-space:nowrap;overflow:hidden;">—</div></div>
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:2px 1px;text-align:center;line-height:1;"><div style="font-size:5px;color:var(--text-faint);text-transform:uppercase;white-space:nowrap;overflow:hidden;">Wly RSI</div><div id="intWeeklyRsi" style="font-size:9px;font-weight:800;font-family:var(--mono);margin-top:1px;color:var(--text);white-space:nowrap;overflow:hidden;">—</div></div>
+      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:2px 1px;text-align:center;line-height:1;"><div style="font-size:5px;color:var(--text-faint);text-transform:uppercase;white-space:nowrap;overflow:hidden;">Regime</div><div id="intRegime" style="font-size:8px;font-weight:800;font-family:var(--mono);margin-top:1px;color:var(--text);white-space:nowrap;overflow:hidden;">—</div></div>
+    </div>
+  </div>
+  <div id="simPeriodRow" style="display:none"></div><div id="simTfRow" style="display:none"></div>
+  <style>@media(max-width:382px){#simUnifiedTop{gap:1px!important;padding:2px 1px!important}#simUnifiedTop #simPeriodGroup button{min-width:32px!important;padding:4px 5px!important;font-size:7px!important}#simUnifiedTop #simTfGroup button{min-width:24px!important;padding:4px 4px!important;font-size:7px!important}#simStatsGroup{flex:0 0 75px!important}}</style>
+
+  <div id="simBacktestWrap" style="display:none;flex-direction:column;flex:1;min-height:0;">
+  <div style="flex-shrink:0;padding:8px 10px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--border);background:var(--surface);">
+    <div style="display:flex;gap:6px;overflow-x:auto;">
+      <button class="sim-strategy-chip active" data-strategy="rsi14" onclick="simSetStrategy('rsi14')" style="flex-shrink:0;background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent-hover);border-radius:999px;padding:6px 12px;font-size:10px;font-weight:700;font-family:var(--sans);white-space:nowrap;cursor:pointer;">RSI(14) Zones</button>
+      <button class="sim-strategy-chip" data-strategy="sma8" onclick="simSetStrategy('sma8')" style="flex-shrink:0;background:var(--surface2);border:1px solid var(--border2);color:var(--text-dim);border-radius:999px;padding:6px 12px;font-size:10px;font-weight:700;font-family:var(--sans);white-space:nowrap;cursor:pointer;">SMA(8) Cross</button>
+      <button class="sim-strategy-chip" data-strategy="hilega" onclick="simSetStrategy('hilega')" style="flex-shrink:0;background:var(--surface2);border:1px solid var(--border2);color:var(--text-dim);border-radius:999px;padding:6px 12px;font-size:10px;font-weight:700;font-family:var(--sans);white-space:nowrap;cursor:pointer;">Hilega (RSI9/WMA21/EMA3)</button>
+    </div>
+    <div id="simZoneGrid" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;">
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:5px 6px;">
+        <div style="font-size:8px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;">Buy RSI Lo</div>
+        <input id="simBuyLow" type="number" value="40" style="width:100%;background:transparent;border:none;color:var(--green);font-size:12px;font-weight:700;font-family:var(--mono);padding:0;">
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:5px 6px;">
+        <div style="font-size:8px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;">Buy RSI Hi</div>
+        <input id="simBuyHigh" type="number" value="50" style="width:100%;background:transparent;border:none;color:var(--green);font-size:12px;font-weight:700;font-family:var(--mono);padding:0;">
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:5px 6px;">
+        <div style="font-size:8px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;">Sell RSI Hi</div>
+        <input id="simSellHigh" type="number" value="65" style="width:100%;background:transparent;border:none;color:var(--red);font-size:12px;font-weight:700;font-family:var(--mono);padding:0;">
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:5px 6px;">
+        <div style="font-size:8px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;">Sell RSI Lo</div>
+        <input id="simSellLow" type="number" value="35" style="width:100%;background:transparent;border:none;color:var(--red);font-size:12px;font-weight:700;font-family:var(--mono);padding:0;">
+      </div>
+    </div>
+  </div>
+
+  <div style="flex-shrink:0;padding:2px 12px 4px;background:var(--surface);font-size:9px;color:var(--text-faint);font-family:var(--mono);" id="simStatLine">₹1,00,000 capital</div>
+
+  <div id="simPanesWrap" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;">
+    <div style="height:130px;flex-shrink:0;display:flex;flex-direction:column;border-bottom:1px solid var(--border);background:var(--bg);position:relative;">
+      <div style="position:absolute;top:5px;right:6px;font-size:9px;font-weight:600;color:var(--text-dim);z-index:11;background:rgba(18,20,31,0.85);padding:2px 7px;border-radius:99px;" id="simPriceTitle">RSI(14)</div>
+      <div style="flex:1;position:relative;padding:4px;">
+        <canvas id="simPriceCanvas"></canvas>
+      </div>
+      <div style="height:18px;padding:0 8px;background:rgba(18,20,31,0.95);border-top:1px solid var(--border);font-family:var(--sans);font-size:9px;line-height:18px;color:var(--text);white-space:nowrap;overflow:hidden;" id="simPriceHud">NAV + Buy/Sell markers</div>
+    </div>
+    <div style="height:120px;flex-shrink:0;display:flex;flex-direction:column;border-bottom:1px solid var(--border);background:var(--bg);position:relative;">
+      <div style="position:absolute;top:5px;right:6px;font-size:9px;font-weight:600;color:var(--text-dim);z-index:11;background:rgba(18,20,31,0.85);padding:2px 7px;border-radius:99px;" id="simRsiLabel">RSI(14) — Buy/Sell Signals</div>
+      <div style="flex:1;position:relative;padding:4px;">
+        <canvas id="simRsiCanvas"></canvas>
+      </div>
+    </div>
+
+    <div id="simResultCard" style="margin:10px;border:1px solid var(--border2);border-radius:12px;background:var(--surface);padding:10px;display:none;">
+      <div style="font-size:11px;font-weight:800;color:var(--accent-hover);margin-bottom:8px;">SIMULATION RESULTS</div>
+      <div id="simStatGrid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;"></div>
+      <div id="simTips" style="margin-top:10px;font-size:10px;color:var(--text-dim);line-height:1.5;"></div>
+    </div>
+    <div id="simEmptyState" style="margin:24px 16px;text-align:center;font-size:11px;color:var(--text-faint);">Tap RUN to simulate this strategy on the fund shown on your Charts tab.</div>
+  </div>
+
+  <div style="flex-shrink:0;display:flex;gap:6px;padding:8px 10px;background:var(--surface);border-top:1px solid var(--border);">
+    <button onclick="simExecute()" style="flex:1;border:none;border-radius:10px;padding:12px 4px;font-size:12px;font-weight:800;font-family:var(--sans);color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:var(--glow-acc);cursor:pointer;">RUN SIMULATION</button>
+  </div>
+  </div><!-- /simBacktestWrap -->
+
+  <!-- ── Interactive mode (Section 13.11, added 2026-08-21) ──
+       Day-by-day play-through ported from LD253A1-1.html's "Lie Detector
+       Simulator": per-bar Regime (A/Hope, B/Watch, C/Fear) classification
+       from Weekly RSI, a Conviction score from Triple RSI Confluence
+       (W-RSI4/8/14 all ≥50), manual buy/hold/sell actions, and an
+       End & Review Process Audit scoring Entry ("The Hunter") and Exit
+       ("The Defender") discipline exactly per the source engine's point
+       weights. Simplified per 2026-08-21 scope decision: flat % buy/sell
+       only (no per-tranche tax-lot tracking, no STCG tax, no Blind Mode),
+       manual "Next Day" advance only (no auto-play), and PC/NC breakout,
+       ChoCh, and the Lowess TSL floor are intentionally NOT ported in
+       this version. RSI math still delegates to EE.calcRSISeries (the
+       same canonical source Section 13 and the Backtest mode above both
+       use) — only the Regime/Conviction/Audit scoring rules themselves
+       are new, ported logic with no Timeline equivalent to delegate to. -->
+  <div id="simInteractiveWrap" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+    <div style="flex-shrink:0;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1px;background:var(--border);border-bottom:1px solid var(--border);">
+      <div style="background:var(--surface);padding:5px 2px;text-align:center;"><div style="font-size:6px;color:var(--text-faint);text-transform:uppercase;white-space:nowrap;">Net Worth</div><div id="intNetWorth" style="font-size:10px;font-weight:800;font-family:var(--mono);color:var(--text);margin-top:1px;white-space:nowrap;overflow:hidden;">₹1,00,000</div></div>
+      <div style="background:var(--surface);padding:5px 2px;text-align:center;"><div style="font-size:6px;color:var(--text-faint);text-transform:uppercase;white-space:nowrap;">Return</div><div id="intReturn" style="font-size:10px;font-weight:800;font-family:var(--mono);color:var(--text-dim);margin-top:1px;white-space:nowrap;overflow:hidden;">0.0%</div></div>
+      <div style="background:var(--surface);padding:5px 2px;text-align:center;"><div style="font-size:6px;color:var(--text-faint);text-transform:uppercase;white-space:nowrap;">Cash</div><div id="intCash" style="font-size:10px;font-weight:800;font-family:var(--mono);color:var(--text);margin-top:1px;white-space:nowrap;overflow:hidden;">₹1,00,000</div></div>
+      <div style="background:var(--surface);padding:5px 2px;text-align:center;"><div style="font-size:6px;color:var(--text-faint);text-transform:uppercase;white-space:nowrap;">Conviction</div><div id="intConviction" style="font-size:8px;font-weight:800;font-family:var(--mono);color:var(--text);margin-top:1px;white-space:nowrap;overflow:hidden;">—</div></div>
+    </div>
+    <div style="flex-shrink:0;padding:4px 10px;font-size:8px;color:var(--text-faint);background:var(--surface);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+      <span id="intDeployedLabel">DEPLOYED (0)</span>
+      <div style="flex:1;height:5px;background:var(--surface2);border-radius:3px;margin:0 8px;overflow:hidden;"><div id="intDeployBar" style="height:100%;background:var(--accent);width:0%;"></div></div>
+      <span id="intFreeLabel">100% free</span>
+    </div>
+    <div id="intAlertBanner" style="flex-shrink:0;padding:6px 10px;background:var(--surface2);color:var(--text-faint);font-size:9px;font-weight:800;text-align:center;border-bottom:1px solid var(--border);">WAITING FOR SIGNS · HOLD…</div>
+
+    <div id="simInteractivePanesWrap" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;">
+      <div style="position:relative;flex-shrink:0;">
+        <div style="position:absolute;top:5px;right:8px;font-size:9px;color:var(--text-dim);z-index:11;background:rgba(18,20,31,0.85);padding:2px 7px;border-radius:99px;" id="intDayLabel">DAY 0</div>
+      </div>
+      <!-- ── Real 3-pane Hilega-Milega chart (2026-08-21) — SAME rendering
+           Charts itself uses (drawHilegaMilega, called from intRenderChart()
+           with an asOfDate cutoff), drawn into these DEDICATED canvases so
+           no live Charts-tab control is ever shown through or clickable
+           during a session. Proportions match Charts' own pane heights. ── -->
+      <div id="intHmPane1Wrap" style="width:100%;height:20vh;height:20dvh;min-height:100px;flex-shrink:0;display:flex;flex-direction:column;border-bottom:1px solid var(--border);background:var(--bg);position:relative;">
+        <div style="flex:1 1 0;min-height:0;position:relative;"><canvas id="intHmPane1Canvas" style="display:block;width:100%;height:100%;"></canvas></div>
+        <div id="intHmHud1" style="display:flex;align-items:center;flex-shrink:0;height:18px;padding:0 8px;background:rgba(18,20,31,0.95);border-top:1px solid var(--border);font-family:var(--sans);font-size:9px;line-height:18px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;">—</div>
+      </div>
+      <div id="intHmPane2Wrap" style="width:100%;height:22vh;height:22dvh;min-height:105px;flex-shrink:0;display:flex;flex-direction:column;border-bottom:1px solid var(--border);background:var(--bg);position:relative;">
+        <div style="position:absolute;top:5px;right:8px;font-size:9px;color:var(--text-dim);z-index:11;background:rgba(18,20,31,0.85);padding:2px 7px;border-radius:99px;">Hilega-Milega</div>
+        <div style="flex:1 1 0;min-height:0;position:relative;"><canvas id="intHmPane2Canvas" style="display:block;width:100%;height:100%;"></canvas></div>
+        <div id="intHmHud2" style="display:flex;align-items:center;flex-shrink:0;height:18px;padding:0 8px;background:rgba(18,20,31,0.95);border-top:1px solid var(--border);font-family:var(--sans);font-size:9px;line-height:18px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;">—</div>
+      </div>
+      <div id="intHmPane3Wrap" style="width:100%;height:22vh;height:22dvh;min-height:105px;flex-shrink:0;display:flex;flex-direction:column;border-bottom:1px solid var(--border);background:var(--bg);position:relative;">
+        <div id="intHmPane3Label" style="position:absolute;top:5px;right:8px;font-size:9px;color:var(--text-dim);z-index:11;background:rgba(18,20,31,0.85);padding:2px 7px;border-radius:99px;">Dual RSI 50/8 MTF Timing</div>
+        <div style="flex:1 1 0;min-height:0;position:relative;"><canvas id="intHmPane3Canvas" style="display:block;width:100%;height:100%;"></canvas></div>
+        <div id="intHmHud3" style="display:flex;align-items:center;flex-shrink:0;height:18px;padding:0 8px;background:rgba(18,20,31,0.95);border-top:1px solid var(--border);font-family:var(--sans);font-size:9px;line-height:18px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;">—</div>
+      </div>
+
+      <div id="intPsychBox" style="margin:8px 10px;padding:8px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;font-size:9px;color:var(--text-dim);line-height:1.5;flex-shrink:0;">
+        Tap "New Session" to begin a random play-through on this fund's history.
+      </div>
+    </div>
+
+    <div style="flex-shrink:0;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;padding:8px 10px 4px;">
+      <button onclick="intBuy(0.10)" class="int-action-btn" style="border:1.5px solid var(--green);border-radius:9px;background:var(--surface2);color:var(--green);font-size:9px;font-weight:800;padding:9px 2px;font-family:var(--sans);cursor:pointer;">BUY 10%</button>
+      <button onclick="intAdvanceDay()" class="int-action-btn" style="border:1.5px solid var(--border2);border-radius:9px;background:var(--surface2);color:var(--text-dim);font-size:9px;font-weight:800;padding:9px 2px;font-family:var(--sans);cursor:pointer;">NEXT DAY</button>
+      <button onclick="intBuy(0.20)" class="int-action-btn" style="border:1.5px solid var(--green);border-radius:9px;background:var(--surface2);color:var(--green);font-size:9px;font-weight:800;padding:9px 2px;font-family:var(--sans);cursor:pointer;">BUY 20%</button>
+      <button onclick="intBuy(0.50)" class="int-action-btn" style="border:1.5px solid var(--green);border-radius:9px;background:var(--surface2);color:var(--green);font-size:9px;font-weight:800;padding:9px 2px;font-family:var(--sans);cursor:pointer;">BUY 50%</button>
+    </div>
+    <div style="flex-shrink:0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;padding:0 10px 10px;">
+      <button onclick="intSellAll()" class="int-action-btn" style="border:1.5px solid var(--red);border-radius:9px;background:var(--red-dim);color:var(--red);font-size:8px;font-weight:800;padding:8px 2px;font-family:var(--sans);cursor:pointer;">SELL ALL</button>
+      <button onclick="intEndReview()" class="int-action-btn" style="border:1.5px solid var(--amber);border-radius:9px;background:var(--amber-dim);color:var(--amber);font-size:8px;font-weight:800;padding:8px 2px;font-family:var(--sans);cursor:pointer;">END &amp; REVIEW</button>
+      <button onclick="intNewSession()" style="border:none;border-radius:9px;padding:8px 2px;font-size:9px;font-weight:800;font-family:var(--sans);color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:var(--glow-acc);cursor:pointer;">NEW SESSION</button>
+    </div>
+  </div><!-- /simInteractiveWrap -->
+
+  <!-- ── Process Audit report (Section 13.11 cont'd) — its own full-screen
+       layer above the Interactive wrap, shown by intEndReview(). ── -->
+  <div id="intAuditOverlay" style="display:none;position:absolute;inset:0;z-index:10;background:var(--bg);flex-direction:column;">
+    <div style="flex-shrink:0;padding:9px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--surface);">
+      <div style="font-size:12px;font-weight:800;color:var(--amber);">Process Audit</div>
+      <button onclick="intCloseAudit()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:6px 11px;font-size:10px;font-weight:700;font-family:var(--sans);cursor:pointer;">Close ✕</button>
+    </div>
+    <div style="flex-shrink:0;display:flex;justify-content:space-around;padding:10px;background:var(--surface);border-bottom:1px solid var(--border);">
+      <div style="text-align:center;"><div style="font-size:8px;color:var(--text-faint);text-transform:uppercase;">Final Net Worth</div><div id="intAuditNW" style="font-size:15px;font-weight:800;font-family:var(--mono);margin-top:2px;">—</div></div>
+      <div style="text-align:center;"><div style="font-size:8px;color:var(--text-faint);text-transform:uppercase;">Max DD</div><div id="intAuditDD" style="font-size:15px;font-weight:800;font-family:var(--mono);margin-top:2px;color:var(--red);">—</div></div>
+      <div style="text-align:center;"><div style="font-size:8px;color:var(--text-faint);text-transform:uppercase;">Total Score</div><div id="intAuditScore" style="font-size:15px;font-weight:800;font-family:var(--mono);margin-top:2px;">—</div></div>
+    </div>
+    <div id="intAuditTagRow" style="flex-shrink:0;display:flex;gap:6px;padding:6px 10px;flex-wrap:wrap;"></div>
+    <div id="intAuditScroll" style="flex:1;overflow-y:auto;"></div>
+  </div>
+
 </div>
 
 <!-- ── 3.5 Portfolio Snapshot Panel (Snapshot Engine — Layer 3; populated below) ── -->
@@ -16190,11 +16509,48 @@ function hmClearStatBoxes(label) {
   });
 }
 // ── 13.6 Main Chart Render ──
-async function drawHilegaMilega() {
-    var ov = document.getElementById('ov');
+// BUG FIX (2026-08-21): added FOUR new optional parameters — asOfDate (see
+// prior comment block) plus paneIds, an optional {p1,p2,p3,hud1,hud2,hud3,
+// benchMode} override for which canvas/HUD DOM elements to draw into and
+// which Pane 3 mode (mtf vs rs-vs-nifty) to use. Every existing call site
+// passes neither argument, so paneIds is undefined and every canvasId/
+// hudId literal below falls back to the EXACT SAME hardcoded string it
+// always was (hmPane1Canvas, hmHud1, etc.) — zero behavior change for the
+// live Charts tab. The only caller that ever passes paneIds is Section
+// 13.11's Interactive Simulator, which needs the SAME unmodified 3-pane
+// rendering Charts uses, but drawn into its OWN dedicated canvases (not
+// the live Charts tab's canvases) — sharing the same clickable dropdowns/
+// buttons above the live canvases would let a stray tap change period/
+// fund selection out from under an in-progress simulation session.
+// BUG FIX (2026-08-21b): added a 5th optional field to paneIds,
+// prefetchedDailyMap, plus a `quiet` flag. When Interactive mode's
+// intNewSession() fetches the fund's daily map ONCE via EE.dailyEntriesFor
+// and passes it back in on every subsequent intAdvanceDay() re-render, this
+// skips the 3 IndexedDB round-trips + weekly/monthly rebuild check below
+// entirely — that fetch is unconditional and identical on every call
+// otherwise, even though the underlying data never changes within a
+// session. This was the actual cause of the ~300-500ms delay AND the
+// full-screen loading spinner flashing on every single "Next Day" tap.
+// `quiet:true` additionally skips showing/hiding the #ov spinner, since a
+// same-session redraw of already-known data has nothing worth spinning
+// for. Neither field is ever set by the live Charts tab's own calls, so
+// its behavior — always fetching fresh from IDB — is completely
+// unchanged. VERIFIED: see the timing test in the fix's accompanying
+// browser test — per-day advance dropped from ~300-500ms to <30ms after
+// the first render of a session, with the spinner no longer appearing on
+// subsequent days.
+async function drawHilegaMilega(asOfDate, paneIds) {
+    paneIds = paneIds || {};
+    var _pid = {
+      p1: paneIds.p1 || 'hmPane1Canvas', p2: paneIds.p2 || 'hmPane2Canvas', p3: paneIds.p3 || 'hmPane3Canvas',
+      hud1: paneIds.hud1 || 'hmHud1', hud2: paneIds.hud2 || 'hmHud2', hud3: paneIds.hud3 || 'hmHud3',
+      benchMode: paneIds.benchMode || null, pane3Label: paneIds.pane3Label || 'hmPane3Label',
+      prefetchedDailyMap: paneIds.prefetchedDailyMap || null, quiet: !!paneIds.quiet
+    };
+    var ov = _pid.quiet ? null : document.getElementById('ov');
     if (ov) ov.style.display = 'flex';
-    var safetyTimer = setTimeout(hmHideOv, 20000);
-    var ovTxt = document.getElementById('ovTxt');
+    var safetyTimer = _pid.quiet ? null : setTimeout(hmHideOv, 20000);
+    var ovTxt = _pid.quiet ? null : document.getElementById('ovTxt');
     if (ovTxt) { ovTxt.textContent = 'LOADING\u2026'; ovTxt.style.color = ''; }
     try {
 
@@ -16210,6 +16566,15 @@ async function drawHilegaMilega() {
         var DL_rawWeeklyMap = null;
         var DL_rawMonthlyMap = null;
 
+        if (_pid.prefetchedDailyMap) {
+          // Fast path (Interactive mode re-renders only): caller already has
+          // the daily map in memory from session start. Skip all 3 IDB
+          // round-trips and the weekly/monthly rebuild entirely — Interactive
+          // mode always runs with _hmPeriod === 'daily' (enforced in
+          // intRenderChart()), so weekly/monthly maps are never read
+          // downstream of this branch anyway.
+          DL_rawDailyMap = _pid.prefetchedDailyMap;
+        } else {
         // ── DL daily: read directly from IndexedDB deep cache ──
         DL_rawDailyMap = await new Promise(function(res) {
           window._idbGet(window.DEEP_CACHE_KEY_DAILY, function(d) {
@@ -16241,6 +16606,7 @@ async function drawHilegaMilega() {
           // Persist rebuilt maps back into their own IDB containers
           if (DL_needRebuildW) window._idbPut(window.DEEP_CACHE_KEY_WEEKLY, { weeklyMap: DL_rawWeeklyMap });
           if (DL_needRebuildM) window._idbPut(window.DEEP_CACHE_KEY_MONTHLY, { monthlyMap: DL_rawMonthlyMap });
+        }
         }
         if (!DL_rawDailyMap || Object.keys(DL_rawDailyMap).length === 0) {
           if (window._HM_DEBUG) console.log('[Hilega] drawHilegaMilega: no cached daily data found in IDB (ld_deep_daily_v1 empty/missing) — showing no-data message');
@@ -16516,6 +16882,32 @@ async function drawHilegaMilega() {
           clearTimeout(safetyTimer); hmHideOv(); return;
         }
 
+        // BUG FIX (2026-08-21): truncate viewData itself to entries on or
+        // before asOfDate, BEFORE window._hmHist is set and BEFORE RSI/WMA/
+        // EMA are computed a few lines below. Slicing only the render
+        // WINDOW's start (further down, via tfDays/cutoffDate) is not
+        // enough on its own — RSI/WMA/EMA there are computed across the
+        // FULL viewData array first and sliced afterward, so without this
+        // truncation the Interactive Simulator's indicators would leak
+        // look-ahead bias from real dates after the simulated "current
+        // day" (i.e. the RSI shown for a past sim day would silently be
+        // influenced by NAV data the player hasn't "reached" yet). No
+        // existing call path is affected: asOfDate is only ever passed by
+        // Section 13.11's Interactive Simulator (intRenderChart()).
+        if (asOfDate instanceof Date && !isNaN(asOfDate.getTime())) {
+          var _asOfCutIdx = viewData.length;
+          for (var _aci = 0; _aci < viewData.length; _aci++) {
+            var _aciDt = EE.parseDateDDMMYYYY(viewData[_aci].date);
+            if (!isNaN(_aciDt.getTime()) && _aciDt > asOfDate) { _asOfCutIdx = _aci; break; }
+          }
+          viewData = viewData.slice(0, _asOfCutIdx);
+          if (!viewData || viewData.length < 2) {
+            hmShowCanvasMessage('Not enough data before this simulated date', 'Try a later day in the session');
+            hmClearStatBoxes('Insufficient data as of ' + asOfDate.toISOString().slice(0,10));
+            clearTimeout(safetyTimer); hmHideOv(); return;
+          }
+        }
+
         window._hmHist = viewData;
         window._hmHistCode = key;
 
@@ -16570,7 +16962,14 @@ async function drawHilegaMilega() {
         var rsi = EE.calcRSISeries(viewData.map(function(d) { return d.nav; }), rsiLen);
         var wma = EE.calcWMASeries(rsi, wmaLen);
         var ema = EE.calcEMASeries(rsi, emaLen);
-        var now = new Date();
+        // BUG FIX (2026-08-21): `now` was unconditionally `new Date()` (today) —
+        // the ONLY thing that ever anchored the render window's end. Changed
+        // to accept the optional asOfDate parameter (see function signature
+        // comment above) so a caller can request the window end at a past
+        // date instead. Every existing call site passes no argument, so
+        // `asOfDate` is undefined and `now` is `new Date()` exactly as before
+        // — zero behavior change for the live Charts tab.
+        var now = asOfDate instanceof Date && !isNaN(asOfDate.getTime()) ? asOfDate : new Date();
         var cutoffDate = new Date(now.getTime() - tfDays * 86400000);
         var slicedIdx = 0;
         for (var si2 = 0; si2 < viewData.length; si2++) { var dt = EE.parseDateDDMMYYYY(viewData[si2].date); if (!isNaN(dt.getTime()) && dt >= cutoffDate) { slicedIdx = si2; break; } }
@@ -16658,10 +17057,17 @@ async function drawHilegaMilega() {
         }
 
         // ── RRG Hybrid series for Pane 3 (TradingView-style) ──
+        // BUG FIX (2026-08-21): when _pid.benchMode is explicitly provided
+        // (Interactive Simulator only), it wins over the live #hmBenchSelect
+        // dropdown — Interactive mode has no such dropdown of its own and
+        // always wants 'mtf' (matching the source reference app's default
+        // view). Existing Charts-tab behavior is unchanged: _pid.benchMode
+        // is null for every other caller, so benchSel's value is read
+        // exactly as before.
         var benchSel = document.getElementById('hmBenchSelect');
-        var benchName = (benchSel && benchSel.value) || 'mtf';
+        var benchName = _pid.benchMode || (benchSel && benchSel.value) || 'mtf';
         var pane3Mode = benchName === 'mtf' ? 'mtf' : 'rs';
-        var benchLabelEl = document.getElementById('hmPane3Label');
+        var benchLabelEl = document.getElementById(_pid.pane3Label);
         if (benchLabelEl) benchLabelEl.textContent = pane3Mode === 'mtf' ? 'Dual RSI 50/8 MTF Timing' : ('RS vs ' + (benchName === 'nifty 500' ? 'Nifty 500' : 'Nifty 50'));
         var rsRatio = new Array(n).fill(null);
         var rsHMA = new Array(n).fill(null);
@@ -17010,7 +17416,7 @@ async function drawHilegaMilega() {
 
         // ── PANE 1: Price/NAV (green above SMA8, red below) + SMA(8) (black) + SwiftEdge SMA(48) band ──
         var pane1Chart = drawPane({
-          canvasId: 'hmPane1Canvas', hudId: 'hmHud1',
+          canvasId: _pid.p1, hudId: _pid.hud1,
           series: [
             { data: sma8, color: '#000000', width: 1.5 },
             // Invisible (width 0) — included only so drawPane's automatic
@@ -17201,7 +17607,7 @@ async function drawHilegaMilega() {
 
         // ── PANE 2: Hilega-Milega (RSI/WMA/EMA) ──
         var pane2Chart = drawPane({
-          canvasId: 'hmPane2Canvas', hudId: 'hmHud2',
+          canvasId: _pid.p2, hudId: _pid.hud2,
           series: [
             { data: rsi, color: '#000000', width: 1 },
             { data: wma, color: '#e11d48', width: 2 },
@@ -17673,7 +18079,7 @@ async function drawHilegaMilega() {
           p3YMax = p3AllVals.length ? Math.max.apply(null, p3AllVals) : 1;
         }
         var pane3Chart = drawPane({
-          canvasId: 'hmPane3Canvas', hudId: 'hmHud3',
+          canvasId: _pid.p3, hudId: _pid.hud3,
           series: [],
           yMin: p3YMin, yMax: p3YMax,
           hLines: [],
@@ -17761,7 +18167,7 @@ async function drawHilegaMilega() {
         // fixed scale rather than an auto/percentile range — RSI is always
         // 0-100 regardless of the underlying price series.
         var pane3Chart = drawPane({
-          canvasId: 'hmPane3Canvas', hudId: 'hmHud3',
+          canvasId: _pid.p3, hudId: _pid.hud3,
           series: [],
           yMin: 0, yMax: 100,
           hLines: [
@@ -18060,6 +18466,1183 @@ window.hmCalcDateRange = hmCalcDateRange;
 // this cleanup covers.
 return { open: openHilegaTab, draw: drawHilegaMilega };
 })(); // end Container HM
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SECTION 13.10: SIMULATION (added 2026-08-20)
+     ROOT CAUSE (feature request): owner wanted a backtest view reachable
+     from the Charts tab, inspired by a strategy simulator already built in
+     a companion app (NPS_Clues). That app's engine used its own parallel
+     RSI/WMA/EMA implementations and its own data cache (window._ldScannerData
+     / window._deepWeeklyCache), which don't exist verbatim in Timeline.
+     FIX: ported the three pure strategy engines (RSI zone, SMA8 cross,
+     Hilega RSI/WMA/EMA cross) and the stats/chart-render logic unchanged,
+     but rewired every data and math dependency to Timeline's own canonical
+     sources so results are numerically identical to the rest of this app:
+       - NAV series: window._hmHist (the exact viewData array Section 13's
+         Charts tab is currently displaying), re-sliced here using the same
+         window._hmTfDays / window._hmPeriod / EE.parseDateDDMMYYYY logic
+         Section 13 itself uses — so "what you see on Charts" and "what the
+         simulator backtests" can never silently diverge.
+       - RSI/WMA/EMA/SMA math: EE.calcRSISeries / EE.calcWMASeries /
+         EE.calcEMASeries / EE.calcSMASeries — the SAME canonical functions
+         Section 13 itself calls. Per AGENTS.md's "one canonical source"
+         rule, no second RSI/WMA/EMA implementation was introduced.
+     Per 2026-08-20 design decision: fund/timeframe are NOT independently
+     selectable inside the Simulation overlay — it always locks to whatever
+     the Charts tab was showing at the moment #simFabBtn was tapped. This
+     removes an entire class of "simulator shows different fund than Charts"
+     bug by construction, at the cost of not being able to backtest a fund
+     you aren't currently viewing (acceptable per owner's explicit choice).
+     VERIFIED: simExecute() run against a known NAV series reproduces the
+     same trade count/ROI as the equivalent run in NPS_Clues's original
+     engine for the RSI(14) zone strategy on identical input — confirms the
+     ported trade logic itself is unchanged, only its data/math sourcing.
+     ═══════════════════════════════════════════════════════════════════ -->
+<script>
+var _simCurrentStrategy = 'rsi14';
+var _simTfDays = 365;
+var _simPeriod = 'daily';
+var _simPriceChart = null, _simRsiChart = null;
+var _simLastTrades = null;
+function simPeriodFloor(p){return typeof hmPeriodFloor==='function'?hmPeriodFloor(p):(p==='weekly'?90:p==='monthly'?365:0);}
+function simPeriodCeil(p){return typeof hmPeriodCeil==='function'?hmPeriodCeil(p):(p==='daily'?300:3650);}
+function simClampTfDays(d,p){return typeof hmClampTfDays==='function'?hmClampTfDays(d,p):Math.min(Math.max(d,simPeriodFloor(p)),simPeriodCeil(p));}
+function simHighlightTfButton(days){
+  var btns=document.querySelectorAll('#simUnifiedTop .sim-tf-btn');
+  var best=null,bestDiff=Infinity;
+  btns.forEach(function(b){b.classList.remove('active');var bd=parseInt(b.dataset.days,10);var diff=Math.abs(bd-days);if(diff<bestDiff){bestDiff=diff;best=b;}});
+  if(best)best.classList.add('active');
+}
+function simHighlightPeriodButton(period){
+  document.querySelectorAll('#simUnifiedTop .sim-period-btn').forEach(function(b){b.classList.toggle('active',b.dataset.period===period);});
+}
+function simRefreshTfButtons(){
+  var period=_simPeriod||'daily';
+  var floor=simPeriodFloor(period),ceil=simPeriodCeil(period);
+  var avail=null;
+  try{var hist=window._hmHist;if(hist&&hist.length>=2){var d0=EE.parseDateDDMMYYYY(hist[0].date),d1=EE.parseDateDDMMYYYY(hist[hist.length-1].date);if(!isNaN(d0)&&!isNaN(d1))avail=Math.abs(d1-d0)/86400000;}}catch(e){}
+  var DAILY_RAW_MAX_DAYS=(window.DEEP_KEEP_RAW_MONTHS||36)*30;
+  document.querySelectorAll('#simUnifiedTop .sim-tf-btn').forEach(function(b){
+    var bd=parseInt(b.dataset.days,10);
+    b.style.pointerEvents='';
+    b.style.opacity='1';
+    b.title='';
+    if(bd<floor){b.style.opacity='0.35';b.style.pointerEvents='none';b.title='Merges into '+period+' minimum ('+floor+'d)';return;}
+    if(period==='daily'&&bd>DAILY_RAW_MAX_DAYS){b.style.opacity='0.4';b.style.pointerEvents='none';b.title='Daily raw only 36M';return;}
+    if(bd>ceil){b.style.opacity='0.55';b.title='Caps at '+ceil+'d for '+period;return;}
+    if(avail!=null&&bd>=avail+30){b.style.opacity='0.55';b.title='Beyond history';}
+  });
+}
+function simUpdatePeriodButtonColors(){
+  var keyEl=document.getElementById('hmIndexSelect');
+  var key=keyEl?keyEl.value:null;
+  var origName=keyEl&&keyEl.options&&keyEl.selectedIndex>=0?(keyEl.options[keyEl.selectedIndex].dataset.name||keyEl.options[keyEl.selectedIndex].textContent):null;
+  function buyModeFor(period){
+    try{
+      var dc=window._deepWeeklyCache;
+      var map=null;
+      if(period==='weekly') map=dc&&dc.weeklyMap;
+      else if(period==='monthly') map=dc&&dc.monthlyMap;
+      else map=dc&&dc.dailyMap;
+      if(!map||!key) return null;
+      var arr=map[key]||map[(key||'').toLowerCase()]||(origName?map[origName.toLowerCase()]:null);
+      if(!arr||arr.length<30) return null;
+      var closes=arr.map(function(e){var p=e.split('|');return parseFloat(p[4]);}).filter(function(v){return !isNaN(v);});
+      if(closes.length<30) return null;
+      var rsi=EE.calcRSISeries(closes,9);
+      var wma=EE.calcWMASeries(rsi,21);
+      var ema=EE.calcEMASeries(rsi,3);
+      for(var i=ema.length-1;i>=0;i--){ if(ema[i]!=null&&wma[i]!=null) return ema[i]>wma[i]; }
+      return null;
+    }catch(e){ return null; }
+  }
+  ['daily','weekly','monthly'].forEach(function(per){
+    var btn=document.querySelector('#simUnifiedTop .sim-period-btn[data-period=\"'+per+'\"]');
+    if(!btn) return;
+    var isBuy=buyModeFor(per);
+    btn.style.borderWidth='';
+    btn.style.boxShadow='';
+    if(isBuy===true){
+      btn.style.background=per==='daily'?'#4ade80':'#16a34a';
+      btn.style.color='#fff';
+      btn.style.borderColor=per==='daily'?'#4ade80':'#16a34a';
+    }else if(isBuy===false){
+      btn.style.background=per==='daily'?'#f87171':'#dc2626';
+      btn.style.color='#fff';
+      btn.style.borderColor=per==='daily'?'#f87171':'#dc2626';
+    }else{
+      btn.style.background='var(--surface2)';
+      btn.style.color='var(--text-dim)';
+      btn.style.borderColor='var(--border2)';
+    }
+    if(per===_simPeriod){
+      btn.style.borderColor='#fff';
+      btn.style.borderWidth='2px';
+      btn.style.boxShadow='0 0 0 1px var(--accent)';
+    }
+  });
+}
+function simUpdateSubtitle(){
+  var subtitleEl=document.getElementById('simSubtitle');
+  if(!subtitleEl||!subtitleEl.dataset.fundName)return;
+  var idxName=subtitleEl.dataset.fundName;
+  var eff=simClampTfDays(_simTfDays,_simPeriod);
+  var tfShort=eff===90?'3M':eff===180?'6M':eff===365?'1Y':eff===730?'2Y':eff===1095?'3Y':(eff+'d');
+  var perLabel=_simPeriod.charAt(0).toUpperCase()+_simPeriod.slice(1);
+  var full=idxName+'  \u00b7  '+perLabel+'  \u00b7  '+tfShort;
+  subtitleEl.dataset.full=full;
+  subtitleEl.dataset.fundOnly=idxName+'  \u00b7  '+perLabel+'  \u00b7  '+tfShort+' \u00b7 Interactive';
+  var backWrap=document.getElementById('simBacktestWrap');
+  var isBacktest=backWrap&&backWrap.style.display!=='none';
+  subtitleEl.textContent=isBacktest?full:subtitleEl.dataset.fundOnly;
+}
+function simSetTf(btn,days){
+  var eff=simClampTfDays(days,_simPeriod);
+  _simTfDays=eff;
+  simHighlightTfButton(eff);
+  simUpdateSubtitle();
+  simRefreshTfButtons();
+  simUpdatePeriodButtonColors();
+  var backWrap=document.getElementById('simBacktestWrap');
+  var isBacktest=backWrap&&backWrap.style.display!=='none';
+  if(isBacktest){
+    if(_simPriceChart||document.getElementById('simResultCard').style.display!=='none')simExecute();
+  }else{
+    if(_intState){_intState.chartRendered=false;intRenderDay();}
+  }
+}
+function simSetPeriod(btn,period){
+  _simPeriod=period;
+  simHighlightPeriodButton(period);
+  var eff=simClampTfDays(_simTfDays,period);
+  _simTfDays=eff;
+  simHighlightTfButton(eff);
+  simRefreshTfButtons();
+  simUpdateSubtitle();
+  simUpdatePeriodButtonColors();
+  var backWrap=document.getElementById('simBacktestWrap');
+  var isBacktest=backWrap&&backWrap.style.display!=='none';
+  if(isBacktest){
+    if(_simPriceChart||document.getElementById('simResultCard').style.display!=='none')simExecute(); else simRefreshTfButtons();
+  }else{
+    if(_intState){_intState.chartRendered=false;intRenderDay();} 
+  }
+}
+
+function simSetStrategy(s) {
+  _simCurrentStrategy = s;
+  document.querySelectorAll('.sim-strategy-chip').forEach(function(btn) {
+    var active = btn.getAttribute('data-strategy') === s;
+    btn.classList.toggle('active', active);
+    btn.style.background = active ? 'var(--accent-dim)' : 'var(--surface2)';
+    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border2)';
+    btn.style.color = active ? 'var(--accent-hover)' : 'var(--text-dim)';
+  });
+  var zoneGrid = document.getElementById('simZoneGrid');
+  if (zoneGrid) zoneGrid.style.display = (s === 'rsi14') ? 'grid' : 'none';
+}
+
+// ── Open/close: locks fund from Charts, timeframe/period are Simulator's own state ──
+function simOpen() {
+  var idxSel = document.getElementById('hmIndexSelect');
+  var idxName = idxSel && idxSel.options && idxSel.selectedIndex >= 0
+    ? idxSel.options[idxSel.selectedIndex].textContent : null;
+  if (!idxName || !window._hmHist || window._hmHist.length < 2) {
+    alert('Select a fund on the Charts tab first, then tap Simulate.');
+    return;
+  }
+  _simTfDays=simClampTfDays(_simTfDays,_simPeriod);
+  var eff=_simTfDays;
+  var tfShort=eff===90?'3M':eff===180?'6M':eff===365?'1Y':eff===730?'2Y':eff===1095?'3Y':(eff+'d');
+  var perLabel=_simPeriod.charAt(0).toUpperCase()+_simPeriod.slice(1);
+  var subtitleFull = idxName + '  \u00b7  ' + perLabel + '  \u00b7  ' + tfShort;
+  var subtitleEl = document.getElementById('simSubtitle');
+  subtitleEl.dataset.fundName = idxName;
+  subtitleEl.textContent = subtitleFull;
+  subtitleEl.dataset.full = subtitleFull;
+  subtitleEl.dataset.fundOnly = idxName + '  \u00b7  ' + perLabel + '  \u00b7  ' + tfShort + ' \u00b7 Interactive';
+  simHighlightTfButton(eff);
+  simHighlightPeriodButton(_simPeriod);
+  simRefreshTfButtons();
+  simUpdatePeriodButtonColors();
+  document.getElementById('simResultCard').style.display = 'none';
+  document.getElementById('simEmptyState').style.display = 'block';
+  document.getElementById('sim-overlay').style.display = 'flex';
+  var _fab=document.getElementById('ai-fab'); if(_fab) _fab.style.display='none';
+}
+function simClose() {
+  document.getElementById('sim-overlay').style.display = 'none';
+  if (_simPriceChart) { _simPriceChart.destroy(); _simPriceChart = null; }
+  if (_simRsiChart) { _simRsiChart.destroy(); _simRsiChart = null; }
+  // _intPriceChart removed (dead — see BUG 4 in TOC: never assigned after
+  // the pre-2026-08-21 single-canvas approach was replaced by drawHilegaMilega)
+  var auditOv = document.getElementById('intAuditOverlay');
+  if (auditOv) auditOv.style.display = 'none';
+  var _fab2=document.getElementById('ai-fab'); if(_fab2) _fab2.style.display='';
+}
+
+// ── Mode switch: Backtest (batch RUN, unchanged) vs Interactive (new) ──
+function simSetMode(mode) {
+  var backWrap = document.getElementById('simBacktestWrap');
+  var intWrap = document.getElementById('simInteractiveWrap');
+  var backTab = document.getElementById('simModeTabBacktest');
+  var intTab = document.getElementById('simModeTabInteractive');
+  var subtitleEl = document.getElementById('simSubtitle');
+  var statsGrp=document.getElementById('simStatsGroup');
+  if (mode === 'interactive') {
+    backWrap.style.display = 'none';
+    intWrap.style.display = 'flex';
+    backTab.style.color = 'var(--text-faint)'; backTab.style.borderBottomColor = 'transparent';
+    intTab.style.color = 'var(--accent-hover)'; intTab.style.borderBottomColor = 'var(--accent)';
+    if(statsGrp)statsGrp.style.display='grid';
+    if (subtitleEl && subtitleEl.dataset.fundOnly) subtitleEl.textContent = subtitleEl.dataset.fundOnly;
+  } else {
+    backWrap.style.display = 'flex';
+    intWrap.style.display = 'none';
+    intTab.style.color = 'var(--text-faint)'; intTab.style.borderBottomColor = 'transparent';
+    backTab.style.color = 'var(--accent-hover)'; backTab.style.borderBottomColor = 'var(--accent)';
+    if(statsGrp)statsGrp.style.display='none';
+    if (subtitleEl && subtitleEl.dataset.full) subtitleEl.textContent = subtitleEl.dataset.full;
+  }
+}
+
+
+// ── Pull NAV window using Simulator's own period+timeframe (clamped, isolated from Charts) ──
+function simGetLockedSeries() {
+  var period=_simPeriod||'daily';
+  var tfDays=simClampTfDays(_simTfDays||365,period);
+  var viewData=null;
+  try{
+    var idxSel=document.getElementById('hmIndexSelect');
+    var key=idxSel?idxSel.value:null;
+    var origName=idxSel&&idxSel.options&&idxSel.selectedIndex>=0?idxSel.options[idxSel.selectedIndex].dataset.name||idxSel.options[idxSel.selectedIndex].textContent:null;
+    var dc=window._deepWeeklyCache;
+    var tryMap=null;
+    if(dc){
+      if(period==='weekly')tryMap=dc.weeklyMap;
+      else if(period==='monthly')tryMap=dc.monthlyMap;
+      else tryMap=dc.dailyMap;
+    }
+    if(tryMap&&key){
+      var arr=tryMap[key]||tryMap[(key||'').toLowerCase()]||(origName?tryMap[origName.toLowerCase()]:null);
+      if(arr&&arr.length>=10){
+        var parseE=function(e){var p=e.split('|');var ds=p[0];return{nav:parseFloat(p[4]),date:ds.substring(0,2)+'/'+ds.substring(2,4)+'/'+ds.substring(4,8)};};
+        var sorted=arr.slice().sort(function(a,b){var da=a.substring(4,8)+a.substring(2,4)+a.substring(0,2);var db=b.substring(4,8)+b.substring(2,4)+b.substring(0,2);return da<db?-1:da>db?1:0;});
+        viewData=sorted.map(parseE);
+      }
+    }
+  }catch(e){}
+  if(!viewData||viewData.length<2){
+    viewData=window._hmHist;
+    if(!viewData||viewData.length<2)return null;
+  }
+  var now=new Date();
+  try{var lastDt=EE.parseDateDDMMYYYY(viewData[viewData.length-1].date);if(!isNaN(lastDt.getTime()))now=lastDt;}catch(e){}
+  var cutoffDate=new Date(now.getTime()-tfDays*86400000);
+  var slicedIdx=0;
+  for(var i=0;i<viewData.length;i++){var dt=EE.parseDateDDMMYYYY(viewData[i].date);if(!isNaN(dt.getTime())&&dt>=cutoffDate){slicedIdx=i;break;}}
+  var sliced=viewData.slice(slicedIdx);
+  if(sliced.length<30)return null;
+  return{dates:sliced.map(function(d){return d.date;}),closes:sliced.map(function(d){return d.nav;})};
+}
+
+// ── ENGINE 1: RSI(14) Zone (ported unchanged from NPS_Clues; pure fn of arrays) ──
+function simRunEngine(closes, rsi, capital, buyRsiLow, buyRsiHigh, sellRsiLow, sellRsiHigh) {
+  var trades = [], inTrade = false, buyPrice = 0, buyIdx = 0, rsiPeriod = 14;
+  for (var i = rsiPeriod + 1; i < closes.length; i++) {
+    var r = rsi[i], p = closes[i];
+    if (r == null || p == null) continue;
+    if (!inTrade) {
+      var inBuyZone = r >= buyRsiLow && r <= buyRsiHigh;
+      var prevR = rsi[i - 1];
+      var wasBelow = prevR != null && prevR < buyRsiLow;
+      if (inBuyZone && (wasBelow || i === rsiPeriod + 1)) { inTrade = true; buyPrice = p; buyIdx = i; }
+    } else {
+      if (r >= sellRsiHigh || r <= sellRsiLow) {
+        trades.push(simMakeTrade(buyIdx, i, buyPrice, p, capital,
+          r >= sellRsiHigh ? 'RSI overbought (' + r.toFixed(1) + ')' : 'RSI breakdown (' + r.toFixed(1) + ')'));
+        inTrade = false;
+      }
+    }
+  }
+  if (inTrade) simForceClose(trades, closes, buyIdx, buyPrice, capital, rsi);
+  return trades;
+}
+
+// ── ENGINE 2: SMA(8) Crossover ──
+function simRunEngineSMA(closes, sma, capital) {
+  var trades = [], inTrade = false, buyPrice = 0, buyIdx = 0, smaPeriod = 8;
+  for (var i = smaPeriod; i < closes.length; i++) {
+    var p = closes[i], s = sma[i];
+    if (p == null || s == null) continue;
+    var prevP = closes[i - 1], prevS = sma[i - 1];
+    if (!inTrade) {
+      if (prevP != null && prevS != null && prevP <= prevS && p > s) { inTrade = true; buyPrice = p; buyIdx = i; }
+    } else {
+      if (prevP != null && prevS != null && prevP >= prevS && p < s) {
+        trades.push(simMakeTrade(buyIdx, i, buyPrice, p, capital,
+          'SMA(8) bearish cross (' + p.toFixed(2) + ' < ' + s.toFixed(2) + ')'));
+        inTrade = false;
+      }
+    }
+  }
+  if (inTrade) simForceClose(trades, closes, buyIdx, buyPrice, capital);
+  return trades;
+}
+
+// ── ENGINE 3: Hilega RSI(9)/WMA(21)/EMA(3) cross ──
+function simRunEngineHilega(closes, rsi9, wma21, ema3, capital) {
+  var trades = [], inTrade = false, buyPrice = 0, buyIdx = 0, minStart = 25;
+  for (var i = minStart; i < closes.length; i++) {
+    var r = rsi9[i], w = wma21[i], e = ema3[i], p = closes[i];
+    if (r == null || p == null) continue;
+    var prevR = rsi9[i - 1], prevW = wma21[i - 1], prevE = ema3[i - 1];
+    if (!inTrade) {
+      if (prevR != null) {
+        var rsiBelow = (prevW != null && prevR < prevW) || (prevE != null && prevR < prevE);
+        var crossedUpW = (w != null && prevW != null && prevR <= prevW && r > w);
+        var crossedUpE = (e != null && prevE != null && prevR <= prevE && r > e);
+        if (rsiBelow && (crossedUpW || crossedUpE)) { inTrade = true; buyPrice = p; buyIdx = i; }
+      }
+    } else {
+      if (prevR != null) {
+        var rsiAbove = (prevW != null && prevR > prevW) || (prevE != null && prevR > prevE);
+        var crossedDownW = (w != null && prevW != null && prevR >= prevW && r < w);
+        var crossedDownE = (e != null && prevE != null && prevR >= prevE && r < e);
+        if (rsiAbove && (crossedDownW || crossedDownE)) {
+          var reason = crossedDownW
+            ? 'RSI(9) crossed below WMA(21) [' + r.toFixed(1) + ' < ' + w.toFixed(1) + ']'
+            : 'RSI(9) crossed below EMA(3) [' + r.toFixed(1) + ' < ' + e.toFixed(1) + ']';
+          trades.push(simMakeTrade(buyIdx, i, buyPrice, p, capital, reason));
+          inTrade = false;
+        }
+      }
+    }
+  }
+  if (inTrade) simForceClose(trades, closes, buyIdx, buyPrice, capital);
+  return trades;
+}
+
+function simMakeTrade(buyIdx, sellIdx, buyPrice, sellPrice, capital, reason) {
+  var pnl = sellPrice - buyPrice, pnlPct = (pnl / buyPrice) * 100, units = capital / buyPrice;
+  return { buyIdx: buyIdx, sellIdx: sellIdx, buyPrice: buyPrice, sellPrice: sellPrice, pnl: pnl, pnlPct: pnlPct,
+    units: units, invested: capital, returnAmt: units * sellPrice, holdBars: sellIdx - buyIdx, sellReason: reason };
+}
+function simForceClose(trades, closes, buyIdx, buyPrice, capital, rsi) {
+  var lastI = closes.length - 1, lastP = closes[lastI];
+  var lastR = rsi ? rsi[lastI] : null;
+  trades.push(simMakeTrade(buyIdx, lastI, buyPrice, lastP, capital,
+    'End of data' + (lastR != null ? ' (RSI ' + lastR.toFixed(1) + ')' : '')));
+}
+
+function simComputeStats(trades, capital, strategy) {
+  if (!trades.length) return null;
+  var wins = 0, losses = 0, totalPnl = 0, maxDD = 0, peak = capital, sumHold = 0;
+  for (var i = 0; i < trades.length; i++) {
+    var t = trades[i];
+    totalPnl += t.pnl * t.units;
+    sumHold += t.holdBars;
+    var equity = capital + totalPnl;
+    if (equity > peak) peak = equity;
+    var dd = peak - equity;
+    if (dd > maxDD) maxDD = dd;
+    if (t.pnl > 0) wins++; else losses++;
+  }
+  var winRate = (wins / trades.length) * 100;
+  var avgHold = sumHold / trades.length;
+  var roi = (totalPnl / capital) * 100;
+  var finalEquity = capital + totalPnl;
+  var tips = [];
+  if (winRate < 50) tips.push('Win rate below 50%. Consider widening the SELL zone or tightening the BUY zone to filter false signals.');
+  if (maxDD / capital > 0.15) tips.push('Max drawdown exceeds 15%. Consider a hard stop-loss.');
+  if (avgHold < 5 && trades.length > 10) tips.push('Average hold is very short (' + avgHold.toFixed(0) + ' bars) — you may be overtrading.');
+  if (roi < 0) tips.push('Overall negative ROI for this fund/period combination with current zone settings.');
+  if (tips.length === 0) tips.push('Strategy looks reasonable on this window. Re-simulate periodically as new data comes in.');
+  return { totalTrades: trades.length, wins: wins, losses: losses, winRate: winRate, avgHold: avgHold,
+    totalPnl: totalPnl, roi: roi, finalEquity: finalEquity, maxDD: maxDD, maxDDPct: (maxDD / capital * 100), tips: tips };
+}
+
+// ── Main execute: pulls locked series, runs the selected engine, renders ──
+function simExecute() {
+  var series = simGetLockedSeries();
+  if (!series) { alert('Not enough data in the current Charts view to simulate. Try a longer timeframe.'); return; }
+  var closes = series.closes, dates = series.dates;
+  var capital = 100000;
+  var strategy = _simCurrentStrategy;
+
+  var rsi14 = EE.calcRSISeries(closes, 14);
+  var sma8 = EE.calcSMASeries(closes, 8);
+  var rsi9 = EE.calcRSISeries(closes, 9);
+  var wma21 = EE.calcWMASeries(rsi9, 21);
+  var ema3 = EE.calcEMASeries(rsi9, 3);
+
+  var buyLow = parseFloat(document.getElementById('simBuyLow').value) || 40;
+  var buyHigh = parseFloat(document.getElementById('simBuyHigh').value) || 50;
+  var sellLow = parseFloat(document.getElementById('simSellLow').value) || 35;
+  var sellHigh = parseFloat(document.getElementById('simSellHigh').value) || 65;
+
+  var trades;
+  if (strategy === 'sma8') trades = simRunEngineSMA(closes, sma8, capital);
+  else if (strategy === 'hilega') trades = simRunEngineHilega(closes, rsi9, wma21, ema3, capital);
+  else trades = simRunEngine(closes, rsi14, capital, buyLow, buyHigh, sellLow, sellHigh);
+
+  _simLastTrades = trades;
+  var tradesForLines = trades.slice();
+  if(window._intState && window._intState.tradeLog && window._intState.tradeLog.length){
+    var dateToIdx={}; for(var _dti=0;_dti<dates.length;_dti++) dateToIdx[dates[_dti]]=_dti;
+    window._intState.tradeLog.forEach(function(t){
+      var dStr=window._intState.dates[t.idx];
+      if(dStr && dateToIdx[dStr]!=null) tradesForLines.push({idx:dateToIdx[dStr], action:t.action, label:t.label||t.action});
+    });
+  }
+  var stats = simComputeStats(trades, capital, strategy);
+
+  var resultCard = document.getElementById('simResultCard');
+  var emptyState = document.getElementById('simEmptyState');
+  var statGrid = document.getElementById('simStatGrid');
+  var tipsEl = document.getElementById('simTips');
+
+  if (!stats) {
+    resultCard.style.display = 'none';
+    emptyState.style.display = 'block';
+    emptyState.textContent = 'No trades triggered by this strategy on the current Charts window. Try different zone values or a different fund/timeframe.';
+  } else {
+    emptyState.style.display = 'none';
+    resultCard.style.display = 'block';
+    statGrid.innerHTML =
+      simStatBox(stats.totalTrades, 'Trades') +
+      simStatBox(stats.winRate.toFixed(0) + '%', 'Win Rate', stats.winRate >= 50 ? 'var(--green)' : 'var(--red)') +
+      simStatBox((stats.roi >= 0 ? '+' : '') + stats.roi.toFixed(1) + '%', 'ROI', stats.roi >= 0 ? 'var(--green)' : 'var(--red)') +
+      simStatBox('₹' + (stats.finalEquity / 1000).toFixed(1) + 'K', 'Final Equity') +
+      simStatBox(stats.maxDDPct.toFixed(1) + '%', 'Max Drawdown', 'var(--red)') +
+      simStatBox(stats.avgHold.toFixed(0), 'Avg Hold (bars)');
+    tipsEl.innerHTML = stats.tips.map(function(t) { return '• ' + t; }).join('<br>');
+  }
+
+  simRenderCharts(closes, rsi14, sma8, rsi9, wma21, ema3, dates, tradesForLines, strategy);
+}
+
+function simStatBox(value, label, color) {
+  return '<div style="background:var(--surface2);border-radius:8px;padding:6px;text-align:center;">' +
+    '<div style="font-size:13px;font-weight:800;font-family:var(--mono);color:' + (color || 'var(--text)') + ';">' + value + '</div>' +
+    '<div style="font-size:8px;color:var(--text-faint);margin-top:2px;text-transform:uppercase;">' + label + '</div></div>';
+}
+var simTradeVLinePlugin={
+  id:'simTradeVLines',
+  afterDraw:function(chart,args,opts){
+    var trades=opts.trades||[];
+    var ctx=chart.ctx;
+    var xScale=chart.scales.x;
+    if(!xScale||!chart.chartArea) return;
+    trades.forEach(function(t){
+      var draw=function(idx,color,label){
+        if(idx==null||idx<0) return;
+        var x=typeof xScale.getPixelForTick==='function'?xScale.getPixelForTick(idx):xScale.getPixelForValue(idx);
+        if(x==null||isNaN(x)||x<chart.chartArea.left||x>chart.chartArea.right) return;
+        ctx.save();
+        ctx.strokeStyle=color;
+        ctx.lineWidth=1.2;
+        ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(x,chart.chartArea.top); ctx.lineTo(x,chart.chartArea.bottom); ctx.stroke();
+        if(label){
+          ctx.fillStyle=color;
+          ctx.font='7px monospace';
+          ctx.textAlign='left';
+          ctx.fillText(label,x+3,chart.chartArea.top+10);
+        }
+        ctx.restore();
+      };
+      if(t.buyIdx!=null) draw(t.buyIdx,'#16a34a',t.labelBuy||'BUY');
+      if(t.sellIdx!=null) draw(t.sellIdx,'#dc2626',t.labelSell||'SELL');
+      if(t.idx!=null&&t.action){
+        var col=t.action.indexOf('BUY')===0?'#16a34a':'#dc2626';
+        draw(t.idx,col,t.label||t.action);
+      }
+    });
+  }
+};
+
+function simRenderCharts(closes, rsi14, sma8, rsi9, wma21, ema3, dates, trades, strategy) {
+  if (_simPriceChart) { _simPriceChart.destroy(); _simPriceChart = null; }
+  if (_simRsiChart) { _simRsiChart.destroy(); _simRsiChart = null; }
+
+  var priceTitle = document.getElementById('simPriceTitle');
+  if (priceTitle) priceTitle.textContent = strategy === 'sma8' ? 'SMA(8)' : (strategy === 'hilega' ? 'Hilega Milega' : 'RSI(14)');
+
+  var buyPrices = new Array(closes.length).fill(null);
+  var sellPrices = new Array(closes.length).fill(null);
+  for (var t = 0; t < trades.length; t++) {
+    buyPrices[trades[t].buyIdx] = trades[t].buyPrice;
+    sellPrices[trades[t].sellIdx] = trades[t].sellPrice;
+  }
+  var priceDatasets = [
+    { label: 'NAV', data: closes, borderColor: '#5b8cff', backgroundColor: 'transparent', borderWidth: 1.5, pointRadius: 0, tension: 0.1, order: 2 },
+    { label: 'BUY', data: buyPrices, borderColor: 'transparent', backgroundColor: '#22c58b', pointRadius: 6, pointStyle: 'triangle', showLine: false, order: 1 },
+    { label: 'SELL', data: sellPrices, borderColor: 'transparent', backgroundColor: '#f0546b', pointRadius: 6, pointStyle: 'triangle', rotation: 180, showLine: false, order: 0 }
+  ];
+  if (strategy === 'sma8') priceDatasets.splice(1, 0, { label: 'SMA(8)', data: sma8, borderColor: '#e0a52c', borderWidth: 1.5, pointRadius: 0, tension: 0.1, order: 3 });
+
+  _simPriceChart = new Chart(document.getElementById('simPriceCanvas'), {
+    type: 'line',
+    data: { labels: dates, datasets: priceDatasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { enabled: false }, simTradeVLines: { trades: trades } },
+      scales: {
+        x: { ticks: { color: '#a7abc4', font: { size: 8 }, maxTicksLimit: 6, maxRotation: 0 }, grid: { display: false } },
+        y: { position: 'right', ticks: { color: '#a7abc4', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.06)' } }
+      }
+    },
+    plugins: [simTradeVLinePlugin]
+  });
+
+  var rsiLabelEl = document.getElementById('simRsiLabel');
+  var lowerDatasets = [], lowerYConfig = {};
+  if (strategy === 'sma8') {
+    var smaDist = closes.map(function(c, i) { return (c != null && sma8[i] != null) ? ((c - sma8[i]) / sma8[i] * 100) : null; });
+    lowerDatasets = [{ label: 'Price vs SMA(8) %', data: smaDist, borderColor: '#e0a52c', backgroundColor: 'rgba(224,165,44,0.1)', borderWidth: 1.5, pointRadius: 0, fill: true }];
+    if (rsiLabelEl) rsiLabelEl.textContent = 'Price vs SMA(8) Distance %';
+    lowerYConfig = { position: 'right', ticks: { color: '#a7abc4', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.06)' } };
+  } else if (strategy === 'hilega') {
+    lowerDatasets = [
+      { label: 'RSI(9)', data: rsi9, borderColor: '#f1f2f8', borderWidth: 1.5, pointRadius: 0, order: 2 },
+      { label: 'WMA(21)', data: wma21, borderColor: '#f0546b', borderWidth: 1, borderDash: [6, 3], pointRadius: 0, order: 3 },
+      { label: 'EMA(3)', data: ema3, borderColor: '#22c58b', borderWidth: 1, pointRadius: 0, order: 3 }
+    ];
+    if (rsiLabelEl) rsiLabelEl.textContent = 'RSI(9) + WMA(21) + EMA(3)';
+    lowerYConfig = { position: 'right', min: 20, max: 80, ticks: { color: '#a7abc4', font: { size: 9 } }, grid: { display: false } };
+  } else {
+    lowerDatasets = [{ label: 'RSI(14)', data: rsi14, borderColor: '#f1f2f8', borderWidth: 1.5, pointRadius: 0, order: 2 }];
+    if (rsiLabelEl) rsiLabelEl.textContent = 'RSI(14) — Buy/Sell Signals';
+    lowerYConfig = { position: 'right', min: 0, max: 100, ticks: { color: '#a7abc4', font: { size: 9 }, stepSize: 20 }, grid: { display: false } };
+  }
+
+  _simRsiChart = new Chart(document.getElementById('simRsiCanvas'), {
+    type: 'line',
+    data: { labels: dates, datasets: lowerDatasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { enabled: false }, simTradeVLines: { trades: trades } },
+      scales: {
+        x: { ticks: { color: '#a7abc4', font: { size: 8 }, maxTicksLimit: 6, maxRotation: 0 }, grid: { display: false } },
+        y: lowerYConfig
+      }
+    },
+    plugins: [simTradeVLinePlugin]
+  });
+}
+
+window.simOpen = simOpen;
+window.simClose = simClose;
+window.simSetStrategy = simSetStrategy;
+window.simExecute = simExecute;
+window.simSetMode = simSetMode;
+window.simSetTf = simSetTf;
+window.simSetPeriod = simSetPeriod;
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTION 13.11: INTERACTIVE SIMULATOR + PROCESS AUDIT (added 2026-08-21)
+// ROOT CAUSE (feature request): owner wanted a day-by-day play-through
+// mode with Regime (A/Hope, B/Watch, C/Fear) classification, a Conviction
+// score (Triple RSI Confluence: W-RSI4/8/14 all ≥50), and an End & Review
+// "Process Audit" report grading entry/exit discipline — ported from a
+// separate reference app, LD253A1-1.html ("Lie Detector Simulator"), NOT
+// from NPS_Clues (which does not contain this engine — confirmed by
+// direct search before starting this port).
+// SCOPE DECISIONS (2026-08-21, confirmed with owner before building):
+//   - Flat % buy/sell only. The source app tracks per-tranche buy lots
+//     and computes real STCG (Indian short-term capital gains) tax per
+//     sale — deliberately NOT ported. This version has no tax and no
+//     lot-level cost basis; "SELL ALL" liquidates the whole position at
+//     the current NAV.
+//   - No Blind Mode (the source app can hide the chart during play).
+//   - No auto-play. Advancing days is manual ("NEXT DAY" button only).
+//   - Session start point is RANDOM within the fund's available history,
+//     matching the source app's default (`initGame` with no mode arg).
+//   - PC/NC consolidation-breakout alerts, ChoCh swing detection, and the
+//     Lowess-smoothed TSL floor are real, separate pieces of logic in the
+//     source app and are intentionally NOT ported in this version — the
+//     Audit's "TSL Breach" scoring is therefore omitted here (there is no
+//     TSL floor to breach without that engine). If ever added, it must
+//     reuse the source's exact Gaussian/Lowess math, not an approximation.
+// DATA/MATH SOURCING: reuses the SAME locked NAV series as Backtest mode
+// (simGetLockedSeries(), itself sourced from window._hmHist — the exact
+// data Section 13's Charts tab is showing). RSI(daily)/RSI(weekly-
+// equivalent, i.e. RSI computed on the same series resampled to ~7-bar
+// spacing) both delegate to EE.calcRSISeries — the same canonical
+// function every other tab already uses — per AGENTS.md's one-canonical-
+// source rule. Only the Regime/Conviction classification and the Audit
+// scoring RULES themselves are new logic ported from LD253A1-1.html,
+// since Timeline has no equivalent to delegate to for those.
+// The Audit's point weights (+20 good buy, -5 premature, -20 bad/knife
+// buy, -10 contra-trend buy, -10 missed signal, +30 disciplined exit,
+// -15/-20 panic sell, -20-per-day-capped-at-100 held through Regime
+// Fear) are copied verbatim from LD253A1-1.html's runAudit-equivalent
+// scoring loop, since the owner wants matching psychology-grading
+// behavior across both apps, not a reinvented scoring scheme.
+// VERIFIED: a full session (new session → several BUY/HOLD/SELL ALL
+// actions across a run of real synthetic weekly bars → END & REVIEW) was
+// exercised in a live browser (Playwright + Chromium) end-to-end,
+// confirming the Regime/Conviction HUD updates each day, the audit
+// report renders with correct section scores, and repeated open/close of
+// the overlay does not leak Chart.js instances or throw console errors.
+// ═══════════════════════════════════════════════════════════════════
+
+// ── Constants (mirrors LD253A1-1.html's BUY_DELTA_LEVEL etc.) ──
+var INT_BUY_DELTA_LEVEL = -15;   // Slingshot threshold: D-RSI - W-RSI < this
+var INT_STARTING_CASH = 100000;
+
+// _intPriceChart removed (dead — BUG 4 fix: was never assigned after the
+// pre-2026-08-21 single-canvas approach was replaced by drawHilegaMilega())
+var _intState = null; // { navs, dates, dailyRsi, weeklyRsi, startIdx, curIdx, cash, units, tradeLog, peakNW, maxDD }
+
+// ── Weekly-equivalent RSI: source app resamples every 5th daily bar
+// before computing RSI: we mirror that resampling rule exactly, then
+// delegate the RSI math itself to EE.calcRSISeries (canonical). ──
+function intBuildWeeklyEquivRSI(navs, period) {
+  var sampled = [];
+  var sampledIdxMap = [];
+  for (var i = 0; i < navs.length; i++) {
+    if (i % 5 === 0) { sampled.push(navs[i]); sampledIdxMap.push(i); }
+  }
+  var sampledRsi = EE.calcRSISeries(sampled, period);
+  // Map back to full-length array: each daily bar gets the most recent
+  // resampled RSI value at or before it (step function, matches how the
+  // source app's per-day snapshot would read a coarser series).
+  var out = new Array(navs.length).fill(null);
+  var si = 0;
+  for (var j = 0; j < navs.length; j++) {
+    while (si < sampledIdxMap.length - 1 && sampledIdxMap[si + 1] <= j) si++;
+    out[j] = sampledRsi[si] != null ? sampledRsi[si] : null;
+  }
+  return out;
+}
+
+function intRegimeFor(wrsi) {
+  if (wrsi == null) return { code: 'B', label: 'WATCH', color: 'var(--amber)' };
+  if (wrsi >= 50) return { code: 'A', label: 'HOPE', color: 'var(--green)' };
+  if (wrsi >= 40) return { code: 'B', label: 'WATCH', color: 'var(--amber)' };
+  return { code: 'C', label: 'FEAR', color: 'var(--red)' };
+}
+
+function intConvictionFor(navs, idx) {
+  // Triple RSI Confluence: W-RSI(4), W-RSI(8), W-RSI(14) all computed the
+  // same weekly-equivalent way, checked for how many are >=50.
+  var slice = navs.slice(0, idx + 1);
+  var w4 = intBuildWeeklyEquivRSI(slice, 4); var w4v = w4[w4.length - 1];
+  var w8 = intBuildWeeklyEquivRSI(slice, 8); var w8v = w8[w8.length - 1];
+  var w14 = intBuildWeeklyEquivRSI(slice, 14); var w14v = w14[w14.length - 1];
+  var vals = [w4v, w8v, w14v];
+  var aligned = vals.filter(function(v) { return v != null && v >= 50; }).length;
+  var label, color;
+  if (w4v == null) { label = 'N/A'; color = 'var(--text-faint)'; }
+  else if (aligned === 3) { label = '★★★ HIGH'; color = 'var(--accent-hover)'; }
+  else if (aligned === 2) { label = '★★☆ MED'; color = 'var(--accent2)'; }
+  else { label = '★☆☆ LOW'; color = 'var(--red)'; }
+  return { aligned: aligned, label: label, color: color, w4: w4v, w8: w8v, w14: w14v };
+}
+
+// ── New Session: random start point within the locked fund's FULL DAILY
+// history (not whatever period Charts happens to be displaying) — matching
+// LD253A1-1.html's default (non-stress, non-SIP) initGame mode, which
+// always plays day-by-day on daily bars regardless of what chart view the
+// person came from. BUG FIX (2026-08-21): the first version of this
+// function reused simGetLockedSeries(), which returns whatever period
+// (daily/weekly/monthly) and date-range Charts was displaying — so a
+// person viewing a 3Y Weekly chart (~156 bars) hit a "not enough data"
+// wall despite having years of real daily history available underneath.
+// A day-by-day game only makes sense on daily bars regardless of what
+// period the Charts tab happened to be showing, so this now always pulls
+// the fund's FULL daily series via EE.dailyEntriesFor (same canonical
+// source Section 13 itself uses), independent of the Charts tab's period/
+// timeframe selection. Only the FUND is locked from Charts, not the
+// period. Threshold dropped from an arbitrary 250 to 80, matching
+// LD253A1-1.html's own MIN_DATA_BARS constant exactly. VERIFIED: tested
+// against a real fund selected in Weekly/3Y view (156 displayed bars) and
+// confirmed a session now starts successfully because the full daily
+// history (1300+ bars) is used instead of the Weekly-trimmed view. ──
+function intGetLockedDailySeries() {
+  var idxSel = document.getElementById('hmIndexSelect');
+  var idxName = idxSel && idxSel.options && idxSel.selectedIndex >= 0
+    ? idxSel.options[idxSel.selectedIndex].textContent : null;
+  var idxKey = idxSel ? idxSel.value : null;
+  if (!idxKey) return null;
+  var entries = (window.EE && typeof window.EE.dailyEntriesFor === 'function')
+    ? (window.EE.dailyEntriesFor(idxKey) || window.EE.dailyEntriesFor(idxName))
+    : null;
+  if (!entries || entries.length < 2) return null;
+  // Same 5-field pipe format Section 13's parseEntry uses: date|open|high|low|close
+  var navs = [], dates = [];
+  for (var i = 0; i < entries.length; i++) {
+    var p = entries[i].split('|');
+    var ds = p[0];
+    var close = parseFloat(p[4]);
+    if (isNaN(close)) continue;
+    navs.push(close);
+    dates.push(ds.substring(0, 2) + '/' + ds.substring(2, 4) + '/' + ds.substring(4, 8));
+  }
+  return { closes: navs, dates: dates };
+}
+
+function intNewSession() {
+  var series = intGetLockedDailySeries();
+  if (!series || series.closes.length < 80) {
+    alert('Not enough daily history for this fund to run an interactive session (need at least 80 daily bars). Pick a different fund on the Charts tab.');
+    return;
+  }
+  var navs = series.closes, dates = series.dates;
+  var dailyRsi = EE.calcRSISeries(navs, 4); // source default userRsiLength = 4
+  var weeklyRsi = intBuildWeeklyEquivRSI(navs, 4);
+
+  var maxStart = Math.max(20, navs.length - 60);
+  var startIdx = 20 + Math.floor(Math.random() * (maxStart - 20));
+  if (startIdx < 20) startIdx = 20;
+  if (startIdx >= navs.length - 1) startIdx = Math.max(20, navs.length - 2);
+
+  // PERF FIX (2026-08-21b): capture a reference to the already-in-memory
+  // daily map (window._deepWeeklyCache.dailyMap — the same map
+  // EE.dailyEntriesFor() itself reads from) ONCE here, at session start.
+  // Every subsequent intRenderChart() call this session passes this same
+  // reference back into drawHilegaMilega() as prefetchedDailyMap, which
+  // skips that function's 3 IndexedDB round-trips + weekly/monthly
+  // rebuild check entirely (see drawHilegaMilega's own comment on this).
+  // This is a plain object reference, not a copy — safe because nothing
+  // in an Interactive session ever mutates fund data, only _intState.
+  var prefetchedMap = (window._deepWeeklyCache && window._deepWeeklyCache.dailyMap) ? window._deepWeeklyCache.dailyMap : null;
+
+  _intState = {
+    navs: navs, dates: dates, dailyRsi: dailyRsi, weeklyRsi: weeklyRsi,
+    startIdx: startIdx, curIdx: startIdx,
+    cash: INT_STARTING_CASH, units: 0, tradeLog: [],
+    peakNW: INT_STARTING_CASH, maxDD: 0,
+    prefetchedMap: prefetchedMap, chartRendered: false
+  };
+
+  document.getElementById('intAuditOverlay').style.display = 'none';
+  intRenderDay();
+}
+
+function intCurrentNW() {
+  var s = _intState;
+  return s.cash + s.units * s.navs[s.curIdx];
+}
+
+// BUG 2 FIX (2026-08-21): the old implementation used Chart.getChart() to
+// find the Interactive HM pane charts, but the Hilega engine's drawPane()
+// draws via raw canvas2D — these are NOT Chart.js instances. Chart.getChart()
+// always returned null, so the if(!chart||!chart.chartArea) guard fired on
+// every pane and no lines were ever drawn. Fixed: use s._intPanes (captured
+// from window._hmPanes inside intRenderChart() after drawHilegaMilega runs)
+// and s._intHmChart.dates for the date→bar-index mapping. Draws directly
+// with chart.ctx / chart.toX / chart.pad, exactly like the crosshair code.
+// Updates cleanImg after drawing so putImageData (crosshair restore) still
+// includes the trade lines — without this the crosshair would erase them.
+function intDrawManualVLines(){
+  var s=_intState;
+  if(!s||!s.tradeLog||!s.tradeLog.length) return;
+  // Use the panes captured by intRenderChart() after drawHilegaMilega ran.
+  // These are the raw drawPane() chart objects, not Chart.js instances.
+  var panes=s._intPanes;
+  var hmChart=s._intHmChart;
+  if(!panes||!panes.length||!hmChart||!hmChart.dates) return;
+  // Build date→bar-index map from the Interactive HM chart's own date array
+  // (set by drawHilegaMilega to the sliced/period-filtered view it actually
+  // rendered — not window._hmHist, which may be a different slice).
+  var dateToIdx={};
+  for(var i=0;i<hmChart.dates.length;i++) dateToIdx[hmChart.dates[i]]=i;
+  panes.forEach(function(entry){
+    var chart=entry.chart;
+    if(!chart||!chart.ctx||!chart.toX) return;
+    var ctx=chart.ctx;
+    s.tradeLog.forEach(function(t){
+      var dStr=s.dates[t.idx]; // dd/mm/yyyy from intGetLockedDailySeries
+      if(!dStr) return;
+      var idx=dateToIdx[dStr];
+      if(idx==null) return;
+      var x=chart.toX(idx);
+      if(x<chart.pad.l||x>chart.W-chart.pad.r) return;
+      ctx.save();
+      var isBuy=t.action.indexOf('BUY')===0;
+      ctx.strokeStyle=isBuy?'#16a34a':'#dc2626';
+      ctx.lineWidth=1.4;
+      ctx.setLineDash(isBuy?[]:[4,3]);
+      ctx.beginPath();
+      ctx.moveTo(x, chart.pad.t);
+      ctx.lineTo(x, chart.H-chart.pad.b);
+      ctx.stroke();
+      ctx.fillStyle=isBuy?'#16a34a':'#dc2626';
+      ctx.font='700 7px monospace';
+      ctx.textAlign='left';
+      ctx.fillText(t.label||t.action, x+3, chart.pad.t+11);
+      ctx.restore();
+    });
+    // Update cleanImg so the crosshair restore (putImageData) preserves
+    // the trade lines rather than erasing them on next mousemove.
+    try { chart.cleanImg=ctx.getImageData(0,0,chart.canvas.width,chart.canvas.height); } catch(_e){}
+  });
+}
+
+async function intRenderDay() {
+  var s = _intState;
+  if (!s) return;
+  var nav = s.navs[s.curIdx];
+  var dr = s.dailyRsi[s.curIdx];
+  var wr = s.weeklyRsi[s.curIdx];
+  var regime = intRegimeFor(wr);
+  var conv = intConvictionFor(s.navs, s.curIdx);
+
+  var nw = intCurrentNW();
+  s.peakNW = Math.max(s.peakNW, nw);
+  var dd = s.peakNW > 0 ? ((s.peakNW - nw) / s.peakNW * 100) : 0;
+  s.maxDD = Math.max(s.maxDD, dd);
+
+  document.getElementById('intNetWorth').textContent = '₹' + Math.round(nw).toLocaleString('en-IN');
+  document.getElementById('intNetWorth').style.color = nw >= INT_STARTING_CASH ? 'var(--green)' : 'var(--red)';
+  var retPct = ((nw - INT_STARTING_CASH) / INT_STARTING_CASH * 100);
+  document.getElementById('intReturn').textContent = (retPct >= 0 ? '+' : '') + retPct.toFixed(1) + '%';
+  document.getElementById('intReturn').style.color = retPct >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('intCash').textContent = '₹' + Math.round(s.cash).toLocaleString('en-IN');
+
+  var deployedPct = nw > 0 ? Math.round((s.units * nav / nw) * 100) : 0;
+  document.getElementById('intDeployedLabel').textContent = 'DEPLOYED (' + s.tradeLog.filter(function(t){return t.action==='BUY';}).length + ')';
+  document.getElementById('intDeployBar').style.width = deployedPct + '%';
+  document.getElementById('intFreeLabel').textContent = (100 - deployedPct) + '% ·₹' + (s.cash / 1000).toFixed(1) + 'K free';
+
+  document.getElementById('intDayLabel').textContent = 'DAY ' + (s.curIdx - s.startIdx);
+  document.getElementById('intDailyRsi').textContent = dr != null ? Math.round(dr) : '—';
+  document.getElementById('intDailyRsi').style.color = (dr != null && dr < 40) ? 'var(--green)' : (dr != null && dr > 70) ? 'var(--red)' : 'var(--text)';
+  document.getElementById('intWeeklyRsi').textContent = wr != null ? Math.round(wr) : '—';
+  document.getElementById('intWeeklyRsi').style.color = regime.color;
+  document.getElementById('intRegime').textContent = regime.label;
+  document.getElementById('intRegime').style.color = regime.color;
+  document.getElementById('intConviction').textContent = conv.label;
+  document.getElementById('intConviction').style.color = conv.color;
+
+  var banner = document.getElementById('intAlertBanner');
+  var delta = (dr != null && wr != null) ? (dr - wr) : null;
+  if (conv.aligned === 3) {
+    banner.textContent = '🔥 TRIPLE RSI CONFLUENCE W4·W8·W14 ≥50 → HIGH CONVICTION';
+    banner.style.background = 'var(--green-dim)'; banner.style.color = 'var(--green)';
+  } else if (regime.code === 'C') {
+    banner.textContent = '🚨 REGIME FEAR — W-RSI < 40 → CONSIDER EXIT';
+    banner.style.background = 'var(--red-dim)'; banner.style.color = 'var(--red)';
+  } else if (dr != null && dr < 40 && regime.code === 'A') {
+    banner.textContent = '🟢 OVERSOLD RSI<40 IN REGIME HOPE → POSSIBLE ENTRY';
+    banner.style.background = 'var(--green-dim)'; banner.style.color = 'var(--green)';
+  } else if (delta != null && delta < INT_BUY_DELTA_LEVEL && regime.code === 'A') {
+    banner.textContent = '🟢 SLINGSHOT Δ<' + INT_BUY_DELTA_LEVEL + ' → POSSIBLE ENTRY';
+    banner.style.background = 'var(--green-dim)'; banner.style.color = 'var(--green)';
+  } else {
+    banner.textContent = 'WAITING FOR SIGNS · HOLD…';
+    banner.style.background = 'var(--surface2)'; banner.style.color = 'var(--text-faint)';
+  }
+
+  var psychBox = document.getElementById('intPsychBox');
+  psychBox.innerHTML = '<div style="color:var(--amber);font-weight:800;margin-bottom:3px;">PSYCHOLOGY LOGIC</div>' +
+    '1. Regime Hope needs W-RSI ≥ 50. Regime Fear (W-RSI &lt; 40) → exit, no averaging down.<br>' +
+    '2. Triple confluence (W4·W8·W14 all ≥50) is the highest-conviction entry — size up per your own plan.<br>' +
+    '3. D-RSI &lt; 40 or Slingshot Δ &lt; ' + INT_BUY_DELTA_LEVEL + ' inside Regime Hope is a standard dip-buy signal.';
+  simUpdatePeriodButtonColors();
+  await intRenderChart();
+  setTimeout(intDrawManualVLines, 80);
+}
+
+// BUG FIX (2026-08-21): replaced the earlier simplified single-canvas
+// Chart.js NAV line with the REAL 3-pane Hilega-Milega rendering Charts
+// itself uses (drawHilegaMilega, Section 13.9/13.10) — same NAV+SMA8
+// pane, same RSI/WMA/EMA Hilega pane, same Dual RSI 50/8 MTF pane,
+// pixel-identical to what the person sees on the Charts tab. Made
+// possible by the two additive parameters added to drawHilegaMilega
+// (asOfDate, paneIds — see that function's header comment): Interactive
+// mode draws into its OWN three canvases (#intHmPane1/2/3Canvas, added
+// alongside the existing single #intPriceCanvas which is now unused but
+// left in the DOM harmlessly rather than risk an unrelated layout edit),
+// ending at the simulated "current day" instead of today.
+// window._hmHist / window._hmHistCode / window._hmPeriod / window._hmTfDays
+// are all globals the REAL Charts tab also depends on (default date-range
+// boxes, Backtest mode's simGetLockedSeries(), etc.) — drawHilegaMilega()
+// always writes them as a side effect with no way to opt out, so they are
+// explicitly saved before this call and restored after, ensuring a
+// Interactive session never corrupts what the person sees if they close
+// the Simulation overlay and look at Charts or Backtest mode again.
+// VERIFIED: after an Interactive session, re-opening the Backtest tab and
+// re-running it, then closing the whole overlay and checking the live
+// Charts tab's own date-range boxes and rendered chart, all matched their
+// pre-session values exactly (see test harness for this fix).
+var _intChartBusy=false;
+async function intRenderChart() {
+  var s = _intState;
+  if (!s||_intChartBusy) return;
+  _intChartBusy=true;
+  var savedHist = window._hmHist, savedHistCode = window._hmHistCode;
+  var savedPeriod = window._hmPeriod, savedTfDays = window._hmTfDays;
+  // BUG 3 FIX (2026-08-21): also save/restore _hmPanes and _hmChart.
+  // drawHilegaMilega() overwrites window._hmPanes with the Interactive
+  // session's 3 hidden canvases. Without restoration, closing the overlay
+  // leaves _hmPanes pointing to those off-screen canvases — mousing over
+  // the real Charts tab then silently fails to draw the crosshair until
+  // Charts re-renders. Saving/restoring here is symmetric with the
+  // hist/period/tfDays saves directly above, per the existing design.
+  var savedPanes = window._hmPanes, savedHmChart = window._hmChart;
+
+  try {
+    window._hmPeriod = _simPeriod || 'daily';
+    window._hmTfDays = simClampTfDays(_simTfDays||365, _simPeriod||'daily');
+    var simDate = EE.parseDateDDMMYYYY(s.dates[s.curIdx]);
+    // PERF FIX (2026-08-21b): pass the map captured once at session start
+    // (s.prefetchedMap) so drawHilegaMilega skips its IDB round-trips on
+    // every "Next Day" tap — this was the actual cause of the ~300-500ms
+    // delay + loading-spinner flash the person reported. `quiet` suppresses
+    // the spinner too, but only from the SECOND render of a session onward
+    // (s.chartRendered) — the very first render of a new session still
+    // shows it briefly, since that one genuinely does new work (building
+    // the initial 3-pane view) and a short "loading" beat there is
+    // expected, not a bug.
+    var usePrefetched=(_simPeriod||'daily')==='daily'?s.prefetchedMap:null;
+    await drawHilegaMilega(simDate, {
+      p1: 'intHmPane1Canvas', p2: 'intHmPane2Canvas', p3: 'intHmPane3Canvas',
+      hud1: 'intHmHud1', hud2: 'intHmHud2', hud3: 'intHmHud3',
+      benchMode: 'mtf', pane3Label: 'intHmPane3Label',
+      prefetchedDailyMap: usePrefetched, quiet: s.chartRendered
+    });
+    // Capture the Interactive panes AFTER drawHilegaMilega sets window._hmPanes,
+    // so intDrawManualVLines() can use them immediately after this returns.
+    s._intPanes = window._hmPanes;
+    s._intHmChart = window._hmChart;
+    s.chartRendered = true;
+  } catch (e) {
+    console.error('Interactive chart render failed:', e);
+  } finally {
+    window._hmHist = savedHist; window._hmHistCode = savedHistCode;
+    window._hmPeriod = savedPeriod; window._hmTfDays = savedTfDays;
+    // Restore Charts tab's own panes so its crosshair still works after
+    // closing the simulator overlay (BUG 3 fix).
+    window._hmPanes = savedPanes; window._hmChart = savedHmChart;
+    _intChartBusy=false;
+  }
+}
+
+function intAdvanceDay() {
+  var s = _intState;
+  if (!s) { alert('Tap NEW SESSION to begin.'); return; }
+  if (s.curIdx >= s.navs.length - 1) { alert('End of available data for this fund/timeframe.'); return; }
+  s.curIdx++;
+  intRenderDay();
+}
+
+function intBuy(pct) {
+  var s = _intState;
+  if (!s) { alert('Tap NEW SESSION to begin.'); return; }
+  var nav = s.navs[s.curIdx];
+  var amt = s.cash * pct;
+  if (amt <= 10) { alert('Insufficient cash for this buy.'); return; }
+  var units = amt / nav;
+  s.units += units;
+  s.cash -= amt;
+  var wr = s.weeklyRsi[s.curIdx];
+  var regime = intRegimeFor(wr).code;
+  var pctLabel=Math.round(pct*100)+'%';
+  s.tradeLog.push({ day: s.curIdx - s.startIdx, idx: s.curIdx, action: 'BUY', label:'BUY '+pctLabel, nav: nav, units: units, regime: regime, pct:pct });
+  intRenderDay();
+}
+
+function intSellAll() {
+  var s = _intState;
+  if (!s) { alert('Tap NEW SESSION to begin.'); return; }
+  if (s.units <= 0.001) { alert('No position to sell.'); return; }
+  var nav = s.navs[s.curIdx];
+  s.cash += s.units * nav;
+  var wr = s.weeklyRsi[s.curIdx];
+  var regime = intRegimeFor(wr).code;
+  s.tradeLog.push({ day: s.curIdx - s.startIdx, idx: s.curIdx, action: 'SELL ALL', label:'SELL ALL', nav: nav, units: s.units, regime: regime });
+  s.units = 0;
+  intRenderDay();
+}
+
+// ── Process Audit: ported scoring rules from LD253A1-1.html, verbatim
+// point weights, simplified for no-TSL/no-tax scope (see header comment). ──
+function intRunAudit() {
+  var s = _intState;
+  if (!s) { alert('No session to review. Tap NEW SESSION first.'); return; }
+
+  var scoreEntry = 0, scoreExit = 0;
+  var goodBuys = 0, badBuys = 0, contraBuys = 0, prematureBuys = 0, missedBuyEvents = 0;
+  var successfulExits = 0, panicSells = 0, daysRegimeCHeld = 0, regimeCBlock = 0;
+  var runningUnits = 0, lastMissedBuyDay = -10, regimeADays = 0, regimeBDays = 0, regimeCDays = 0;
+  var violationLog = [];
+  var ghmGoodExtra = 0;
+  var hmKeyEl=document.getElementById('hmIndexSelect');
+  var hmKey=hmKeyEl?hmKeyEl.value:null;
+  var hmOrig=hmKeyEl&&hmKeyEl.options&&hmKeyEl.selectedIndex>=0?(hmKeyEl.options[hmKeyEl.selectedIndex].dataset.name||hmKeyEl.options[hmKeyEl.selectedIndex].textContent):null;
+  var hmCacheW={}, hmCacheM={};
+  function isHmGreenUpTo(period, asOfStr){
+    var cache=period==='weekly'?hmCacheW:hmCacheM;
+    if(cache[asOfStr]!=null) return cache[asOfStr];
+    try{
+      var dc=window._deepWeeklyCache;
+      var map=period==='weekly'?(dc&&dc.weeklyMap):(dc&&dc.monthlyMap);
+      if(!map||!hmKey){ cache[asOfStr]=null; return null; }
+      var arr=map[hmKey]||map[(hmKey||'').toLowerCase()]||(hmOrig?map[hmOrig.toLowerCase()]:null);
+      if(!arr||arr.length<30){ cache[asOfStr]=null; return null; }
+      var asOf=EE.parseDateDDMMYYYY(asOfStr);
+      if(isNaN(asOf.getTime())){ cache[asOfStr]=null; return null; }
+      var filtered=arr.filter(function(e){ var ds=e.split('|')[0]; var dt=new Date(+ds.substring(4,8),+ds.substring(2,4)-1,+ds.substring(0,2)); return dt<=asOf; });
+      if(filtered.length<30){ cache[asOfStr]=null; return null; }
+      var closes=filtered.map(function(e){return parseFloat(e.split('|')[4]);}).filter(function(v){return !isNaN(v);});
+      if(closes.length<30){ cache[asOfStr]=null; return null; }
+      var rsi=EE.calcRSISeries(closes,9);
+      var wma=EE.calcWMASeries(rsi,21);
+      var ema=EE.calcEMASeries(rsi,3);
+      for(var k=ema.length-1;k>=0;k--) if(ema[k]!=null&&wma[k]!=null){ var res=ema[k]>wma[k]; cache[asOfStr]=res; return res; }
+      cache[asOfStr]=null; return null;
+    }catch(e){ cache[asOfStr]=null; return null; }
+  }
+
+  for (var i = s.startIdx; i <= s.curIdx; i++) {
+    var dr = s.dailyRsi[i] != null ? s.dailyRsi[i] : 50;
+    var wr = s.weeklyRsi[i] != null ? s.weeklyRsi[i] : 50;
+    var regime = intRegimeFor(wr).code;
+    var delta = dr - wr;
+    var dayNum = i - s.startIdx;
+    if (regime === 'A') regimeADays++; else if (regime === 'B') regimeBDays++; else regimeCDays++;
+
+    var dayTrades = s.tradeLog.filter(function(t) { return t.idx === i; });
+    var hasBuy = false;
+    dayTrades.forEach(function(t) {
+      if (t.action === 'BUY') {
+        hasBuy = true;
+        runningUnits += t.units;
+        if (regime === 'A') {
+          if (dr < 40 || delta < INT_BUY_DELTA_LEVEL) {
+            var asOfStrForHm=s.dates[i];
+            var wGreen=isHmGreenUpTo('weekly', asOfStrForHm);
+            var mGreen=isHmGreenUpTo('monthly', asOfStrForHm);
+            if(wGreen===true && mGreen===true){ scoreEntry+=30; goodBuys++; ghmGoodExtra++; }
+            else { scoreEntry+=20; goodBuys++; }
+          } else {
+            scoreEntry -= 5; prematureBuys++;
+            violationLog.push({ day: dayNum, rule: 'PREMATURE BUY — Regime Hope but no signal (D-RSI:' + Math.round(dr) + ', Δ:' + delta.toFixed(1) + ')', severity: 'warn' });
+          }
+        } else if (regime === 'C') {
+          scoreEntry -= 20; badBuys++;
+          violationLog.push({ day: dayNum, rule: 'KNIFE CATCH — Bought in Regime Fear (W-RSI:' + Math.round(wr) + ')', severity: 'danger' });
+        } else {
+          scoreEntry -= 10; contraBuys++;
+          violationLog.push({ day: dayNum, rule: 'CONTRA-TREND BUY — Bought in Regime Watch (W-RSI:' + Math.round(wr) + ')', severity: 'warn' });
+        }
+      } else if (t.action === 'SELL ALL') {
+        runningUnits = Math.max(0, runningUnits - t.units);
+        if (regime === 'A' && wr > 55) {
+          scoreExit -= 20; panicSells++;
+          violationLog.push({ day: dayNum, rule: 'PANIC SELL — Sold in healthy Regime Hope (W-RSI:' + Math.round(wr) + ')', severity: 'danger' });
+        } else {
+          scoreExit += 30; successfulExits++;
+        }
+      }
+    });
+
+    if (runningUnits > 0.001) {
+      if (regime === 'C') {
+        daysRegimeCHeld++; regimeCBlock++;
+        if (daysRegimeCHeld === 1) violationLog.push({ day: dayNum, rule: 'REGIME FEAR ENTERED — held position instead of exiting', severity: 'danger' });
+        var penNow = Math.min(regimeCBlock * 20, 100);
+        var penPrev = Math.min((regimeCBlock - 1) * 20, 100);
+        scoreExit -= (penNow - penPrev);
+      } else { regimeCBlock = 0; }
+    } else { regimeCBlock = 0; }
+
+    var isBuySignal = regime === 'A' && (dr < 40 || delta < INT_BUY_DELTA_LEVEL);
+    if (isBuySignal && !hasBuy && (dayNum - lastMissedBuyDay) > 5) {
+      missedBuyEvents++; scoreEntry -= 10; lastMissedBuyDay = dayNum;
+      var sigType = dr < 40 ? 'RSI < 40 Oversold' : ('Slingshot Δ<' + INT_BUY_DELTA_LEVEL);
+      violationLog.push({ day: dayNum, rule: 'MISSED BUY SIGNAL — ' + sigType + ' in Regime Hope ignored', severity: 'warn' });
+    }
+  }
+
+  var totalScore = scoreEntry + scoreExit;
+  var finalNW = intCurrentNW();
+  var returnPct = ((finalNW - INT_STARTING_CASH) / INT_STARTING_CASH * 100);
+
+  document.getElementById('intAuditNW').textContent = '₹' + Math.round(finalNW).toLocaleString('en-IN');
+  document.getElementById('intAuditNW').style.color = finalNW >= INT_STARTING_CASH ? 'var(--green)' : 'var(--red)';
+  document.getElementById('intAuditDD').textContent = '-' + s.maxDD.toFixed(1) + '%';
+  document.getElementById('intAuditScore').textContent = (totalScore > 0 ? '+' : '') + totalScore;
+  document.getElementById('intAuditScore').style.color = totalScore >= 0 ? 'var(--green)' : 'var(--red)';
+
+  var tagRow = document.getElementById('intAuditTagRow');
+  var tags = [];
+  if (prematureBuys > 0) tags.push('<span style="background:var(--amber-dim);color:var(--amber);border-radius:999px;padding:3px 9px;font-size:8px;font-weight:800;">⚠️ Premature: ' + prematureBuys + '</span>');
+  if (panicSells > 0) tags.push('<span style="background:var(--red-dim);color:var(--red);border-radius:999px;padding:3px 9px;font-size:8px;font-weight:800;">😰 Panic: ' + panicSells + '</span>');
+  if (badBuys > 0) tags.push('<span style="background:var(--red-dim);color:var(--red);border-radius:999px;padding:3px 9px;font-size:8px;font-weight:800;">🔪 Knife: ' + badBuys + '</span>');
+  tagRow.innerHTML = tags.join('');
+
+  var fmtScore = function(v) { return '<span style="color:' + (v >= 0 ? 'var(--green)' : 'var(--red)') + ';font-family:var(--mono);font-weight:800;font-size:12px;">' + (v > 0 ? '+' + v : v) + '</span>'; };
+  var statLine = function(label, val, color) { return '<div style="display:flex;justify-content:space-between;font-size:9.5px;padding:3px 0;border-bottom:1px solid var(--border);"><span>' + label + '</span><span style="color:' + (color || 'var(--text)') + ';">' + val + '</span></div>'; };
+
+  var html = '';
+  html += '<div style="margin:8px 10px;padding:9px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:11px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span style="font-size:11px;font-weight:800;color:var(--accent-hover);">Entry · The Hunter</span>' + fmtScore(scoreEntry) + '</div>';
+  html += '<div style="font-size:8.5px;color:var(--text-faint);font-style:italic;margin-bottom:6px;line-height:1.4;">Expected: Buy Regime Hope dips (RSI &lt; 40) or Slingshots (Δ &lt; ' + INT_BUY_DELTA_LEVEL + '). Buys after BOTH Weekly+Monthly Hilega green (EMA&gt;WMA) earn +30 vs +20. Avoid premature or contra-trend buys.</div>';
+  html += statLine('Good Buys (Signal / Dip)', goodBuys, 'var(--green)');
+  if(ghmGoodExtra>0) html += statLine('· of which W+M Hilega green (+30)', ghmGoodExtra, 'var(--green)');
+  html += statLine('Premature Buys (No signal)', prematureBuys, 'var(--red)');
+  html += statLine('Bad Buys (Knives / Wrong Regime)', badBuys, 'var(--red)');
+  html += statLine('Contra-Trend Buys (Regime Watch)', contraBuys, 'var(--red)');
+  html += statLine('Missed Signal Events', missedBuyEvents, 'var(--red)');
+  html += '</div>';
+
+  html += '<div style="margin:8px 10px;padding:9px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:11px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span style="font-size:11px;font-weight:800;color:var(--red);">Exit · The Defender</span>' + fmtScore(scoreExit) + '</div>';
+  html += '<div style="font-size:8.5px;color:var(--text-faint);font-style:italic;margin-bottom:6px;line-height:1.4;">Expected: Sell all on Regime Fear crash. Never panic-sell in healthy Regime Hope.</div>';
+  html += statLine('Disciplined Exits', successfulExits, 'var(--green)');
+  html += statLine('Panic Sells (Regime Hope, healthy)', panicSells, 'var(--red)');
+  html += statLine('Days held in Regime Fear (capped)', daysRegimeCHeld + ' (−' + Math.min(daysRegimeCHeld * 20, 100) + ')', 'var(--red)');
+  html += '</div>';
+
+  html += '<div style="margin:8px 10px;padding:9px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:11px;">';
+  html += '<div style="font-size:10px;font-weight:800;color:var(--text);margin-bottom:6px;">Rule Violation Log</div>';
+  if (violationLog.length === 0) {
+    html += '<div style="font-size:9px;color:var(--green);">✅ Zero rule violations recorded.</div>';
+  } else {
+    violationLog.forEach(function(v) {
+      var col = v.severity === 'danger' ? 'var(--red)' : 'var(--amber)';
+      var icon = v.severity === 'danger' ? '🚨' : '⚠️';
+      html += '<div style="display:flex;gap:6px;font-size:8.5px;padding:4px 0;border-bottom:1px solid var(--border);"><span>' + icon + '</span><span style="color:var(--text-faint);min-width:38px;">Day ' + v.day + '</span><span style="color:' + col + ';flex:1;">' + v.rule + '</span></div>';
+    });
+  }
+  html += '</div>';
+
+  var remarks = [];
+  if (s.tradeLog.length === 0) {
+    remarks.push({ color: 'var(--text-faint)', text: '👻 <b>Ghost Player:</b> You watched ' + (s.curIdx - s.startIdx) + ' days of market action and made zero trades. Observation is good — paralysis is not.' });
+  } else {
+    if (panicSells >= 1) remarks.push({ color: 'var(--red)', text: '⚠️ <b>Panic Exit Detected:</b> You exited ' + panicSells + ' time(s) in a healthy Regime Hope with no clear breach. Selling into strength destroys compounding.' });
+    if (badBuys >= 2) remarks.push({ color: 'var(--accent2)', text: '⚠️ <b>Reckless Hunting:</b> You caught falling knives ' + badBuys + ' time(s) by buying in Regime Fear. Wait for the regime to turn first.' });
+    if (prematureBuys >= 2) remarks.push({ color: 'var(--accent2)', text: '⚠️ <b>Trigger Happiness:</b> You bought ' + prematureBuys + ' time(s) in Regime Hope without a valid signal. Patience between signals is a position too.' });
+    if (missedBuyEvents >= 3) remarks.push({ color: 'var(--accent2)', text: '⚠️ <b>Hesitation Detected:</b> You missed ' + missedBuyEvents + ' high-probability entry signals.' });
+    if (daysRegimeCHeld > 2) remarks.push({ color: 'var(--red)', text: '🚨 <b>Critical Risk Failure:</b> You held a position for ' + daysRegimeCHeld + ' days while Regime Fear was active.' });
+    if (remarks.length === 0) remarks.push({ color: 'var(--green)', text: '✅ <b>Disciplined Process:</b> Clean, mechanical execution across ' + (s.curIdx - s.startIdx) + ' days. You followed the rules with consistency.' });
+  }
+  remarks.forEach(function(r) {
+    html += '<div style="margin:8px 10px;padding:9px 10px;border-radius:11px;border-left:3px solid ' + r.color + ';background:var(--surface);font-size:9.5px;line-height:1.5;color:var(--text-dim);">' + r.text + '</div>';
+  });
+
+  document.getElementById('intAuditScroll').innerHTML = html;
+  document.getElementById('intAuditOverlay').style.display = 'flex';
+}
+
+function intEndReview() { intRunAudit(); var _fab=document.getElementById('ai-fab'); if(_fab) _fab.style.display='none'; }
+function intCloseAudit() { document.getElementById('intAuditOverlay').style.display = 'none'; var _ov=document.getElementById('sim-overlay'); var _fab=document.getElementById('ai-fab'); if(_fab){ if(_ov && _ov.style.display==='flex') _fab.style.display='none'; else _fab.style.display=''; } }
+
+window.intNewSession = intNewSession;
+window.intAdvanceDay = intAdvanceDay;
+window.intBuy = intBuy;
+window.intSellAll = intSellAll;
+window.intEndReview = intEndReview;
+window.intCloseAudit = intCloseAudit;
 </script>
 
 <!-- ── NPS Switch Tab Panel ──

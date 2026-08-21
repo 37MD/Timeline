@@ -5,55 +5,6 @@
 ════════════════════════════════════════════════════════════════════════════
  TIMELINE_15K4 — MASTER TABLE OF CONTENTS
 ════════════════════════════════════════════════════════════════════════════
- WHAT CHANGED (AGENTS.md §1 audit — week-key consolidation — 2026-08-21)
- ────────────────────────────────────────────────────────────────────────
- ROOT CAUSE: A full AGENTS.md audit found "find the Monday of the ISO
- week containing this date, build a week-bucket key from it" independently
- reimplemented at 8 sites across 3 sections — Data Engine
- (_buildWeeklyMonthlyMaps, _buildBafWeeklyMonthlyIntoCache,
- _buildWeeklyMonthlyMapsAsync, deepToWeeklyCloses, weeklyClosesFromDates,
- _deriveWeeklyStrings) and Tactical Transfer (_drawTacticalChart,
- _computeStrategyStats) — using 3 different but mathematically equivalent
- offset expressions (`dow===0?6:dow-1`, `day===0?-6:1-day`, `(dow+6)%7`)
- and 3 different key formats (numeric YYYYMMDD, string YYYYMMDD via
- concatenation, and 'W'+YYYYMMDD). This is the same failure mode already
- fixed once for normalize()/dateKey() (36 + 6 duplicate sites, per this
- TOC's earlier entries) — no canonical helper existed for this one.
- FIX: Added U.mondayOf(d) (returns the Monday Date), U.weekKeyNum(d), and
- U.weekKeyStr(d) to Container U (Section A.1, right after dateKey — see
- that function's own comment for the full rationale). All 8 sites now
- delegate to these instead of reimplementing the Monday-rollback locally.
- Each site's exact prior output shape was preserved (e.g.
- _buildWeeklyMonthlyMapsAsync still stores {d: dt} not {d: mon} at one
- site, matching its own pre-existing behavior — not "corrected" to match
- a different site, per AGENTS.md §5's byte-for-byte-first rule).
- _deriveWeeklyStrings's header comment documents that it must build the
- same bucket key as EE.toWeeklyCloses (→ deepToWeeklyCloses) for their
- 1:1 iteration-order invariant to hold; since both now delegate to the
- same U.weekKeyNum, that invariant is preserved by construction rather
- than by two independently-written copies happening to agree.
- NOTE (pre-existing, not touched): _buildWeeklyMonthlyMaps (the
- non-async sibling of _buildWeeklyMonthlyMapsAsync) has zero live
- callers — confirmed dead code, unrelated to this consolidation. Left
- in place; removing it is a separate change with its own review.
- VERIFIED: node --check on all 15 inline <script> blocks (14 real + the
- Chart.js UMD block) passes post-edit. Extracted the LIVE
- U.weekKeyNum/weekKeyStr from the edited file (not a standalone
- reimplementation) and ran them against all 3 original site formulas
- across every single day from 2020-01-01 to 2027-12-31 (2,922 dates,
- spanning multiple leap years and every weekday/month/year boundary) —
- zero mismatches. Confirmed padStart(2,'0') and ('0'+x).slice(-2)
- (the two padding idioms used across the original 8 sites) are
- equivalent for all 1–31 values. Confirmed weeklyClosesFromDates's
- switch from a hand-built string key to U.weekKeyNum's numeric return is
- safe because JS coerces object-property keys to strings identically
- either way. Blast radius: grepped every caller of all 8 touched
- functions — none inspect the internal week-key mechanics, only the
- returned OHLC/array/string output, whose shape is unchanged. Full-
- document HTML div balance (508/508) and all 7 tab-panels independently
- re-confirmed balanced post-edit (unchanged from pre-edit, as expected
- since only <script> content was touched, no markup).
-
  WHAT CHANGED (AGENTS.md audit — SW/manifest filename + simulator bugs — 2026-08-21)
  ────────────────────────────────────────────────────────────────────────
  BUG 1 (sw.js + manifest.json — CRITICAL): APP_SHELL and start_url pointed
@@ -4200,42 +4151,6 @@ var U = (function() {
     // date strings, causing lookup misses. Added String() cast + trim().
     return String(dateStr != null ? dateStr : '').trim().replace(/[\/\-]/g, '');
   }
-  // ── CONSOLIDATION (AGENTS.md §1 audit, 2026-08-21): single source of
-  // truth for "Monday of the ISO week containing this date." Before this
-  // fix, 8 sites across 3 sections (_buildWeeklyMonthlyMaps,
-  // _buildBafWeeklyMonthlyIntoCache x2, _buildWeeklyMonthlyMapsAsync,
-  // deepToWeeklyCloses, weeklyClosesFromDates, _drawTacticalChart,
-  // _computeStrategyStats) each independently reimplemented this same
-  // Monday-rollback logic, using 3 different (but mathematically
-  // identical — verified numerically for all 7 weekday values before
-  // this change) offset expressions: `dow===0?6:dow-1` (subtracted),
-  // `day===0?-6:1-day` (added), and `(dow+6)%7` (subtracted). None
-  // delegated to a canonical helper. This is the same failure mode
-  // AGENTS.md §1 already fixed once for normalize()/dateKey() (36 + 6
-  // duplicate sites) — consolidating here for the same reason: a future
-  // change to "what counts as the start of the week" would otherwise
-  // need to be found and fixed in 8 places by hand.
-  // Returns a NEW Date object set to 00:00 local time on the Monday of
-  // the ISO week (Mon–Sun) containing `d`. Does not mutate `d`.
-  function mondayOf(d) {
-    var dow = d.getDay();
-    var mon = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    mon.setDate(mon.getDate() - (dow === 0 ? 6 : dow - 1));
-    return mon;
-  }
-  // Numeric YYYYMMDD week-bucket key (matches the format used by
-  // _buildWeeklyMonthlyMaps, _buildBafWeeklyMonthlyIntoCache,
-  // _buildWeeklyMonthlyMapsAsync, and deepToWeeklyCloses).
-  function weekKeyNum(d) {
-    var m = mondayOf(d);
-    return m.getFullYear() * 10000 + (m.getMonth() + 1) * 100 + m.getDate();
-  }
-  // 'W'+YYYYMMDD string week-bucket key (matches the format used by
-  // _drawTacticalChart and _computeStrategyStats).
-  function weekKeyStr(d) {
-    var m = mondayOf(d);
-    return 'W' + m.getFullYear() + String(m.getMonth() + 1).padStart(2, '0') + String(m.getDate()).padStart(2, '0');
-  }
   // ── Single, canonical way to build an indexList entry with its category ──
   // Every place in the app that needs "name + normalized key + category"
   // for an index should go through this function instead of building its
@@ -4339,9 +4254,6 @@ var U = (function() {
     genTradingDays: genTradingDays,
     fmtDDMMYYYY: fmtDDMMYYYY,
     dateKey: dateKey,
-    mondayOf: mondayOf,
-    weekKeyNum: weekKeyNum,
-    weekKeyStr: weekKeyStr,
     buildIndexEntry: buildIndexEntry,
     buildIndexListFromMaster: buildIndexListFromMaster,
     categoryForKey: categoryForKey,
@@ -6055,11 +5967,9 @@ function _buildWeeklyMonthlyMaps(cache) {
       var ds = p[0], dd = +ds.substring(0, 2), mm = +ds.substring(2, 4) - 1, yy = +ds.substring(4, 8);
       var dt = new Date(yy, mm, dd);
       if (dt.getDay() === 0 || dt.getDay() === 6) continue;
-      // CONSOLIDATION (AGENTS.md §1 audit): delegates to U.weekKeyNum /
-      // U.mondayOf instead of reimplementing the Monday-rollback locally
-      // (was one of 8 duplicate sites — see U.mondayOf's own comment).
-      var wk = U.weekKeyNum(dt);
-      var mon = U.mondayOf(dt);
+      var dow = dt.getDay(), mon = new Date(dt);
+      mon.setDate(dt.getDate() - (dow === 0 ? 6 : dow - 1));
+      var wk = mon.getFullYear() * 10000 + (mon.getMonth() + 1) * 100 + mon.getDate();
       var o = parseFloat(p[1]), h = parseFloat(p[2]), l = parseFloat(p[3]), c = parseFloat(p[4]);
       if (isNaN(o) || isNaN(h) || isNaN(l) || isNaN(c)) continue;
       if (!wBuckets[wk]) { wBuckets[wk] = { o: o, h: h, l: l, c: c, d: mon }; }
@@ -6149,9 +6059,9 @@ function _buildBafWeeklyMonthlyIntoCache(cache, bafMap) {
       if (isNaN(dt.getTime())) continue;
       var nav = r.nav;
       if (dt.getDay() !== 0 && dt.getDay() !== 6) {
-        // CONSOLIDATION (AGENTS.md §1 audit): delegates to U.weekKeyNum
-        // instead of reimplementing the Monday-rollback locally.
-        var wk = U.weekKeyNum(dt);
+        var dow = dt.getDay(), mon = new Date(dt);
+        mon.setDate(dt.getDate() - (dow === 0 ? 6 : dow - 1));
+        var wk = mon.getFullYear() * 10000 + (mon.getMonth() + 1) * 100 + mon.getDate();
         if (!wBuckets[wk]) wBuckets[wk] = { o: nav, h: nav, l: nav, c: nav, d: dt };
         else { var w = wBuckets[wk]; if (nav > w.h) w.h = nav; if (nav < w.l) w.l = nav; w.c = nav; w.d = dt; }
       }
@@ -6198,8 +6108,9 @@ function _buildWeeklyMonthlyMapsAsync(cache, onProgress, cb) {
         var ds = p[0], dd = +ds.substring(0, 2), mm = +ds.substring(2, 4) - 1, yy = +ds.substring(4, 8);
         var dt = new Date(yy, mm, dd);
         if (dt.getDay() === 0 || dt.getDay() === 6) continue;
-        // CONSOLIDATION (AGENTS.md §1 audit): delegates to U.weekKeyNum.
-        var wk = U.weekKeyNum(dt);
+        var dow = dt.getDay(), mon = new Date(dt);
+        mon.setDate(dt.getDate() - (dow === 0 ? 6 : dow - 1));
+        var wk = mon.getFullYear() * 10000 + (mon.getMonth() + 1) * 100 + mon.getDate();
         var o = parseFloat(p[1]), h = parseFloat(p[2]), l = parseFloat(p[3]), c = parseFloat(p[4]);
         if (isNaN(o) || isNaN(h) || isNaN(l) || isNaN(c)) continue;
         if (!wBuckets[wk]) { wBuckets[wk] = { o: o, h: h, l: l, c: c, d: dt }; }
@@ -7746,8 +7657,9 @@ function deepToWeeklyCloses(entries){
     var ds=p[0],dd=+ds.substring(0,2),mm=+ds.substring(2,4)-1,yy=+ds.substring(4,8);
     var dt=new Date(yy,mm,dd);
     if(dt.getDay()===0||dt.getDay()===6) continue;
-    // CONSOLIDATION (AGENTS.md §1 audit): delegates to U.weekKeyNum.
-    var wk=U.weekKeyNum(dt);
+    var dow=dt.getDay(),mon=new Date(dt);
+    mon.setDate(dt.getDate()-(dow===0?6:dow-1));
+    var wk=mon.getFullYear()*10000+(mon.getMonth()+1)*100+mon.getDate();
     var o=parseFloat(p[1]),h=parseFloat(p[2]),l=parseFloat(p[3]),c=parseFloat(p[4]);
     if(isNaN(o)||isNaN(h)||isNaN(l)||isNaN(c))continue;
     if(!map[wk]){map[wk]={o:o,h:h,l:l,c:c};}
@@ -8105,13 +8017,10 @@ var EE = (function() {
   function weeklyClosesFromDates(closes, dates) {
     var wkMap = {};
     for (var i = 0; i < dates.length; i++) {
-      var d = dates[i];
-      // CONSOLIDATION (AGENTS.md §1 audit): delegates to U.weekKeyNum.
-      // Object-key lookups are unaffected by number-vs-string (JS coerces
-      // property keys to strings), so this is a safe drop-in — verified
-      // U.weekKeyNum(d) and the old getFullYear()+pad+pad string produce
-      // the identical string when used as wkMap[key].
-      var key = U.weekKeyNum(d);
+      var d = dates[i], day = d.getDay();
+      var mon = new Date(d);
+      mon.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+      var key = mon.getFullYear() + String(mon.getMonth() + 1).padStart(2, '0') + String(mon.getDate()).padStart(2, '0');
       wkMap[key] = closes[i];
     }
     var keys = Object.keys(wkMap).sort();
@@ -11471,13 +11380,9 @@ function _deriveWeeklyStrings(dailyEntries) {
     var ds = p[0], dd = +ds.substring(0, 2), mm = +ds.substring(2, 4) - 1, yy = +ds.substring(4, 8);
     var dt = new Date(yy, mm, dd);
     if (dt.getDay() === 0 || dt.getDay() === 6) continue;
-    // CONSOLIDATION (AGENTS.md §1 audit): delegates to U.weekKeyNum — the
-    // same canonical helper EE.toWeeklyCloses now uses (via
-    // deepToWeeklyCloses), so the Monday-start/1:1-iteration-order
-    // invariant this function's own header comment describes is
-    // preserved automatically rather than by two independent copies
-    // happening to agree.
-    var wk = U.weekKeyNum(dt);
+    var dow = dt.getDay(), mon = new Date(dt);
+    mon.setDate(dt.getDate() - (dow === 0 ? 6 : dow - 1));
+    var wk = mon.getFullYear() * 10000 + (mon.getMonth() + 1) * 100 + mon.getDate();
     lastDateByBucket[wk] = ds; // last one seen per bucket wins, same as before
   }
   var dateList = Object.keys(lastDateByBucket).sort().map(function(wk) { return lastDateByBucket[wk]; });
@@ -22108,8 +22013,9 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
         var d = new Date(parseInt(pp[2]), parseInt(pp[1]) - 1, parseInt(pp[0]));
         var key;
         if (timeframe === 'weekly') {
-          // CONSOLIDATION (AGENTS.md §1 audit): delegates to U.weekKeyStr.
-          key = U.weekKeyStr(d);
+          var dow = d.getDay();
+          var mon = new Date(d); mon.setDate(d.getDate() - ((dow + 6) % 7));
+          key = 'W' + mon.getFullYear() + ('0'+(mon.getMonth()+1)).slice(-2) + ('0'+mon.getDate()).slice(-2);
         } else {
           key = pp[2] + '-' + pp[1];
         }
@@ -22712,8 +22618,10 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
       var d = new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]));
       var key;
       if (timeframe === 'weekly') {
-        // CONSOLIDATION (AGENTS.md §1 audit): delegates to U.weekKeyStr.
-        key = U.weekKeyStr(d);
+        var dow = d.getDay();
+        var monday = new Date(d);
+        monday.setDate(d.getDate() - ((dow + 6) % 7));
+        key = 'W' + monday.getFullYear() + ('0' + (monday.getMonth() + 1)).slice(-2) + ('0' + monday.getDate()).slice(-2);
       } else {
         key = p[2] + '-' + p[1];
       }
@@ -23021,8 +22929,10 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
         var d = new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]));
         var key;
         if (timeframe === 'weekly') {
-          // CONSOLIDATION (AGENTS.md §1 audit): delegates to U.weekKeyStr.
-          key = U.weekKeyStr(d);
+          var dayOfWeek = d.getDay();
+          var monday = new Date(d);
+          monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
+          key = 'W' + monday.getFullYear() + ('0' + (monday.getMonth() + 1)).slice(-2) + ('0' + monday.getDate()).slice(-2);
         } else {
           key = p[2] + '-' + p[1];
         }
