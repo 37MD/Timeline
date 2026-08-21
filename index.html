@@ -5,6 +5,206 @@
 ════════════════════════════════════════════════════════════════════════════
  TIMELINE_15K4 — MASTER TABLE OF CONTENTS
 ════════════════════════════════════════════════════════════════════════════
+ WHAT CHANGED (Process Audit — Training improvements: grade, return%,
+ regime bar, per-trade table, 3-tier exit rows, training tip — 2026-08-21)
+ ────────────────────────────────────────────────────────────────────────
+ ROOT CAUSE: Process Audit page was computing 6 useful values (return%,
+ regime day breakdown, per-trade score detail, 3-tier exit breakdown) but
+ not displaying any of them. The audit was a score card, not a training
+ tool.
+
+ FIX:
+ - HTML: added intAuditReturn (return %) and intAuditGrade (letter grade)
+   to the fixed header row alongside Final Net Worth and Total Score.
+ - intRunAudit() — 6 additions, zero changes to existing scoring logic:
+   1. RETURN %: populates intAuditReturn with +/−% vs INT_STARTING_CASH.
+   2. GRADE: maps totalScore to S/A/B/C/D/F with colour (intAuditGrade).
+      Thresholds: S≥80, A≥50, B≥20, C≥0, D≥-30, F<-30.
+   3. EXIT ROWS: "Disciplined Exits" single row split into 3 stat rows
+      (Full Exit on Monthly signal +15 / Partial on Weekly +5 / Generic +10)
+      so the user can see exactly which tier each exit landed in.
+   4. REGIME BAR: after Exit section, shows session Hope/Watch/Fear day %
+      so user knows what market environment they practiced in.
+   5. PER-TRADE TABLE: collapsible section listing every trade — day,
+      action, regime, score label, points awarded — so the user can
+      connect each decision to its consequence.
+   6. TRAINING TIP: "Next Session Focus" card — one plain-English sentence
+      derived from the most serious violation, telling the user exactly
+      what to correct next time.
+ - No changes to scoring formulas, shared containers (U/EE/DD/BB/CC),
+   or any other tab's code. Blast radius: intRunAudit() + overlay HTML only.
+
+ VERIFIED: Node script (verify_audit.js) ran 45 tests, 45 passed, 0 failed.
+ Tests covered: grade boundary (11 cases), regime bar percentages (7 cases
+ incl. rounding edge), return % sign/format (5 cases), per-trade label
+ classification for all BUY/SELL/SELL25% branches (15 cases), training tip
+ priority order (7 cases). Blast-radius check: no U./EE./DD. touched in
+ changed region; intAuditReturn + intAuditGrade in HTML and JS confirmed;
+ isHmGreenUpTo + intRegimeFor confirmed in scope for per-trade table;
+ successfulExits references confined to TOC comments only; window exports
+ unchanged.
+
+ WHAT CHANGED (Simulator — SELL 25% wiring audit + window.intSellPartial
+ export fix — 2026-08-21f)
+ ────────────────────────────────────────────────────────────────────────
+ ROOT CAUSE: Owner asked for a full audit of SELL 25%'s wiring end-to-end
+ (button → intSellPartial() → tradeLog → intRunAudit() → Process Audit
+ display) after the NEW SESSION blank-charts fix, suspecting a possible
+ issue with the button. Audited every hop:
+   - Button onclick="intSellPartial(0.25)" → function exists and is
+     structurally identical to intBuy()/intSellAll() (guard, cash/units
+     math, tradeLog.push, intRenderDay()).
+   - Cash/units math: verified numerically in Node (extracted the real
+     function from this file) — BUY 50% then two SELL 25% taps in
+     sequence conserve net worth exactly (100000 → 100000, same-day, no
+     fees), and units decrease correctly each tap (500 → 375 → 281.25).
+   - intRunAudit() classification: t.action.indexOf('SELL ')===0 matches
+     both 'SELL ALL' and 'SELL 25%'; isFullExit/isPartial split correctly
+     routes 'SELL 25%' to the weekly-partial Tier 2 (+5) or generic Tier 3
+     (+10) scoring paths, and correctly triggers the Regime-A/healthy-W-RSI
+     panic-sell path (-20) when applicable — verified numerically in Node
+     against all three branches.
+   - intDrawManualVLines(): isBuy=t.action.indexOf('BUY')===0 correctly
+     evaluates false for 'SELL 25%', so it draws as a red line, matching
+     the header comment's claim.
+ Found ONE genuine wiring gap: the window-export block at the bottom of
+ the Interactive Simulator script (window.intNewSession=…, window.intBuy=…,
+ etc.) was missing `window.intSellPartial = intSellPartial;` — despite an
+ earlier TOC entry (2026-08-21) explicitly claiming "Registered
+ window.intSellPartial for HTML onclick access". That line described
+ intent that never actually landed in the code. In practice this was NOT
+ currently breaking the button, because this is a plain non-module
+ <script> block — top-level `function` declarations auto-attach to
+ `window` in non-strict mode, so the onclick handler still resolved. But
+ every sibling handler (intBuy, intSellAll, intAdvanceDay, intEndReview,
+ intCloseAudit) is exported explicitly, and leaving just this one to rely
+ on implicit global behavior is fragile (would silently break under a
+ future IIFE/module/bundler wrap or "use strict") and left the code not
+ matching the file's own documented history.
+ FIX: added `window.intSellPartial = intSellPartial;` to the export block,
+ matching every sibling handler.
+ VERIFIED: extracted intBuy/intSellPartial/intSellAll/intRegimeFor from
+ this file into a Node harness with a mock DOM/_intState and confirmed the
+ cash/units math and net-worth conservation numerically. Separately
+ extracted the audit-loop classification logic and confirmed 'SELL 25%'
+ correctly routes to Tier 2/Tier 3/panic-sell scoring depending on regime
+ and W-RSI. Confirmed intDrawManualVLines' isBuy check evaluates false for
+ 'SELL 25%'. Grepped the full file for every intSellPartial reference to
+ confirm no other call site or shadow definition exists. No browser
+ available in this environment to click-test the button directly; the fix
+ itself is a no-op change in current browser behavior (explicit export now
+ matches the pre-existing implicit one) so no regression is expected.
+════════════════════════════════════════════════════════════════════════════
+ WHAT CHANGED (Simulator — NEW SESSION blank-charts fix — 2026-08-21e)
+ ────────────────────────────────────────────────────────────────────────
+ ROOT CAUSE: Owner reported that tapping NEW SESSION in the Simulation
+ overlay left the 3 charts blank (stats/labels like Net Worth and DAY 0
+ updated fine, but no chart lines drew). Traced to _intChartBusy, the
+ re-entrancy guard on intRenderChart(): it was a single "return early if
+ busy" flag with no memory of the dropped call. If ANY prior action (NEXT
+ DAY, BUY, SELL, or an earlier NEW SESSION) was still awaiting
+ drawHilegaMilega()'s async IDB reads when NEW SESSION was tapped,
+ intNewSession() would rebuild _intState and call intRenderChart() — but
+ that call saw _intChartBusy already true and returned immediately,
+ silently drawing nothing for the new session. The stale in-flight render
+ from the OLD session/action finished afterward on its own, by which point
+ nothing was left to trigger a fresh draw for the new session, so the
+ canvases stayed blank until some unrelated action happened to fire another
+ render. Text fields looked fine because intRenderDay() sets those
+ synchronously before it awaits intRenderChart() — only the chart call was
+ affected.
+ FIX: replaced the drop-on-busy guard with a queued re-render. A call that
+ arrives while busy now sets _intChartRenderPending = true instead of
+ returning silently; when the in-flight render's finally block completes,
+ it checks that flag and immediately re-invokes intRenderChart() for
+ whatever _intState is current at that point. Every caller (NEW SESSION,
+ NEXT DAY, BUY, SELL, END & REVIEW's pre-render) goes through this same
+ single gate — no caller-specific special-casing.
+ VERIFIED: wrote a Node repro mirroring the exact guard/await structure —
+ an in-flight 300ms render plus a second call 20ms later (simulating NEW
+ SESSION tapped mid-render) — and confirmed the UNFIXED logic never drew
+ the second session's chart at all. Re-ran the same repro against the
+ fixed queued logic and confirmed both renders complete, with the later
+ (current) session's chart drawn last, matching what should be on screen.
+ No browser available in this environment to click-test in situ; the
+ owner should confirm charts now populate immediately after tapping NEW
+ SESSION, including when tapped right after another action (BUY/SELL/NEXT
+ DAY) rather than only from a fully idle screen.
+════════════════════════════════════════════════════════════════════════════
+ WHAT CHANGED (Simulator — END & REVIEW crash fix + SELL 25% comment
+ correction — 2026-08-21d)
+ ────────────────────────────────────────────────────────────────────────
+ ROOT CAUSE: Owner reported END & REVIEW button "not working" (tapping it
+ did nothing visible) and asked for an audit of the buy/sell buttons.
+ Investigation found intRunAudit() referenced a variable `successfulExits`
+ that was never declared anywhere in the function or file — this threw a
+ ReferenceError every time the function ran, which silently aborted
+ execution BEFORE the `intAuditOverlay.style.display = 'flex'` line, so the
+ review panel never opened. Traced to the 2026-08-21 3-tier exit-scoring
+ rework (see entry below): it replaced a single successfulExits counter
+ with three tier-specific counters (monthlyExits, weeklyPartialExits,
+ genericExits) but one display line referencing the old name was missed.
+
+ Separately, while auditing SELL 25% (intSellPartial), found the button's
+ own header comment claimed "four taps of SELL 25% fully liquidate" — this
+ was never true of the code, which sells pct of whatever position remains
+ at tap time (compounds: 100→75→56.25→42.19→31.64, ~68% sold after 4 taps,
+ not 100%). The code itself was correct and consistent (funds/units always
+ balanced, matches standard "sell X% of current holdings" semantics used
+ elsewhere in this app) — only the comment was wrong. No behavior changed.
+
+ FIX:
+ - intRunAudit(): added `var successfulExits = monthlyExits +
+   weeklyPartialExits + genericExits;` immediately before its one use, sourced
+   from the three tier counters that were already being correctly tallied.
+ - intSellPartial(): corrected the header comment to describe actual
+   (compounding, current-holdings) behavior instead of the inaccurate
+   "4 taps fully liquidates" claim.
+
+ VERIFIED:
+ - Extracted the real intRunAudit() source from this file and executed it
+   (Node, mock DOM + mock _intState) against a synthetic trade log covering
+   BUY, SELL 25%, and SELL ALL. Confirmed the UNFIXED version throws
+   `ReferenceError: successfulExits is not defined` and never touches
+   intAuditOverlay. Confirmed the FIXED version completes without
+   throwing and sets intAuditOverlay.style.display to 'flex'.
+ - Extracted and executed intBuy(), intSellAll(), intSellPartial() the same
+   way: confirmed correct cash/units math, correct tradeLog entries, correct
+   "no position" guard (alerts + skips render, doesn't throw), and confirmed
+   the compounding-sell behavior numerically (four 25% taps → 31.64% of
+   original position remains, not 0).
+ - No browser available in this environment — did not visually confirm the
+   overlay renders on-screen or click-test the buttons in situ. Recommend
+   the owner run one live Interactive session (a few buys/sells + END &
+   REVIEW) to confirm the panel now opens and shows correct figures.
+════════════════════════════════════════════════════════════════════════════
+ WHAT CHANGED (Simulator — SELL 25% partial exit + 3-tier exit scoring — 2026-08-21)
+ ────────────────────────────────────────────────────────────────────────
+ ROOT CAUSE: Owner requested (1) a SELL 25% partial exit button alongside
+ SELL ALL, and (2) exit scoring to reflect signal quality rather than a
+ flat +30 for any non-panic sell.
+
+ FIX:
+ - Added SELL 25% button (bottom row, 4-column grid: SELL 25% | SELL ALL |
+   END & REVIEW | NEW SESSION). Sells 25% of current holdings each tap;
+   4 taps = fully liquidated. Stores action:'SELL 25%' in tradeLog.
+ - Added intSellPartial(pct) function, mirroring intSellAll structure.
+ - Reworked intRunAudit() exit scoring into 3 tiers:
+     Full Exit on Monthly Hilega signal (SELL ALL, monthly EMA<WMA)  → +15
+     Partial Exit on Weekly signal      (SELL 25%, weekly EMA<WMA)   → +5
+     Generic Disciplined Exit           (any other non-panic sell)   → +10
+     Panic Sell (Regime Hope, W-RSI>55)                              → -20 (unchanged)
+     Held in Regime Fear per day                         → -20/day capped -100 (unchanged)
+ - isHmGreenUpTo() reused for exit scoring (same closure already in
+   intRunAudit — no new duplicate logic). Checks monthly/weekly at the
+   exact date of each sell trade.
+ - Updated audit display: 3-tier exit stat rows, updated description text.
+ - Registered window.intSellPartial for HTML onclick access.
+ - intDrawManualVLines: SELL 25% correctly gets red dashed line (action
+   does not start with 'BUY' — no code change needed, verified by grep).
+
+ VERIFIED: (see Node test below after implementation)
+
  WHAT CHANGED (AGENTS.md audit — SW/manifest filename + simulator bugs — 2026-08-21)
  ────────────────────────────────────────────────────────────────────────
  BUG 1 (sw.js + manifest.json — CRITICAL): APP_SHELL and start_url pointed
@@ -30,8 +230,15 @@
  After an Interactive render, window._hmPanes pointed to the overlay's hidden
  canvases. Closing the simulator and mousing over Charts drew the crosshair
  on those off-screen canvases (silently failing) instead of the real Charts
- panes — crosshair appeared broken until Charts re-rendered. Fixed: save and
- restore window._hmPanes and window._hmChart in the same try/finally block.
+ panes — crosshair appeared broken until Charts re-rendered. Fixed: save
+ window._hmPanes/_hmChart at simOpen() (before the overlay opens) and restore
+ them at simClose() (after the overlay closes). During the session _hmPanes
+ correctly points to Interactive canvases (crosshair on intHmPane1/2/3Canvas
+ works); after closing _hmPanes is back to Charts canvases (Charts crosshair
+ works). NOTE: an earlier attempt saved/restored inside intRenderChart's
+ finally block — that was wrong because it restored Charts panes after every
+ Next-Day render, breaking the Interactive crosshair mid-session. Corrected
+ by moving save/restore to simOpen/simClose instead.
  BUG 4 (dead variable — simClose): _intPriceChart was declared null and the
  simClose() destroy guard was a permanent no-op (variable never assigned after
  the pre-2026-08-21 single-canvas prototype was replaced by drawHilegaMilega).
@@ -2357,11 +2564,12 @@ body{}
 
     <div style="flex-shrink:0;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;padding:8px 10px 4px;">
       <button onclick="intBuy(0.10)" class="int-action-btn" style="border:1.5px solid var(--green);border-radius:9px;background:var(--surface2);color:var(--green);font-size:9px;font-weight:800;padding:9px 2px;font-family:var(--sans);cursor:pointer;">BUY 10%</button>
-      <button onclick="intAdvanceDay()" class="int-action-btn" style="border:1.5px solid var(--border2);border-radius:9px;background:var(--surface2);color:var(--text-dim);font-size:9px;font-weight:800;padding:9px 2px;font-family:var(--sans);cursor:pointer;">NEXT DAY</button>
+      <button onclick="intAdvanceDay()" class="int-action-btn" style="border:1.5px solid var(--border2);border-radius:9px;background:var(--surface2);color:var(--text-dim);font-size:9px;font-weight:800;padding:9px 2px;font-family:var(--sans);cursor:pointer;">NEXT BAR</button>
       <button onclick="intBuy(0.20)" class="int-action-btn" style="border:1.5px solid var(--green);border-radius:9px;background:var(--surface2);color:var(--green);font-size:9px;font-weight:800;padding:9px 2px;font-family:var(--sans);cursor:pointer;">BUY 20%</button>
       <button onclick="intBuy(0.50)" class="int-action-btn" style="border:1.5px solid var(--green);border-radius:9px;background:var(--surface2);color:var(--green);font-size:9px;font-weight:800;padding:9px 2px;font-family:var(--sans);cursor:pointer;">BUY 50%</button>
     </div>
-    <div style="flex-shrink:0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;padding:0 10px 10px;">
+    <div style="flex-shrink:0;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;padding:0 10px 10px;">
+      <button onclick="intSellPartial(0.25)" class="int-action-btn" style="border:1.5px solid #f87171;border-radius:9px;background:var(--red-dim);color:#f87171;font-size:8px;font-weight:800;padding:8px 2px;font-family:var(--sans);cursor:pointer;">SELL 25%</button>
       <button onclick="intSellAll()" class="int-action-btn" style="border:1.5px solid var(--red);border-radius:9px;background:var(--red-dim);color:var(--red);font-size:8px;font-weight:800;padding:8px 2px;font-family:var(--sans);cursor:pointer;">SELL ALL</button>
       <button onclick="intEndReview()" class="int-action-btn" style="border:1.5px solid var(--amber);border-radius:9px;background:var(--amber-dim);color:var(--amber);font-size:8px;font-weight:800;padding:8px 2px;font-family:var(--sans);cursor:pointer;">END &amp; REVIEW</button>
       <button onclick="intNewSession()" style="border:none;border-radius:9px;padding:8px 2px;font-size:9px;font-weight:800;font-family:var(--sans);color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:var(--glow-acc);cursor:pointer;">NEW SESSION</button>
@@ -2375,10 +2583,30 @@ body{}
       <div style="font-size:12px;font-weight:800;color:var(--amber);">Process Audit</div>
       <button onclick="intCloseAudit()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:6px 11px;font-size:10px;font-weight:700;font-family:var(--sans);cursor:pointer;">Close ✕</button>
     </div>
-    <div style="flex-shrink:0;display:flex;justify-content:space-around;padding:10px;background:var(--surface);border-bottom:1px solid var(--border);">
-      <div style="text-align:center;"><div style="font-size:8px;color:var(--text-faint);text-transform:uppercase;">Final Net Worth</div><div id="intAuditNW" style="font-size:15px;font-weight:800;font-family:var(--mono);margin-top:2px;">—</div></div>
-      <div style="text-align:center;"><div style="font-size:8px;color:var(--text-faint);text-transform:uppercase;">Max DD</div><div id="intAuditDD" style="font-size:15px;font-weight:800;font-family:var(--mono);margin-top:2px;color:var(--red);">—</div></div>
-      <div style="text-align:center;"><div style="font-size:8px;color:var(--text-faint);text-transform:uppercase;">Total Score</div><div id="intAuditScore" style="font-size:15px;font-weight:800;font-family:var(--mono);margin-top:2px;">—</div></div>
+    <div style="flex-shrink:0;display:flex;justify-content:space-around;align-items:center;padding:8px 10px 6px;background:var(--surface);border-bottom:1px solid var(--border);gap:4px;flex-wrap:wrap;">
+      <div style="text-align:center;min-width:60px;">
+        <div style="font-size:7px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;">Net Worth</div>
+        <div id="intAuditNW" style="font-size:13px;font-weight:800;font-family:var(--mono);margin-top:2px;">—</div>
+      </div>
+      <div style="text-align:center;min-width:48px;">
+        <div style="font-size:7px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;">Return</div>
+        <div id="intAuditReturn" style="font-size:13px;font-weight:800;font-family:var(--mono);margin-top:2px;">—</div>
+      </div>
+      <div style="text-align:center;min-width:40px;">
+        <div style="font-size:7px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;">Max DD</div>
+        <div id="intAuditDD" style="font-size:13px;font-weight:800;font-family:var(--mono);margin-top:2px;color:var(--red);">—</div>
+      </div>
+      <div style="text-align:center;min-width:40px;">
+        <div style="font-size:7px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;">Score</div>
+        <div id="intAuditScore" style="font-size:13px;font-weight:800;font-family:var(--mono);margin-top:2px;">—</div>
+      </div>
+      <div style="text-align:center;min-width:36px;">
+        <div style="font-size:7px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;">Grade</div>
+        <div id="intAuditGrade" style="font-size:18px;font-weight:900;font-family:var(--mono);margin-top:1px;line-height:1;">—</div>
+      </div>
+    </div>
+    <div style="flex-shrink:0;padding:4px 10px 4px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;justify-content:flex-end;">
+      <button onclick="intJumpToDay(-1)" style="background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:8px;padding:6px 10px;font-size:8px;font-weight:800;font-family:var(--sans);cursor:pointer;white-space:nowrap;box-shadow:var(--glow-acc);">JUMP TO FIRST VIOLATION ↘</button>
     </div>
     <div id="intAuditTagRow" style="flex-shrink:0;display:flex;gap:6px;padding:6px 10px;flex-wrap:wrap;"></div>
     <div id="intAuditScroll" style="flex:1;overflow-y:auto;"></div>
@@ -16545,7 +16773,17 @@ async function drawHilegaMilega(asOfDate, paneIds) {
       p1: paneIds.p1 || 'hmPane1Canvas', p2: paneIds.p2 || 'hmPane2Canvas', p3: paneIds.p3 || 'hmPane3Canvas',
       hud1: paneIds.hud1 || 'hmHud1', hud2: paneIds.hud2 || 'hmHud2', hud3: paneIds.hud3 || 'hmHud3',
       benchMode: paneIds.benchMode || null, pane3Label: paneIds.pane3Label || 'hmPane3Label',
-      prefetchedDailyMap: paneIds.prefetchedDailyMap || null, quiet: !!paneIds.quiet
+      prefetchedDailyMap: paneIds.prefetchedDailyMap || null, quiet: !!paneIds.quiet,
+      // ADDED (2026-08-21c): opt-in TradingView-style fixed-candle-width mode.
+      // When set (a px/bar number), the render window is chosen as "last N
+      // bars ending at asOfDate" (N = canvas width / fixedBarWidth) instead
+      // of "last tfDays calendar days ending at asOfDate", and drawPane()
+      // uses this fixed px/bar directly instead of deriving xStep from
+      // cW/(n-1). Only Interactive Simulation passes this (see
+      // intRenderChart()); every other caller leaves it undefined, so
+      // window selection and xStep math are byte-for-byte unchanged for
+      // the live Charts tab, NPS Switch, and Tactical Transfer.
+      fixedBarWidth: paneIds.fixedBarWidth || null
     };
     var ov = _pid.quiet ? null : document.getElementById('ov');
     if (ov) ov.style.display = 'flex';
@@ -16865,7 +17103,13 @@ async function drawHilegaMilega(asOfDate, paneIds) {
             hmClearStatBoxes('No monthly data');
             clearTimeout(safetyTimer); hmHideOv(); return;
           }
-          MONTHLY_viewData = MONTHLY_arr.map(parseEntry);
+          // Sort chronologically (oldest first) to match drawHilegaMilega's expectations
+          var sorted = MONTHLY_arr.slice().sort(function(a, b) {
+            var da = a.substring(4,8) + a.substring(2,4) + a.substring(0,2);
+            var db = b.substring(4,8) + b.substring(2,4) + b.substring(0,2);
+            return da < db ? -1 : da > db ? 1 : 0;
+          });
+          MONTHLY_viewData = sorted.map(parseEntry);
         }
 
         // ═══════════════════════════════════════════════════════════════════
@@ -16970,11 +17214,38 @@ async function drawHilegaMilega(asOfDate, paneIds) {
         // `asOfDate` is undefined and `now` is `new Date()` exactly as before
         // — zero behavior change for the live Charts tab.
         var now = asOfDate instanceof Date && !isNaN(asOfDate.getTime()) ? asOfDate : new Date();
-        var cutoffDate = new Date(now.getTime() - tfDays * 86400000);
         var slicedIdx = 0;
-        for (var si2 = 0; si2 < viewData.length; si2++) { var dt = EE.parseDateDDMMYYYY(viewData[si2].date); if (!isNaN(dt.getTime()) && dt >= cutoffDate) { slicedIdx = si2; break; } }
+        var cutoffDate = null;
+        // ADDED (2026-08-21c): fixed-bar-width window selection — TradingView-
+        // style behavior for Interactive Simulation. Instead of "last tfDays
+        // CALENDAR days ending at asOfDate" (which recomputes xStep = cW/(n-1)
+        // every render, so every existing bar's pixel position shifts left
+        // each time a new day is added — the "chart slides left" bug), this
+        // picks "last N BARS ending at asOfDate" where N = floor(canvas width
+        // / fixedBarWidth). Combined with drawPane() using fixedBarWidth
+        // directly as xStep (see drawPane change below) instead of deriving
+        // it from n, existing bars keep a CONSTANT pixel position as new bars
+        // are appended on the right — exactly like a real candlestick chart —
+        // until the window is full, at which point it slides one bar at a
+        // time (oldest bar drops off the left), also matching TradingView.
+        // Only reached when the caller (intRenderChart()) passes
+        // paneIds.fixedBarWidth; every other caller keeps the calendar-cutoff
+        // path below completely unchanged.
+        if (_pid.fixedBarWidth) {
+          var _fbwCanvas = document.getElementById(_pid.p1);
+          var _fbwRectW = (_fbwCanvas && _fbwCanvas.parentElement) ? _fbwCanvas.parentElement.getBoundingClientRect().width : 300;
+          var _fbwPadLR = 40 + 8; // matches drawPane's pad.l + pad.r
+          var _fbwMaxBars = Math.max(2, Math.floor((_fbwRectW - _fbwPadLR) / _pid.fixedBarWidth) + 1);
+          // End index = last bar on/before asOfDate (viewData is already
+          // truncated to asOfDate above, so this is simply the last index).
+          var _fbwEndIdx = viewData.length - 1;
+          slicedIdx = Math.max(0, _fbwEndIdx - _fbwMaxBars + 1);
+        } else {
+          cutoffDate = new Date(now.getTime() - tfDays * 86400000);
+          for (var si2 = 0; si2 < viewData.length; si2++) { var dt = EE.parseDateDDMMYYYY(viewData[si2].date); if (!isNaN(dt.getTime()) && dt >= cutoffDate) { slicedIdx = si2; break; } }
+        }
         var slicedLen = viewData.length - slicedIdx;
-        if (window._HM_DEBUG) console.log('[HM TRACE] cutoffDate=' + cutoffDate.toISOString().slice(0,10) + ' slicedIdx=' + slicedIdx + ' slicedLen=' + slicedLen + ' viewDataTotal=' + viewData.length);
+        if (window._HM_DEBUG) console.log('[HM TRACE] fixedBarWidth=' + _pid.fixedBarWidth + ' cutoffDate=' + (cutoffDate ? cutoffDate.toISOString().slice(0,10) : 'n/a') + ' slicedIdx=' + slicedIdx + ' slicedLen=' + slicedLen + ' viewDataTotal=' + viewData.length);
         if (slicedLen < 2) {
           var periodLabelInsuff = window._hmPeriod.charAt(0).toUpperCase() + window._hmPeriod.slice(1);
           hmShowCanvasMessage('Not enough ' + periodLabelInsuff + ' data points in this range', 'Try a longer timeframe button, or switch to Daily/Weekly period');
@@ -17367,7 +17638,11 @@ async function drawHilegaMilega(asOfDate, paneIds) {
           if (yMax === yMin) { yMax += 1; yMin -= 1; }
           var yPad = (yMax - yMin) * 0.08;
           yMin -= yPad; yMax += yPad;
-          var xStep = cW / Math.max(n - 1, 1);
+          // ADDED (2026-08-21c): fixed-bar-width mode uses a constant px/bar
+          // instead of stretching to fill cW — see the window-selection
+          // comment above (fixedBarWidth) for why this is required for
+          // TradingView-style "new bars append without shifting old ones."
+          var xStep = _pid.fixedBarWidth ? _pid.fixedBarWidth : (cW / Math.max(n - 1, 1));
           var toX = function(i) { return pad.l + i * xStep; };
           var toY = function(v) { return pad.t + cH - ((v - yMin) / (yMax - yMin)) * cH; };
           ctx.strokeStyle = '#e5e7eb'; ctx.lineWidth = 0.5;
@@ -18535,32 +18810,45 @@ function simRefreshTfButtons(){
   });
 }
 function simUpdatePeriodButtonColors(){
+  var s=_intState;
+  if(!s) return;
+  var ci=s.curIdx;
+  var dr=s.dailyRsi[ci];
+  var wr=s.weeklyRsi[ci];
   var keyEl=document.getElementById('hmIndexSelect');
   var key=keyEl?keyEl.value:null;
   var origName=keyEl&&keyEl.options&&keyEl.selectedIndex>=0?(keyEl.options[keyEl.selectedIndex].dataset.name||keyEl.options[keyEl.selectedIndex].textContent):null;
-  function buyModeFor(period){
-    try{
-      var dc=window._deepWeeklyCache;
-      var map=null;
-      if(period==='weekly') map=dc&&dc.weeklyMap;
-      else if(period==='monthly') map=dc&&dc.monthlyMap;
-      else map=dc&&dc.dailyMap;
-      if(!map||!key) return null;
-      var arr=map[key]||map[(key||'').toLowerCase()]||(origName?map[origName.toLowerCase()]:null);
-      if(!arr||arr.length<30) return null;
-      var closes=arr.map(function(e){var p=e.split('|');return parseFloat(p[4]);}).filter(function(v){return !isNaN(v);});
-      if(closes.length<30) return null;
-      var rsi=EE.calcRSISeries(closes,9);
-      var wma=EE.calcWMASeries(rsi,21);
-      var ema=EE.calcEMASeries(rsi,3);
-      for(var i=ema.length-1;i>=0;i--){ if(ema[i]!=null&&wma[i]!=null) return ema[i]>wma[i]; }
-      return null;
-    }catch(e){ return null; }
+  var dc=window._deepWeeklyCache;
+  var monthlyBuy=null;
+  if(dc&&dc.monthlyMap&&key){
+    var marr=dc.monthlyMap[key]||dc.monthlyMap[(key||'').toLowerCase()]||(origName?dc.monthlyMap[origName.toLowerCase()]:null);
+    if(marr&&marr.length>30){
+      var simDateStr=s.dates[ci];
+      var simDt=EE.parseDateDDMMYYYY(simDateStr);
+      var monthlyCloses=[];
+      for(var i=0;i<marr.length;i++){
+        var p=marr[i].split('|');
+        var ds=p[0];
+        var dt=new Date(+ds.substring(4,8),+ds.substring(2,4)-1,+ds.substring(0,2));
+        if(!isNaN(simDt.getTime())&&!isNaN(dt.getTime())&&dt>simDt) break;
+        var c=parseFloat(p[4]);
+        if(!isNaN(c)) monthlyCloses.push(c);
+      }
+      if(monthlyCloses.length>30){
+        var mrsi=EE.calcRSISeries(monthlyCloses,9);
+        var mwma=EE.calcWMASeries(mrsi,21);
+        var mema=EE.calcEMASeries(mrsi,3);
+        var li=monthlyCloses.length-1;
+        if(mema[li]!=null&&mwma[li]!=null) monthlyBuy=mema[li]>mwma[li];
+      }
+    }
   }
+  var dailyBuy=dr!=null?dr<40:null;
+  var weeklyBuy=wr!=null?wr<40:null;
   ['daily','weekly','monthly'].forEach(function(per){
     var btn=document.querySelector('#simUnifiedTop .sim-period-btn[data-period=\"'+per+'\"]');
     if(!btn) return;
-    var isBuy=buyModeFor(per);
+    var isBuy=per==='daily'?dailyBuy:per==='weekly'?weeklyBuy:monthlyBuy;
     btn.style.borderWidth='';
     btn.style.boxShadow='';
     if(isBuy===true){
@@ -18643,6 +18931,16 @@ function simSetStrategy(s) {
   if (zoneGrid) zoneGrid.style.display = (s === 'rsi14') ? 'grid' : 'none';
 }
 
+// _simSavedPanes / _simSavedHmChart: hold the Charts tab's own _hmPanes and
+// _hmChart reference saved at simOpen() and restored at simClose() (BUG 3 FIX
+// — 2026-08-21). While the sim overlay is open, window._hmPanes must point to
+// the Interactive panes so the crosshair on intHmPane1/2/3Canvas still works.
+// Restoring inside intRenderChart's finally block (the earlier approach) was
+// wrong: it restored _hmPanes to Charts panes after every Next-Day render,
+// so mousing over the Interactive canvases drew the crosshair on the hidden
+// Charts canvases instead. Save once here, restore once in simClose().
+var _simSavedPanes = null, _simSavedHmChart = null;
+
 // ── Open/close: locks fund from Charts, timeframe/period are Simulator's own state ──
 function simOpen() {
   var idxSel = document.getElementById('hmIndexSelect');
@@ -18652,6 +18950,11 @@ function simOpen() {
     alert('Select a fund on the Charts tab first, then tap Simulate.');
     return;
   }
+  // BUG 3 FIX: save Charts-tab pane state BEFORE the overlay opens.
+  // drawHilegaMilega() will overwrite these globals when the first Interactive
+  // render runs; simClose() puts them back so the Charts crosshair is intact.
+  _simSavedPanes = window._hmPanes;
+  _simSavedHmChart = window._hmChart;
   _simTfDays=simClampTfDays(_simTfDays,_simPeriod);
   var eff=_simTfDays;
   var tfShort=eff===90?'3M':eff===180?'6M':eff===365?'1Y':eff===730?'2Y':eff===1095?'3Y':(eff+'d');
@@ -18679,6 +18982,15 @@ function simClose() {
   // the pre-2026-08-21 single-canvas approach was replaced by drawHilegaMilega)
   var auditOv = document.getElementById('intAuditOverlay');
   if (auditOv) auditOv.style.display = 'none';
+  // BUG 3 FIX: restore Charts-tab pane state now that the overlay is gone.
+  // _simSavedPanes/_simSavedHmChart were captured in simOpen() before the first
+  // drawHilegaMilega() ran and overwrote window._hmPanes with Interactive panes.
+  // During the session _hmPanes correctly pointed to Interactive canvases
+  // (so the Interactive crosshair worked); now point it back to Charts canvases.
+  if (_simSavedPanes !== null) { window._hmPanes = _simSavedPanes; _simSavedPanes = null; }
+  if (_simSavedHmChart !== null) { window._hmChart = _simSavedHmChart; _simSavedHmChart = null; }
+  // Also reset interactive state so a fresh session starts clean next time
+  _intState = null;
   var _fab2=document.getElementById('ai-fab'); if(_fab2) _fab2.style.display='';
 }
 
@@ -19059,7 +19371,7 @@ window.simSetPeriod = simSetPeriod;
 //     lot-level cost basis; "SELL ALL" liquidates the whole position at
 //     the current NAV.
 //   - No Blind Mode (the source app can hide the chart during play).
-//   - No auto-play. Advancing days is manual ("NEXT DAY" button only).
+//   - No auto-play. Advancing bars is manual ("NEXT BAR" button only).
 //   - Session start point is RANDOM within the fund's available history,
 //     matching the source app's default (`initGame` with no mode arg).
 //   - PC/NC consolidation-breakout alerts, ChoCh swing detection, and the
@@ -19175,9 +19487,15 @@ function intGetLockedDailySeries() {
     : null;
   if (!entries || entries.length < 2) return null;
   // Same 5-field pipe format Section 13's parseEntry uses: date|open|high|low|close
+  // Must sort chronologically (oldest first) to match drawHilegaMilega's DAILY_sorted
+  var sorted = entries.slice().sort(function(a, b) {
+    var da = a.substring(4,8) + a.substring(2,4) + a.substring(0,2);
+    var db = b.substring(4,8) + b.substring(2,4) + b.substring(0,2);
+    return da < db ? -1 : da > db ? 1 : 0;
+  });
   var navs = [], dates = [];
-  for (var i = 0; i < entries.length; i++) {
-    var p = entries[i].split('|');
+  for (var i = 0; i < sorted.length; i++) {
+    var p = sorted[i].split('|');
     var ds = p[0];
     var close = parseFloat(p[4]);
     if (isNaN(close)) continue;
@@ -19213,12 +19531,25 @@ function intNewSession() {
   // in an Interactive session ever mutates fund data, only _intState.
   var prefetchedMap = (window._deepWeeklyCache && window._deepWeeklyCache.dailyMap) ? window._deepWeeklyCache.dailyMap : null;
 
+  // ADDED (2026-08-21c): fixed px/bar for this session, computed once so the
+  // FIRST render looks the same as the old tfDays-based window (i.e. picking
+  // a starting bar count that fills the pane at the same density users were
+  // used to), then held constant for the rest of the session. This is what
+  // makes intAdvanceDay() append new bars on the right at a fixed width
+  // instead of re-fitting all bars to the canvas every day (see
+  // drawHilegaMilega's fixedBarWidth handling for the mechanism).
+  var _fbwStartBars = (function(d,p){ var fl=p==='weekly'?90:p==='monthly'?365:0; var ce=p==='daily'?300:3650; return Math.min(Math.max(d,fl),ce); })(window._hmTfDays || 365, 'daily');
+  var _fbwPaneEl = document.getElementById('intHmPane1Canvas');
+  var _fbwRectW = (_fbwPaneEl && _fbwPaneEl.parentElement) ? _fbwPaneEl.parentElement.getBoundingClientRect().width : 300;
+  var chartXStep = Math.max(1, (_fbwRectW - 48) / Math.max(_fbwStartBars - 1, 1));
+
   _intState = {
     navs: navs, dates: dates, dailyRsi: dailyRsi, weeklyRsi: weeklyRsi,
     startIdx: startIdx, curIdx: startIdx,
     cash: INT_STARTING_CASH, units: 0, tradeLog: [],
     peakNW: INT_STARTING_CASH, maxDD: 0,
-    prefetchedMap: prefetchedMap, chartRendered: false
+    prefetchedMap: prefetchedMap, chartRendered: false,
+    chartXStep: chartXStep
   };
 
   document.getElementById('intAuditOverlay').style.display = 'none';
@@ -19373,20 +19704,45 @@ async function intRenderDay() {
 // Charts tab's own date-range boxes and rendered chart, all matched their
 // pre-session values exactly (see test harness for this fix).
 var _intChartBusy=false;
+// RE-ENTRANCY FIX (2026-08-21e): _intChartBusy used to just `return` when a
+// render was already in flight, silently DROPPING that call. ROOT CAUSE of
+// the "New Session → blank charts" bug: if any prior action (NEXT BAR, BUY,
+// SELL, or an earlier New Session) was still awaiting drawHilegaMilega's
+// async work when NEW SESSION was tapped, intNewSession() would rebuild
+// _intState and call intRenderChart() — but this function saw
+// _intChartBusy===true and returned immediately without drawing anything.
+// The in-flight PREVIOUS render then finished afterward and drew a chart
+// for a session that no longer exists (or drew nothing useful), leaving the
+// new session's 3 canvases permanently blank until some other action
+// happened to trigger a further render. Text fields (Net Worth, Day 0, etc.)
+// looked correct because intRenderDay() sets those synchronously BEFORE
+// awaiting intRenderChart() — only the chart silently failed to draw.
+// FIX: track one pending "re-render requested while busy" flag. When a
+// render finishes, if another call arrived in the meantime, immediately
+// re-run for whatever _intState is current (not the stale one), so the
+// most recent request always wins instead of being dropped. This is the
+// single re-entrancy gate the AGENTS.md process calls for — every caller
+// (NEW SESSION, NEXT BAR, BUY, SELL, END & REVIEW's pre-render) now goes
+// through this same queued path.
+// VERIFIED: node repro (in-flight 300ms render + a second call 20ms later)
+// previously showed the second call's session id NEVER appearing in the
+// drawn list. Same repro against the queued version below now shows both
+// renders complete, with the later request's session drawn last/final.
+var _intChartRenderPending=false;
 async function intRenderChart() {
   var s = _intState;
-  if (!s||_intChartBusy) return;
+  if (!s) return;
+  if (_intChartBusy) { _intChartRenderPending = true; return; }
   _intChartBusy=true;
+  // Save/restore _hmHist, _hmHistCode, _hmPeriod, _hmTfDays — drawHilegaMilega()
+  // overwrites these globals and they must be put back so the Charts tab's own
+  // state is unaffected. _hmPanes and _hmChart are handled at a higher level:
+  // saved by simOpen() before the overlay opens, restored by simClose() after it
+  // closes — so _hmPanes correctly points to Interactive canvases for the whole
+  // session (crosshair works on Interactive panes) and only reverts to Charts
+  // panes when the overlay is gone (BUG 3 FIX — 2026-08-21).
   var savedHist = window._hmHist, savedHistCode = window._hmHistCode;
   var savedPeriod = window._hmPeriod, savedTfDays = window._hmTfDays;
-  // BUG 3 FIX (2026-08-21): also save/restore _hmPanes and _hmChart.
-  // drawHilegaMilega() overwrites window._hmPanes with the Interactive
-  // session's 3 hidden canvases. Without restoration, closing the overlay
-  // leaves _hmPanes pointing to those off-screen canvases — mousing over
-  // the real Charts tab then silently fails to draw the crosshair until
-  // Charts re-renders. Saving/restoring here is symmetric with the
-  // hist/period/tfDays saves directly above, per the existing design.
-  var savedPanes = window._hmPanes, savedHmChart = window._hmChart;
 
   try {
     window._hmPeriod = _simPeriod || 'daily';
@@ -19406,10 +19762,14 @@ async function intRenderChart() {
       p1: 'intHmPane1Canvas', p2: 'intHmPane2Canvas', p3: 'intHmPane3Canvas',
       hud1: 'intHmHud1', hud2: 'intHmHud2', hud3: 'intHmHud3',
       benchMode: 'mtf', pane3Label: 'intHmPane3Label',
-      prefetchedDailyMap: usePrefetched, quiet: s.chartRendered
+      prefetchedDailyMap: usePrefetched, quiet: s.chartRendered,
+      // ADDED (2026-08-21c): TradingView-style fixed candle width — see
+      // drawHilegaMilega's fixedBarWidth comment. s.chartXStep is set once
+      // in intNewSession() and held constant for the whole session.
+      fixedBarWidth: s.chartXStep
     });
-    // Capture the Interactive panes AFTER drawHilegaMilega sets window._hmPanes,
-    // so intDrawManualVLines() can use them immediately after this returns.
+    // Capture Interactive panes after drawHilegaMilega sets window._hmPanes,
+    // so intDrawManualVLines() can use them (BUG 2 fix — 2026-08-21).
     s._intPanes = window._hmPanes;
     s._intHmChart = window._hmChart;
     s.chartRendered = true;
@@ -19418,10 +19778,19 @@ async function intRenderChart() {
   } finally {
     window._hmHist = savedHist; window._hmHistCode = savedHistCode;
     window._hmPeriod = savedPeriod; window._hmTfDays = savedTfDays;
-    // Restore Charts tab's own panes so its crosshair still works after
-    // closing the simulator overlay (BUG 3 fix).
-    window._hmPanes = savedPanes; window._hmChart = savedHmChart;
+    // _hmPanes/_hmChart are NOT restored here — they remain pointing to
+    // Interactive panes for the duration of the session so the crosshair
+    // on intHmPane1/2/3Canvas keeps working. simClose() restores them.
     _intChartBusy=false;
+    // RE-ENTRANCY FIX (2026-08-21e) cont'd: if a render was requested while
+    // this one was in flight (e.g. NEW SESSION tapped mid-render), run it
+    // now instead of leaving the caller's request silently dropped. Uses
+    // whatever _intState is current at this point, so a New Session that
+    // arrived mid-render correctly gets its own chart drawn.
+    if (_intChartRenderPending) {
+      _intChartRenderPending = false;
+      intRenderChart();
+    }
   }
 }
 
@@ -19429,7 +19798,14 @@ function intAdvanceDay() {
   var s = _intState;
   if (!s) { alert('Tap NEW SESSION to begin.'); return; }
   if (s.curIdx >= s.navs.length - 1) { alert('End of available data for this fund/timeframe.'); return; }
-  s.curIdx++;
+  // Advance by period-appropriate amount (TradingView-style):
+  // Daily: 1 day, Weekly: 5 days, Monthly: 20 days
+  var period = _simPeriod || 'daily';
+  var advance = period === 'weekly' ? 5 : period === 'monthly' ? 20 : 1;
+  // Ensure we don't advance past the available data
+  var maxAdvance = s.navs.length - 1 - s.curIdx;
+  var actualAdvance = Math.min(advance, maxAdvance);
+  s.curIdx += actualAdvance;
   intRenderDay();
 }
 
@@ -19462,6 +19838,33 @@ function intSellAll() {
   intRenderDay();
 }
 
+// Partial exit: sells pct of CURRENT holdings (e.g. pct=0.25 → sells 25%,
+// leaving 75% invested). Each tap acts on whatever position remains at that
+// moment, so this compounds — repeated 25% taps do NOT fully liquidate after
+// exactly 4 taps (100→75→56.25→42.19→31.64, i.e. ~68% sold after 4 taps, not
+// 100%); use SELL ALL for full liquidation. (COMMENT FIX 2026-08-21d: the
+// previous version of this comment incorrectly claimed "four taps of SELL
+// 25% fully liquidate" — that was never true of the code below, which
+// always operates on s.units at tap time, not the original position. No
+// behavior changed here, only the comment.)
+// Records action:'SELL 25%' in the
+// tradeLog so intRunAudit() can score it as a Partial Exit (Weekly signal → +5)
+// and intDrawManualVLines draws it as a red dashed line (action ≠ 'BUY…').
+function intSellPartial(pct) {
+  var s = _intState;
+  if (!s) { alert('Tap NEW SESSION to begin.'); return; }
+  if (s.units <= 0.001) { alert('No position to sell.'); return; }
+  var nav = s.navs[s.curIdx];
+  var sellUnits = s.units * pct;
+  s.cash += sellUnits * nav;
+  s.units = Math.max(0, s.units - sellUnits);
+  var wr = s.weeklyRsi[s.curIdx];
+  var regime = intRegimeFor(wr).code;
+  var pctLabel = Math.round(pct * 100) + '%';
+  s.tradeLog.push({ day: s.curIdx - s.startIdx, idx: s.curIdx, action: 'SELL ' + pctLabel, label: 'SELL ' + pctLabel, nav: nav, units: sellUnits, regime: regime });
+  intRenderDay();
+}
+
 // ── Process Audit: ported scoring rules from LD253A1-1.html, verbatim
 // point weights, simplified for no-TSL/no-tax scope (see header comment). ──
 function intRunAudit() {
@@ -19470,7 +19873,12 @@ function intRunAudit() {
 
   var scoreEntry = 0, scoreExit = 0;
   var goodBuys = 0, badBuys = 0, contraBuys = 0, prematureBuys = 0, missedBuyEvents = 0;
-  var successfulExits = 0, panicSells = 0, daysRegimeCHeld = 0, regimeCBlock = 0;
+  // Exit counters — 3 tiers:
+  //   monthlyExits  : SELL ALL when monthly Hilega red (EMA<WMA) → +15
+  //   weeklyPartials: SELL 25% when weekly  Hilega red (EMA<WMA) → +5
+  //   genericExits  : any other disciplined sell                  → +10
+  var monthlyExits = 0, weeklyPartialExits = 0, genericExits = 0;
+  var panicSells = 0, daysRegimeCHeld = 0, regimeCBlock = 0;
   var runningUnits = 0, lastMissedBuyDay = -10, regimeADays = 0, regimeBDays = 0, regimeCDays = 0;
   var violationLog = [];
   var ghmGoodExtra = 0;
@@ -19533,13 +19941,30 @@ function intRunAudit() {
           scoreEntry -= 10; contraBuys++;
           violationLog.push({ day: dayNum, rule: 'CONTRA-TREND BUY — Bought in Regime Watch (W-RSI:' + Math.round(wr) + ')', severity: 'warn' });
         }
-      } else if (t.action === 'SELL ALL') {
+      } else if (t.action === 'SELL ALL' || t.action.indexOf('SELL ') === 0) {
+        // Any SELL action (SELL ALL or SELL 25%, etc.)
         runningUnits = Math.max(0, runningUnits - t.units);
+        var isFullExit = (t.action === 'SELL ALL');
+        var isPartial  = !isFullExit;
         if (regime === 'A' && wr > 55) {
+          // Panic sell: sold while Regime Hope is healthy — no signal to exit
           scoreExit -= 20; panicSells++;
           violationLog.push({ day: dayNum, rule: 'PANIC SELL — Sold in healthy Regime Hope (W-RSI:' + Math.round(wr) + ')', severity: 'danger' });
         } else {
-          scoreExit += 30; successfulExits++;
+          // 3-tier disciplined exit scoring:
+          var sellDateStr = s.dates[i];
+          var mRed = isHmGreenUpTo('monthly', sellDateStr) === false; // monthly Hilega bearish
+          var wRed = isHmGreenUpTo('weekly',  sellDateStr) === false; // weekly  Hilega bearish
+          if (isFullExit && mRed) {
+            // Tier 1: Full exit aligned with Monthly Hilega exit signal
+            scoreExit += 15; monthlyExits++;
+          } else if (isPartial && wRed) {
+            // Tier 2: Partial exit aligned with Weekly Hilega exit signal
+            scoreExit += 5; weeklyPartialExits++;
+          } else {
+            // Tier 3: Generic disciplined exit (no specific Hilega signal)
+            scoreExit += 10; genericExits++;
+          }
         }
       }
     });
@@ -19566,81 +19991,253 @@ function intRunAudit() {
   var finalNW = intCurrentNW();
   var returnPct = ((finalNW - INT_STARTING_CASH) / INT_STARTING_CASH * 100);
 
+  // ── 1. HEADER: Return % and Grade ──────────────────────────────────────
   document.getElementById('intAuditNW').textContent = '₹' + Math.round(finalNW).toLocaleString('en-IN');
   document.getElementById('intAuditNW').style.color = finalNW >= INT_STARTING_CASH ? 'var(--green)' : 'var(--red)';
-  document.getElementById('intAuditDD').textContent = '-' + s.maxDD.toFixed(1) + '%';
+  document.getElementById('intAuditDD').textContent = '−' + s.maxDD.toFixed(1) + '%';
   document.getElementById('intAuditScore').textContent = (totalScore > 0 ? '+' : '') + totalScore;
   document.getElementById('intAuditScore').style.color = totalScore >= 0 ? 'var(--green)' : 'var(--red)';
 
+  // Return %
+  var retSign = returnPct >= 0 ? '+' : '';
+  var retEl = document.getElementById('intAuditReturn');
+  retEl.textContent = retSign + returnPct.toFixed(1) + '%';
+  retEl.style.color = returnPct >= 0 ? 'var(--green)' : 'var(--red)';
+
+  // Grade: S≥80 / A≥50 / B≥20 / C≥0 / D≥-30 / F<-30
+  var gradeEl = document.getElementById('intAuditGrade');
+  var gradeLabel, gradeColor;
+  if      (totalScore >= 80) { gradeLabel = 'S'; gradeColor = '#fde047'; }  // gold
+  else if (totalScore >= 50) { gradeLabel = 'A'; gradeColor = 'var(--green)'; }
+  else if (totalScore >= 20) { gradeLabel = 'B'; gradeColor = '#4ade80'; }
+  else if (totalScore >= 0)  { gradeLabel = 'C'; gradeColor = 'var(--amber)'; }
+  else if (totalScore >= -30){ gradeLabel = 'D'; gradeColor = '#fb923c'; }
+  else                       { gradeLabel = 'F'; gradeColor = 'var(--red)'; }
+  gradeEl.textContent = gradeLabel;
+  gradeEl.style.color = gradeColor;
+
+  // ── TAG PILLS ─────────────────────────────────────────────────────────
   var tagRow = document.getElementById('intAuditTagRow');
   var tags = [];
   if (prematureBuys > 0) tags.push('<span style="background:var(--amber-dim);color:var(--amber);border-radius:999px;padding:3px 9px;font-size:8px;font-weight:800;">⚠️ Premature: ' + prematureBuys + '</span>');
-  if (panicSells > 0) tags.push('<span style="background:var(--red-dim);color:var(--red);border-radius:999px;padding:3px 9px;font-size:8px;font-weight:800;">😰 Panic: ' + panicSells + '</span>');
-  if (badBuys > 0) tags.push('<span style="background:var(--red-dim);color:var(--red);border-radius:999px;padding:3px 9px;font-size:8px;font-weight:800;">🔪 Knife: ' + badBuys + '</span>');
+  if (panicSells > 0)    tags.push('<span style="background:var(--red-dim);color:var(--red);border-radius:999px;padding:3px 9px;font-size:8px;font-weight:800;">😰 Panic: ' + panicSells + '</span>');
+  if (badBuys > 0)       tags.push('<span style="background:var(--red-dim);color:var(--red);border-radius:999px;padding:3px 9px;font-size:8px;font-weight:800;">🔪 Knife: ' + badBuys + '</span>');
+  if (monthlyExits > 0)  tags.push('<span style="background:#14532d;color:#4ade80;border-radius:999px;padding:3px 9px;font-size:8px;font-weight:800;">📅 Monthly Exit: ' + monthlyExits + '</span>');
   tagRow.innerHTML = tags.join('');
 
-  var fmtScore = function(v) { return '<span style="color:' + (v >= 0 ? 'var(--green)' : 'var(--red)') + ';font-family:var(--mono);font-weight:800;font-size:12px;">' + (v > 0 ? '+' + v : v) + '</span>'; };
-  var statLine = function(label, val, color) { return '<div style="display:flex;justify-content:space-between;font-size:9.5px;padding:3px 0;border-bottom:1px solid var(--border);"><span>' + label + '</span><span style="color:' + (color || 'var(--text)') + ';">' + val + '</span></div>'; };
+  // ── HELPERS ───────────────────────────────────────────────────────────
+  var fmtScore = function(v) {
+    return '<span style="color:' + (v >= 0 ? 'var(--green)' : 'var(--red)') + ';font-family:var(--mono);font-weight:800;font-size:12px;">' + (v > 0 ? '+' + v : v) + '</span>';
+  };
+  var statLine = function(label, val, color, indent) {
+    var pad = indent ? 'padding-left:12px;' : '';
+    return '<div style="display:flex;justify-content:space-between;font-size:9.5px;padding:3px 0;border-bottom:1px solid var(--border);' + pad + '"><span>' + label + '</span><span style="color:' + (color || 'var(--text)') + ';">' + val + '</span></div>';
+  };
+  var totalDays = s.curIdx - s.startIdx;
 
   var html = '';
+
+  // ── 2. ENTRY SECTION ─────────────────────────────────────────────────
   html += '<div style="margin:8px 10px;padding:9px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:11px;">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span style="font-size:11px;font-weight:800;color:var(--accent-hover);">Entry · The Hunter</span>' + fmtScore(scoreEntry) + '</div>';
-  html += '<div style="font-size:8.5px;color:var(--text-faint);font-style:italic;margin-bottom:6px;line-height:1.4;">Expected: Buy Regime Hope dips (RSI &lt; 40) or Slingshots (Δ &lt; ' + INT_BUY_DELTA_LEVEL + '). Buys after BOTH Weekly+Monthly Hilega green (EMA&gt;WMA) earn +30 vs +20. Avoid premature or contra-trend buys.</div>';
-  html += statLine('Good Buys (Signal / Dip)', goodBuys, 'var(--green)');
-  if(ghmGoodExtra>0) html += statLine('· of which W+M Hilega green (+30)', ghmGoodExtra, 'var(--green)');
-  html += statLine('Premature Buys (No signal)', prematureBuys, 'var(--red)');
-  html += statLine('Bad Buys (Knives / Wrong Regime)', badBuys, 'var(--red)');
-  html += statLine('Contra-Trend Buys (Regime Watch)', contraBuys, 'var(--red)');
-  html += statLine('Missed Signal Events', missedBuyEvents, 'var(--red)');
+  html += '<div style="font-size:8.5px;color:var(--text-faint);font-style:italic;margin-bottom:6px;line-height:1.4;">Buy in Regime Hope (W-RSI&gt;55) when D-RSI&lt;40 or Slingshot Δ&lt;' + INT_BUY_DELTA_LEVEL + '. Both W+M Hilega green = +30, partial = +20.</div>';
+  html += statLine('Good Buys (Signal hit)', goodBuys, 'var(--green)');
+  if (ghmGoodExtra > 0) html += statLine('↳ of which W+M Hilega green (+30)', ghmGoodExtra, 'var(--green)', true);
+  if (goodBuys - ghmGoodExtra > 0) html += statLine('↳ of which partial Hilega (+20)', goodBuys - ghmGoodExtra, '#86efac', true);
+  html += statLine('Premature Buys (no signal, −5 each)', prematureBuys, prematureBuys > 0 ? 'var(--red)' : 'var(--text)');
+  html += statLine('Knife Catches (Regime Fear, −20 each)', badBuys, badBuys > 0 ? 'var(--red)' : 'var(--text)');
+  html += statLine('Contra-Trend Buys (Watch, −10 each)', contraBuys, contraBuys > 0 ? 'var(--red)' : 'var(--text)');
+  html += statLine('Missed Buy Signals (−10 each)', missedBuyEvents, missedBuyEvents > 0 ? 'var(--red)' : 'var(--text)');
   html += '</div>';
 
+  // ── 3. EXIT SECTION — 3-tier breakdown ───────────────────────────────
   html += '<div style="margin:8px 10px;padding:9px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:11px;">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span style="font-size:11px;font-weight:800;color:var(--red);">Exit · The Defender</span>' + fmtScore(scoreExit) + '</div>';
-  html += '<div style="font-size:8.5px;color:var(--text-faint);font-style:italic;margin-bottom:6px;line-height:1.4;">Expected: Sell all on Regime Fear crash. Never panic-sell in healthy Regime Hope.</div>';
-  html += statLine('Disciplined Exits', successfulExits, 'var(--green)');
-  html += statLine('Panic Sells (Regime Hope, healthy)', panicSells, 'var(--red)');
-  html += statLine('Days held in Regime Fear (capped)', daysRegimeCHeld + ' (−' + Math.min(daysRegimeCHeld * 20, 100) + ')', 'var(--red)');
+  html += '<div style="font-size:8.5px;color:var(--text-faint);font-style:italic;margin-bottom:6px;line-height:1.4;">SELL ALL on Monthly Hilega exit signal = +15. SELL 25% on Weekly signal = +5. Generic disciplined exit = +10. Never sell in healthy Regime Hope.</div>';
+  // Tier 1
+  html += statLine('🏆 Full Exit on Monthly Hilega (SELL ALL, +15)', monthlyExits, monthlyExits > 0 ? 'var(--green)' : 'var(--text)');
+  // Tier 2
+  html += statLine('📈 Partial Exit on Weekly Signal (SELL 25%, +5)', weeklyPartialExits, weeklyPartialExits > 0 ? '#86efac' : 'var(--text)');
+  // Tier 3
+  html += statLine('✅ Generic Disciplined Exit (+10)', genericExits, genericExits > 0 ? 'var(--green)' : 'var(--text)');
+  html += statLine('😰 Panic Sells (Regime Hope, W-RSI>55, −20)', panicSells, panicSells > 0 ? 'var(--red)' : 'var(--text)');
+  html += statLine('🔥 Days held in Regime Fear (−20/day, cap −100)', daysRegimeCHeld > 0 ? daysRegimeCHeld + ' days (−' + Math.min(daysRegimeCHeld * 20, 100) + ')' : '0', daysRegimeCHeld > 0 ? 'var(--red)' : 'var(--text)');
   html += '</div>';
 
+  // ── 4. REGIME BREAKDOWN BAR ───────────────────────────────────────────
+  if (totalDays > 0) {
+    var pA = Math.round(regimeADays / totalDays * 100);
+    var pB = Math.round(regimeBDays / totalDays * 100);
+    var pC = 100 - pA - pB; if (pC < 0) pC = 0;
+    html += '<div style="margin:8px 10px;padding:9px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:11px;">';
+    html += '<div style="font-size:10px;font-weight:800;color:var(--text);margin-bottom:6px;">Session Environment · ' + totalDays + ' days</div>';
+    html += '<div style="display:flex;border-radius:6px;overflow:hidden;height:14px;margin-bottom:6px;">';
+    if (pA > 0) html += '<div style="width:' + pA + '%;background:var(--green);opacity:.7;" title="Regime Hope ' + pA + '%"></div>';
+    if (pB > 0) html += '<div style="width:' + pB + '%;background:var(--amber);opacity:.7;" title="Regime Watch ' + pB + '%"></div>';
+    if (pC > 0) html += '<div style="width:' + pC + '%;background:var(--red);opacity:.7;" title="Regime Fear ' + pC + '%"></div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:12px;font-size:8.5px;">';
+    html += '<span style="color:var(--green);">🟢 Hope ' + pA + '% (' + regimeADays + 'd)</span>';
+    html += '<span style="color:var(--amber);">🟡 Watch ' + pB + '% (' + regimeBDays + 'd)</span>';
+    html += '<span style="color:var(--red);">🔴 Fear ' + pC + '% (' + regimeCDays + 'd)</span>';
+    html += '</div>';
+    html += '</div>';
+  }
+
+  // ── 5. PER-TRADE SUMMARY TABLE ────────────────────────────────────────
+  if (s.tradeLog.length > 0) {
+    // Build a per-trade score table by re-walking the trade log with
+    // the same classification logic used above (read-only, no re-scoring).
+    var tradeRows = [];
+    s.tradeLog.forEach(function(t) {
+      var dayNum = t.idx - s.startIdx;
+      var wr2 = s.weeklyRsi[t.idx] != null ? s.weeklyRsi[t.idx] : 50;
+      var dr2 = s.dailyRsi[t.idx]  != null ? s.dailyRsi[t.idx]  : 50;
+      var reg2 = intRegimeFor(wr2);
+      var delta2 = dr2 - wr2;
+      var pts = 0, label = '', labelCol = 'var(--text)';
+      if (t.action === 'BUY') {
+        if (reg2.code === 'A') {
+          if (dr2 < 40 || delta2 < INT_BUY_DELTA_LEVEL) {
+            var asOf2 = s.dates[t.idx];
+            var wG = isHmGreenUpTo('weekly', asOf2);
+            var mG = isHmGreenUpTo('monthly', asOf2);
+            if (wG === true && mG === true) { pts = +30; label = 'Good Buy +30 🏆'; labelCol = '#fde047'; }
+            else { pts = +20; label = 'Good Buy +20 ✅'; labelCol = 'var(--green)'; }
+          } else { pts = -5; label = 'Premature −5 ⚠️'; labelCol = 'var(--amber)'; }
+        } else if (reg2.code === 'C') { pts = -20; label = 'Knife Catch −20 🔪'; labelCol = 'var(--red)'; }
+        else { pts = -10; label = 'Contra-Trend −10 ⚠️'; labelCol = 'var(--amber)'; }
+      } else if (t.action === 'SELL ALL' || t.action.indexOf('SELL ') === 0) {
+        var isFullExit2 = t.action === 'SELL ALL';
+        if (reg2.code === 'A' && wr2 > 55) { pts = -20; label = 'Panic Sell −20 😰'; labelCol = 'var(--red)'; }
+        else {
+          var asOf2s = s.dates[t.idx];
+          var mRed2 = isHmGreenUpTo('monthly', asOf2s) === false;
+          var wRed2 = isHmGreenUpTo('weekly',  asOf2s) === false;
+          if (isFullExit2 && mRed2)   { pts = +15; label = 'Full Exit Monthly +15 🏆'; labelCol = 'var(--green)'; }
+          else if (!isFullExit2 && wRed2) { pts = +5;  label = 'Partial Exit Weekly +5 📈'; labelCol = '#86efac'; }
+          else                             { pts = +10; label = 'Disciplined Exit +10 ✅'; labelCol = 'var(--green)'; }
+        }
+      }
+      var regBadge = reg2.code === 'A' ? '<span style="color:var(--green);font-size:7.5px;">Hope</span>' :
+                     reg2.code === 'B' ? '<span style="color:var(--amber);font-size:7.5px;">Watch</span>' :
+                                         '<span style="color:var(--red);font-size:7.5px;">Fear</span>';
+      tradeRows.push('<div style="display:flex;align-items:center;gap:6px;font-size:8.5px;padding:4px 0;border-bottom:1px solid var(--border);">' +
+        '<span style="color:var(--text-faint);min-width:32px;">Day ' + dayNum + '</span>' +
+        '<span style="font-weight:700;min-width:50px;color:var(--text);">' + t.action + '</span>' +
+        regBadge +
+        '<span style="color:' + labelCol + ';flex:1;text-align:right;">' + label + '</span>' +
+        '</div>');
+    });
+    // Wrap in collapsible details element
+    html += '<details style="margin:8px 10px;" open>';
+    html += '<summary style="padding:9px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:11px;font-size:10px;font-weight:800;color:var(--text);cursor:pointer;list-style:none;display:flex;justify-content:space-between;">';
+    html += '<span>Trade-by-Trade Breakdown</span><span style="color:var(--text-faint);font-size:8px;font-weight:400;">' + s.tradeLog.length + ' trade(s) — tap to toggle ▾</span>';
+    html += '</summary>';
+    html += '<div style="padding:4px 10px 8px;background:var(--surface);border:1px solid var(--border2);border-top:none;border-radius:0 0 11px 11px;">';
+    html += tradeRows.join('');
+    html += '</div></details>';
+  }
+
+  // ── 6. RULE VIOLATION LOG (existing, unchanged) ───────────────────────
   html += '<div style="margin:8px 10px;padding:9px 10px;background:var(--surface);border:1px solid var(--border2);border-radius:11px;">';
   html += '<div style="font-size:10px;font-weight:800;color:var(--text);margin-bottom:6px;">Rule Violation Log</div>';
   if (violationLog.length === 0) {
     html += '<div style="font-size:9px;color:var(--green);">✅ Zero rule violations recorded.</div>';
   } else {
     violationLog.forEach(function(v) {
-      var col = v.severity === 'danger' ? 'var(--red)' : 'var(--amber)';
+      var col  = v.severity === 'danger' ? 'var(--red)' : 'var(--amber)';
       var icon = v.severity === 'danger' ? '🚨' : '⚠️';
-      html += '<div style="display:flex;gap:6px;font-size:8.5px;padding:4px 0;border-bottom:1px solid var(--border);"><span>' + icon + '</span><span style="color:var(--text-faint);min-width:38px;">Day ' + v.day + '</span><span style="color:' + col + ';flex:1;">' + v.rule + '</span></div>';
+      html += '<div onclick="intJumpToDay(' + v.day + ')" style="display:flex;gap:6px;font-size:8.5px;padding:4px 0;border-bottom:1px solid var(--border);cursor:pointer;" title="Tap to jump chart to Day ' + v.day + '">' +
+        '<span>' + icon + '</span>' +
+        '<span style="color:var(--text-faint);min-width:38px;">Day ' + v.day + '</span>' +
+        '<span style="color:' + col + ';flex:1;">' + v.rule + '</span>' +
+        '<span style="color:var(--accent);font-size:7px;align-self:center;">↗</span>' +
+        '</div>';
     });
   }
   html += '</div>';
 
+  // ── REMARKS (existing, unchanged) ─────────────────────────────────────
   var remarks = [];
   if (s.tradeLog.length === 0) {
-    remarks.push({ color: 'var(--text-faint)', text: '👻 <b>Ghost Player:</b> You watched ' + (s.curIdx - s.startIdx) + ' days of market action and made zero trades. Observation is good — paralysis is not.' });
+    remarks.push({ color: 'var(--text-faint)', text: '👻 <b>Ghost Player:</b> You watched ' + totalDays + ' days of market action and made zero trades. Observation is good — paralysis is not.' });
   } else {
-    if (panicSells >= 1) remarks.push({ color: 'var(--red)', text: '⚠️ <b>Panic Exit Detected:</b> You exited ' + panicSells + ' time(s) in a healthy Regime Hope with no clear breach. Selling into strength destroys compounding.' });
-    if (badBuys >= 2) remarks.push({ color: 'var(--accent2)', text: '⚠️ <b>Reckless Hunting:</b> You caught falling knives ' + badBuys + ' time(s) by buying in Regime Fear. Wait for the regime to turn first.' });
+    if (panicSells >= 1)    remarks.push({ color: 'var(--red)',     text: '⚠️ <b>Panic Exit Detected:</b> You exited ' + panicSells + ' time(s) in a healthy Regime Hope with no clear breach. Selling into strength destroys compounding.' });
+    if (badBuys >= 2)       remarks.push({ color: 'var(--accent2)', text: '⚠️ <b>Reckless Hunting:</b> You caught falling knives ' + badBuys + ' time(s) by buying in Regime Fear. Wait for the regime to turn first.' });
     if (prematureBuys >= 2) remarks.push({ color: 'var(--accent2)', text: '⚠️ <b>Trigger Happiness:</b> You bought ' + prematureBuys + ' time(s) in Regime Hope without a valid signal. Patience between signals is a position too.' });
     if (missedBuyEvents >= 3) remarks.push({ color: 'var(--accent2)', text: '⚠️ <b>Hesitation Detected:</b> You missed ' + missedBuyEvents + ' high-probability entry signals.' });
     if (daysRegimeCHeld > 2) remarks.push({ color: 'var(--red)', text: '🚨 <b>Critical Risk Failure:</b> You held a position for ' + daysRegimeCHeld + ' days while Regime Fear was active.' });
-    if (remarks.length === 0) remarks.push({ color: 'var(--green)', text: '✅ <b>Disciplined Process:</b> Clean, mechanical execution across ' + (s.curIdx - s.startIdx) + ' days. You followed the rules with consistency.' });
+    if (remarks.length === 0) remarks.push({ color: 'var(--green)', text: '✅ <b>Disciplined Process:</b> Clean, mechanical execution across ' + totalDays + ' days. You followed the rules with consistency.' });
   }
   remarks.forEach(function(r) {
     html += '<div style="margin:8px 10px;padding:9px 10px;border-radius:11px;border-left:3px solid ' + r.color + ';background:var(--surface);font-size:9.5px;line-height:1.5;color:var(--text-dim);">' + r.text + '</div>';
   });
 
+  // ── 6b. NEXT SESSION FOCUS training tip ──────────────────────────────
+  // Derive the single most urgent correction from the session's violations.
+  // Priority order: daysRegimeCHeld > panicSells > badBuys > prematureBuys > missedBuyEvents
+  var tip = '';
+  if (daysRegimeCHeld > 2) {
+    tip = '📌 <b>Next Session Focus:</b> The moment the regime turns <b>Fear</b> (W-RSI drops below 40) and you hold a position — exit immediately. Don\'t wait. Regime Fear erodes principal fast.';
+  } else if (panicSells >= 1) {
+    tip = '📌 <b>Next Session Focus:</b> Before tapping SELL, check the regime. If W-RSI is still above 55 (Regime Hope) and Hilega is green, hold — selling now is panic, not discipline.';
+  } else if (badBuys >= 2) {
+    tip = '📌 <b>Next Session Focus:</b> Only buy when W-RSI &gt; 55 (Regime Hope is active). If the market is in Watch or Fear, let it stabilise first — no regime, no buy.';
+  } else if (prematureBuys >= 2) {
+    tip = '📌 <b>Next Session Focus:</b> A valid buy signal requires D-RSI &lt; 40 (oversold) OR Slingshot Δ &lt; ' + INT_BUY_DELTA_LEVEL + '. If neither condition is met, use NEXT DAY and wait.';
+  } else if (missedBuyEvents >= 3) {
+    tip = '📌 <b>Next Session Focus:</b> Check the regime + RSI banner before every NEXT DAY tap. When you see "SLINGSHOT" or "RSI &lt; 40" inside Regime Hope, that is your cue to buy — don\'t hesitate.';
+  } else if (monthlyExits === 0 && (genericExits + weeklyPartialExits) > 0) {
+    tip = '📌 <b>Next Session Focus:</b> Try to time your SELL ALL to a <b>Monthly Hilega exit signal</b> (Monthly EMA crosses below WMA). That earns +15 vs +10 for a generic exit — it is the highest-quality exit.';
+  }
+  if (tip) {
+    html += '<div style="margin:8px 10px 12px;padding:10px 12px;background:var(--surface);border:1px solid var(--amber);border-radius:11px;font-size:9.5px;line-height:1.6;color:var(--text-dim);">' + tip + '</div>';
+  }
+
   document.getElementById('intAuditScroll').innerHTML = html;
   document.getElementById('intAuditOverlay').style.display = 'flex';
+
 }
 
 function intEndReview() { intRunAudit(); var _fab=document.getElementById('ai-fab'); if(_fab) _fab.style.display='none'; }
 function intCloseAudit() { document.getElementById('intAuditOverlay').style.display = 'none'; var _ov=document.getElementById('sim-overlay'); var _fab=document.getElementById('ai-fab'); if(_fab){ if(_ov && _ov.style.display==='flex') _fab.style.display='none'; else _fab.style.display=''; } }
+function intJumpToDay(day){
+  var s=_intState; if(!s) return;
+  if(day===-1){
+    var log=document.querySelector('#intAuditScroll [onclick^="intJumpToDay"]');
+    if(!log) return;
+    var m=log.getAttribute('onclick').match(/\d+/);
+    day=m?parseInt(m[0],10):0;
+  }
+  var targetIdx=s.startIdx+day;
+  if(targetIdx< s.startIdx) targetIdx=s.startIdx;
+  if(targetIdx> s.curIdx) targetIdx=s.curIdx;
+  s.curIdx=targetIdx;
+  document.getElementById('intAuditOverlay').style.display='none';
+  intRenderDay();
+}
+window.intJumpToDay=intJumpToDay;
 
+// WIRING FIX (2026-08-21f): window.intSellPartial was never actually
+// registered here, despite the 2026-08-21 TOC entry claiming it had been
+// ("Registered window.intSellPartial for HTML onclick access" — that line
+// described intent, not a change that landed). SELL 25%'s onclick attribute
+// (onclick="intSellPartial(0.25)") still worked in practice because this is
+// a plain non-module <script> block, where top-level `function` declarations
+// auto-attach to `window` in non-strict mode — so the button was NOT
+// actually broken. But every sibling action handler (intBuy, intSellAll,
+// intAdvanceDay, etc.) is exported explicitly here, and relying on the
+// implicit global-function behavior for just this one handler is fragile —
+// it would silently break if this script block were ever wrapped in an
+// IIFE/module or run under "use strict" with a bundler, and it left the
+// code not matching what the file's own history claims. Added for
+// consistency with every other handler and to match documented intent.
 window.intNewSession = intNewSession;
 window.intAdvanceDay = intAdvanceDay;
 window.intBuy = intBuy;
 window.intSellAll = intSellAll;
+window.intSellPartial = intSellPartial;
 window.intEndReview = intEndReview;
 window.intCloseAudit = intCloseAudit;
 </script>
