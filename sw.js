@@ -1,6 +1,6 @@
 // ── Timeline Scanner — Service Worker ──
 // Cache-first app shell for a single-file PWA: everything (HTML, CSS, JS,
-// Chart.js) is inlined into index.html, so the "app shell" is just that
+// Chart.js) is inlined into Timeline_18H.html, so the "app shell" is just that
 // one file plus the manifest and icons. All actual DATA (NSE/NPS/BAF
 // price history) lives in IndexedDB, which the browser manages
 // independently of this cache — this service worker only makes the app's
@@ -11,34 +11,16 @@
 // clear signal to bump the other too, even though they serve different
 // purposes (backup format vs. offline shell).
 //
-// 2026-08-22: bumped v6.05 -> v6.06. RENAME: the app file (previously
-// Timeline_18H.html) is being renamed to index.html for GitHub Pages
-// hosting (GitHub Pages serves index.html at the repo root by default;
-// no other file name works without extra Pages config). Updated all
-// three references (APP_SHELL entry, the offline-navigation fallback,
-// and manifest.json's start_url — see that file) from
-// './Timeline_18H.html' to './index.html', and bumped the cache name so
-// any browser that already installed the v6.05 service worker (which
-// still references the old filename) is forced to delete that cache and
-// re-fetch under the new name on next visit, rather than serving a
-// permanently-404ing cached entry. This is the same class of fix as the
-// v6.05 entry directly below — filename drift between the actual app
-// file and what these three references point to has broken offline
-// install twice now, so double-check this trio any time the app file is
-// renamed or moved.
-//
 // 2026-08-21: bumped v6.04 -> v6.05. AUDIT FIX: the APP_SHELL list and the
 // offline-navigation fallback both referenced './index.html' and './', but
-// the actual app file was Timeline_18H.html at the time. There was no
-// index.html in the root of that deployment — the only index.html in the
-// project lived inside the icons/ subfolder (unrelated). The v6.04 cache
-// therefore silently 404'd on every install (individual cache.add().catch()
-// swallowed the error) and the offline navigation fallback returned a
-// useless 404 response instead of the real app shell. Fixed all three
-// references to './Timeline_18H.html' and bumped the cache name so browsers
-// with the old broken v6.04 cache were forced to re-fetch from scratch on
-// the next service worker update cycle. (Superseded by the 2026-08-22
-// rename above — the app file is now genuinely called index.html.)
+// the actual app file is Timeline_18H.html. There is no index.html in the
+// root of this deployment — the only index.html in the project lives inside
+// the icons/ subfolder (unrelated). The v6.04 cache therefore silently 404'd
+// on every install (individual cache.add().catch() swallowed the error) and
+// the offline navigation fallback returned a useless 404 response instead of
+// the real app shell. Fixed all three references to './Timeline_18H.html'
+// and bumped the cache name so browsers with the old broken v6.04 cache are
+// forced to re-fetch from scratch on the next service worker update cycle.
 //
 // 2026-08-19: bumped v6.03 -> v6.04. The v6.03 tag was set in index.html
 // alongside sw.js during the Indigo Pulse dark-theme UI redesign, but
@@ -50,10 +32,10 @@
 // re-fetch everything fresh on this deploy, so the dark-theme rebuild
 // actually reaches the phone on the next app open instead of silently
 // serving the old light-mode index.html for one more session.
-const CACHE_NAME = 'timeline-scanner-v6.06';
+const CACHE_NAME = 'timeline-scanner-v6.05';
 
 const APP_SHELL = [
-  './index.html',
+  './Timeline_18H.html',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-maskable-192.png',
@@ -122,9 +104,9 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => {
           // Offline and not in cache: for navigations, fall back to the
-          // cached index.html so the app shell still loads.
+          // cached Timeline_18H.html so the app shell still loads.
           if (event.request.mode === 'navigate') {
-            return caches.match('./index.html');
+            return caches.match('./Timeline_18H.html');
           }
           return undefined;
         });

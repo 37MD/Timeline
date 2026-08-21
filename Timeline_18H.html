@@ -30,8 +30,15 @@
  After an Interactive render, window._hmPanes pointed to the overlay's hidden
  canvases. Closing the simulator and mousing over Charts drew the crosshair
  on those off-screen canvases (silently failing) instead of the real Charts
- panes — crosshair appeared broken until Charts re-rendered. Fixed: save and
- restore window._hmPanes and window._hmChart in the same try/finally block.
+ panes — crosshair appeared broken until Charts re-rendered. Fixed: save
+ window._hmPanes/_hmChart at simOpen() (before the overlay opens) and restore
+ them at simClose() (after the overlay closes). During the session _hmPanes
+ correctly points to Interactive canvases (crosshair on intHmPane1/2/3Canvas
+ works); after closing _hmPanes is back to Charts canvases (Charts crosshair
+ works). NOTE: an earlier attempt saved/restored inside intRenderChart's
+ finally block — that was wrong because it restored Charts panes after every
+ Next-Day render, breaking the Interactive crosshair mid-session. Corrected
+ by moving save/restore to simOpen/simClose instead.
  BUG 4 (dead variable — simClose): _intPriceChart was declared null and the
  simClose() destroy guard was a permanent no-op (variable never assigned after
  the pre-2026-08-21 single-canvas prototype was replaced by drawHilegaMilega).
@@ -18643,6 +18650,16 @@ function simSetStrategy(s) {
   if (zoneGrid) zoneGrid.style.display = (s === 'rsi14') ? 'grid' : 'none';
 }
 
+// _simSavedPanes / _simSavedHmChart: hold the Charts tab's own _hmPanes and
+// _hmChart reference saved at simOpen() and restored at simClose() (BUG 3 FIX
+// — 2026-08-21). While the sim overlay is open, window._hmPanes must point to
+// the Interactive panes so the crosshair on intHmPane1/2/3Canvas still works.
+// Restoring inside intRenderChart's finally block (the earlier approach) was
+// wrong: it restored _hmPanes to Charts panes after every Next-Day render,
+// so mousing over the Interactive canvases drew the crosshair on the hidden
+// Charts canvases instead. Save once here, restore once in simClose().
+var _simSavedPanes = null, _simSavedHmChart = null;
+
 // ── Open/close: locks fund from Charts, timeframe/period are Simulator's own state ──
 function simOpen() {
   var idxSel = document.getElementById('hmIndexSelect');
@@ -18652,6 +18669,11 @@ function simOpen() {
     alert('Select a fund on the Charts tab first, then tap Simulate.');
     return;
   }
+  // BUG 3 FIX: save Charts-tab pane state BEFORE the overlay opens.
+  // drawHilegaMilega() will overwrite these globals when the first Interactive
+  // render runs; simClose() puts them back so the Charts crosshair is intact.
+  _simSavedPanes = window._hmPanes;
+  _simSavedHmChart = window._hmChart;
   _simTfDays=simClampTfDays(_simTfDays,_simPeriod);
   var eff=_simTfDays;
   var tfShort=eff===90?'3M':eff===180?'6M':eff===365?'1Y':eff===730?'2Y':eff===1095?'3Y':(eff+'d');
@@ -18679,6 +18701,15 @@ function simClose() {
   // the pre-2026-08-21 single-canvas approach was replaced by drawHilegaMilega)
   var auditOv = document.getElementById('intAuditOverlay');
   if (auditOv) auditOv.style.display = 'none';
+  // BUG 3 FIX: restore Charts-tab pane state now that the overlay is gone.
+  // _simSavedPanes/_simSavedHmChart were captured in simOpen() before the first
+  // drawHilegaMilega() ran and overwrote window._hmPanes with Interactive panes.
+  // During the session _hmPanes correctly pointed to Interactive canvases
+  // (so the Interactive crosshair worked); now point it back to Charts canvases.
+  if (_simSavedPanes !== null) { window._hmPanes = _simSavedPanes; _simSavedPanes = null; }
+  if (_simSavedHmChart !== null) { window._hmChart = _simSavedHmChart; _simSavedHmChart = null; }
+  // Also reset interactive state so a fresh session starts clean next time
+  _intState = null;
   var _fab2=document.getElementById('ai-fab'); if(_fab2) _fab2.style.display='';
 }
 
@@ -19377,16 +19408,15 @@ async function intRenderChart() {
   var s = _intState;
   if (!s||_intChartBusy) return;
   _intChartBusy=true;
+  // Save/restore _hmHist, _hmHistCode, _hmPeriod, _hmTfDays — drawHilegaMilega()
+  // overwrites these globals and they must be put back so the Charts tab's own
+  // state is unaffected. _hmPanes and _hmChart are handled at a higher level:
+  // saved by simOpen() before the overlay opens, restored by simClose() after it
+  // closes — so _hmPanes correctly points to Interactive canvases for the whole
+  // session (crosshair works on Interactive panes) and only reverts to Charts
+  // panes when the overlay is gone (BUG 3 FIX — 2026-08-21).
   var savedHist = window._hmHist, savedHistCode = window._hmHistCode;
   var savedPeriod = window._hmPeriod, savedTfDays = window._hmTfDays;
-  // BUG 3 FIX (2026-08-21): also save/restore _hmPanes and _hmChart.
-  // drawHilegaMilega() overwrites window._hmPanes with the Interactive
-  // session's 3 hidden canvases. Without restoration, closing the overlay
-  // leaves _hmPanes pointing to those off-screen canvases — mousing over
-  // the real Charts tab then silently fails to draw the crosshair until
-  // Charts re-renders. Saving/restoring here is symmetric with the
-  // hist/period/tfDays saves directly above, per the existing design.
-  var savedPanes = window._hmPanes, savedHmChart = window._hmChart;
 
   try {
     window._hmPeriod = _simPeriod || 'daily';
@@ -19408,8 +19438,8 @@ async function intRenderChart() {
       benchMode: 'mtf', pane3Label: 'intHmPane3Label',
       prefetchedDailyMap: usePrefetched, quiet: s.chartRendered
     });
-    // Capture the Interactive panes AFTER drawHilegaMilega sets window._hmPanes,
-    // so intDrawManualVLines() can use them immediately after this returns.
+    // Capture Interactive panes after drawHilegaMilega sets window._hmPanes,
+    // so intDrawManualVLines() can use them (BUG 2 fix — 2026-08-21).
     s._intPanes = window._hmPanes;
     s._intHmChart = window._hmChart;
     s.chartRendered = true;
@@ -19418,9 +19448,9 @@ async function intRenderChart() {
   } finally {
     window._hmHist = savedHist; window._hmHistCode = savedHistCode;
     window._hmPeriod = savedPeriod; window._hmTfDays = savedTfDays;
-    // Restore Charts tab's own panes so its crosshair still works after
-    // closing the simulator overlay (BUG 3 fix).
-    window._hmPanes = savedPanes; window._hmChart = savedHmChart;
+    // _hmPanes/_hmChart are NOT restored here — they remain pointing to
+    // Interactive panes for the duration of the session so the crosshair
+    // on intHmPane1/2/3Canvas keeps working. simClose() restores them.
     _intChartBusy=false;
   }
 }
