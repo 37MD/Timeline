@@ -32,7 +32,7 @@
 // re-fetch everything fresh on this deploy, so the dark-theme rebuild
 // actually reaches the phone on the next app open instead of silently
 // serving the old light-mode index.html for one more session.
-const CACHE_NAME = 'timeline-scanner-v6.05';
+const CACHE_NAME = 'timeline-scanner-v6.06';
 
 const APP_SHELL = [
   './Timeline_18H.html',
