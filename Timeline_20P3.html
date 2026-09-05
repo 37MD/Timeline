@@ -5,176 +5,6 @@
 ════════════════════════════════════════════════════════════════════════════
  TIMELINE_20P3 — MASTER TABLE OF CONTENTS
 ════════════════════════════════════════════════════════════════════════════
- ────────────────────────────────────────────────────────────────────────
- JUMP-INDEX — one line per dated entry below, in document order (most
- recent first). Ctrl-F/grep a snippet in quotes to jump to the full entry —
- line numbers are not used here since they shift on every edit. This index
- is a navigation aid only; it never replaces or summarizes-away an entry —
- every entry below still has its full ROOT CAUSE/FIX/VERIFIED body intact
- further down in this same comment block.
- ────────────────────────────────────────────────────────────────────────
- -- TIMELINE_20P3 --
-   • added a jump-index to the top of this TOC comment block, per explicit request ("optimize and consolidate with a brief summar...
-   • localStorage consolidation: routed 25 direct localStorage.getItem/setItem/removeItem call sites through BB, closing a gap the f...
-   • Consolidation sweep, phase 2: audited backup/restore, calculations, and charts for scattering; corrected the file's own stale s...
- -- TIMELINE_20P2 --
-   • downloadData/downloadDataFast/restartFreshDownload bare- global export fix + false TOC entry correction (2026-09-05
- -- TIMELINE_20O --
-   • Charts tab: Candlestick view + Teacher Mode on one row (2026-09-04
-   • Charts tab: Select Strategy Index dropdown showed unformatted names, e.g. "Nifty200alpha30" instead of "Nifty200 Alpha 30" (202...
-   • Teacher Mode: 4-step reasoning signals (2026-09-04
-   • Teacher Mode extended to the live Charts tab (2026-09-03, same-day follow-up to the Simulator's Teacher Mode
-   • Interactive Simulator: "Teacher Mode" (2026-09-03
-   • once-per-day export guard could still be stamped by stale-but-non-empty data, blocking retries for the rest of the day (2026-09...
-   • daily download's REAL freshness gate fixed (cache-first filter had no staleness check at all); a second latent bug found and fi...
-   • NPS/BAF staleness-gate threshold too loose, tightened (2026-09-03
-   • extended Weekly/Monthly candlestick view to NPS and BAF (2026-09-03
-   • Weekly/Monthly candlestick view, NSE indices only (2026-09-02, new feature, Charts tab
-   • closed the remaining NPS/BAF fetch-path duplication (2026-09-02, fourth same-day follow-up, "fix all"
-   • found and fixed why the NPS Trust fallback never fired (2026-09-02, third same-day follow-up
-   • NPS Trust alternate data source (2026-09-02, second same-day follow-up
-   • NPS staleness-gate fix + source-lag freshness signal (2026-09-02, same-day follow-up
-   • NSE/NPS/BAF data-pipeline consolidation (2026-09-02
-   • Two pre-existing crash bugs fixed, surfaced during the rendering-speed profiling session above — 2026-08-24
-   • Tab-switch rendering speed — ldFullAuditStatus() redundant IndexedDB re-reads — 2026-08-24
-   • _deepIsComplete/ldFullAuditStatus completeness-definition mismatch fixed — 2026-08-23k
-   • Consolidated all scanning code into single logical Section 10.6 — 2026-08-23j
-   • NPS “NO DATA” + Hide-list skip verified — 2026-08-23i
-   • Portfolio pill “FULL DOWNLOAD” → “2 funds” — scanning now starts after 2 full funds, not 10/full — 2026-08-23h
-   • NPS/BAF 85%/99% stall — partial download stamped as done for the day, blocking retries — 2026-08-23g
-   • ACTUAL root cause found — onTabActivated()'s content:// URL guard returned before ever reaching the scan-trigger code, on every...
-   • Core scan fix — Portfolio never completed its own scan; only appeared to "work" as a side effect of clicking NPS Switch or Re-r...
-   • Regression fix — the previous session's completeness check caused partial downloads to be discarded entirely instead of scanned...
-   • Core scan bug fix — Step 0's "is cache complete" check accepted thin/partial data as complete, causing intermittent blank/near-...
-   • Bug fix — scan never used already-downloaded data on fresh page load — 2026-08-23a
-   • Core Charts — DAILY/WEEKLY/MONTHLY Buy/Sell coloring — 2026-08-22j
-   • Simulation — NEXT BAR promoted to tall right-side button — 2026-08-22i
-   • Simulation — Monthly period button never changes color — 2026-08-22h
-   • Simulation — Process Audit training-value pass: inline feedback, Replay, session history, scenario picker, confirm-before-disca...
-   • Simulator — SELL 25% wiring audit + window.intSellPartial export fix — 2026-08-21f
-   • Simulator — NEW SESSION blank-charts fix — 2026-08-21e
-   • Simulator — END & REVIEW crash fix + SELL 25% comment correction — 2026-08-21d
-   • Simulator — SELL 25% partial exit + 3-tier exit scoring — 2026-08-21
-   • AGENTS.md audit — SW/manifest filename + simulator bugs — 2026-08-21
-   • Process Audit — Hilega double-green buys give +30 — 2026-08-22
-   • Simulation — Interactive first + Simulation Actions vertical lines + layout — 2026-08-22
-   • Charts tab dropdown: fund names garbled — 2026-08-18
-   • full AGENTS.md audit — two documentation fixes, 2026-08-18
-   • fixed a stray closing div that pushed all 3 red Watch tab titles flush against the screen edge, per explicit request 2026-08-17...
-   • fixed the floating "Cache is fresh" status strip + NPS Switch title consistency, per explicit request 2026-08-17 — "Do we need ...
-   • title/subtitle style consistency across Scanner, Watch, and Timeline tabs, per explicit request 2026-08-17 — "Refer Monthly gre...
-   • removed the "Live cache diagnostic" box from the Setup tab, per explicit request 2026-08-17 — "Do we need the details for 'live...
-   • fixed all 3 findings from the single-source-of-truth audit, per explicit request 2026-08 — "Fix all"
-   • Setup tab Re-run Scan centered + dead-code audit, per explicit request 2026-08 — "center the Re run scan script inside the butt...
-   • removed the "Critical Alert" scroll-to BUTTON only, per explicit request 2026-08 — "The Critical Alert button seems to be of no...
-   • Setup tab's live cache diagnostic box now always shows Hide List status, per explicit request 2026-08 — "should we update the b...
-   • excluded hidden funds from the completeness audit, per explicit request 2026-08 — user asked, after purging hidden-fund data, w...
-   • Hide List funds fully excluded from download + one-time purge of already-stored hidden data, per explicit request 2026-08 — "Hi...
-   • storage-time Master List + Hide List filter for NSE downloads, per explicit request 2026-08 — user asked whether download could...
-   • fixed the actual "downloading 1201 days again" bug, per explicit request 2026-08 — user's own testing disproved the prior sessi...
-   • live gap-count diagnostic panel on Setup tab, per explicit request 2026-08 — user saw a screenshot with the Fast-download progr...
-   • decouple NPS/BAF re-download from NSE index audit completeness, per explicit request 2026-08 — user reported the app re-downloa...
-   • card-color consistency fix across Portfolio/Scanner/Watch cards, per explicit request 2026-08 — user asked to fix ALL card-base...
-   • CRITICAL BUG FIX: infinite download loop after wipe, per explicit request 2026-08 — 12 screenshots showed NPS/BAF stuck at 0/32...
-   • auto-trigger consistency fix, per explicit request 2026-08 — investigation started from a screenshot showing 100% audit + empty...
-   • scan-start gate + progressive Critical Alert, per explicit request 2026-08 — investigation that started from a screenshot showi...
-   • candle-red list: strict download+scan gate
-   • Setup tab: candle-red alert + audit exclusions
-   • Setup tab: candle-red alert + audit exclusions
-   • senior code audit — single-source-of-truth fixes
-   • reorganization only — no logic changed
- ────────────────────────────────────────────────────────────────────────
- WHAT CHANGED — added a jump-index to the top of this TOC comment block,
- per explicit request ("optimize and consolidate with a brief summary at
- each of the points") (2026-09-05)
-
- REQUEST: the TOC had grown to ~4,100 lines / 66 dated entries across 3
- version headers, making top-to-bottom reading impractical. Asked for
- optimization/consolidation with a brief summary per entry.
-
- WHY NOT A REWRITE: AGENTS.md §4 requires keeping old entries — even
- superseded ones — "since they explain why something was tried and
- undone," and never authorizes shrinking an entry's ROOT CAUSE/FIX/
- VERIFIED body to save space. Rewriting each entry down to a "brief
- summary" in place would delete exactly the reasoning a future session
- needs when it hits a similar bug — the failure mode this file's own
- history (15K3/15K4/15L) already document as costly. So: added an index,
- changed zero dated entries.
-
- FIX: inserted a JUMP-INDEX block directly below this file's top header,
- above every dated entry — one bullet per WHAT CHANGED entry, grouped by
- version header (20P3/20P2/20O), in original document order. Each bullet
- is a trimmed (~130 char) snippet of that entry's own header line — no
- line numbers, since those shift on every future edit; the entry text
- itself is the stable anchor to Ctrl-F/grep for. Every dated entry below
- the index is untouched — same words, same order, same length.
-
- VERIFIED: diffed the file against the pre-insertion version from the
- first unchanged line onward (found by matching the first dated entry's
- exact text in both copies) — 0 differences, confirming the insertion is
- purely additive and disturbed nothing else. Re-syntax-checked all 15
- script blocks with `node --check` after the insertion — 0 errors.
- Comment-open/comment-close tag counts and script-open/script-close tag
- counts both unchanged (156/156 and 15/15 respectively) before and after.
- ────────────────────────────────────────────────────────────────────────
- WHAT CHANGED — localStorage consolidation: routed 25 direct
- localStorage.getItem/setItem/removeItem call sites through BB, closing
- a gap the file's own comment (line ~6533, "No section should call
- localStorage.getItem/setItem/removeItem directly") had been asserting
- but not actually enforcing (2026-09-05)
-
- ROOT CAUSE: flagged as a pending item during a line-by-line AGENTS.md
- audit (§1, "one canonical source per concept"). 25 sites across
- Sections A/B/16/16.5/17/Timeline-Sim/15 (Tactical Transfer) called
- localStorage directly instead of through BB — most visibly the
- ld_deep_meta_v1 IDB-wipe canary, touched 6 different ways (3 direct
- setItem, 2 direct getItem, 1 direct removeItem) with only ONE site
- (line ~13460, _aiDataSource) correctly using BB.getJSON. Also found:
- LD_DL2500_LAST_EXPORT_DATE_KEY (2 sites), ld_deep_weekly_history_v4
- (2 sites), ld_dl2500_last_export_date (1 site), LD_SIM_LOG_KEY (3
- sites), _TACTICAL_LS_KEY (2 sites), tacticalScanTargetCode/
- tacticalScanMidCode (3 sites), _SCAN_LS_KEY (2 sites), and one
- ld_storage_persist_granted write. Not a live bug — each site had its
- own try/catch and never collided with another — but the same failure
- shape as the previously-fixed 36-site normalize()/6-site date-key
- scattering (see 15K3), just for storage access instead of math.
-
- FIX: mechanical only, per §5 ("preserve behavior byte-for-byte first,
- restructure second") — zero functional changes, one edit per site:
-   - localStorage.getItem(k) → BB.get(k)
-   - localStorage.setItem(k, v) → BB.set(k, v)
-   - localStorage.removeItem(k) → BB.remove(k)
-   - JSON.parse(localStorage.getItem(k) || 'fallback') → BB.getJSON(k, fallback)
-   - localStorage.setItem(k, JSON.stringify(obj)) → BB.setJSON(k, obj)
- One site (_saveTacticalState) kept its explicit console.warn on save
- failure — BB.setJSON's return value (false on failure) is checked
- instead of relying on setJSON's own silent internal catch, so the
- existing warning behavior is unchanged. BB's own internal
- implementation (get/set/remove/getJSON/setJSON/getAll, ~line
- 6572-6685) was left untouched — those ARE the canonical localStorage
- access point, not a violation.
-
- VERIFIED: all 15 script blocks re-extracted and re-syntax-checked with
- `node --check` after every edit — 0 errors. Independent Node
- reproduction (BB stubbed with an in-memory localStorage polyfill)
- confirmed round-trip equivalence for every access pattern touched:
- BB.setJSON→BB.getJSON round-trip matches exactly; missing-key reads
- return the same fallback the old `|| 'null'`/`|| '[]'` patterns did;
- BB.remove followed by a read returns the fallback; plain BB.get/
- BB.set string round-trip (LD_DL2500_LAST_EXPORT_DATE_KEY pattern)
- matches; BB.get on an unset key returns null, matching the old
- try/catch-and-fall-through-to-default behavior for
- tacticalScanTargetCode/tacticalScanMidCode. Grepped for stray
- localStorage.getItem/setItem/removeItem after all edits — only BB's
- own internal implementation (lines 6585-6675) and unrelated comment
- text remain.
- NOT verified: no browser available this session — the IndexedDB-wipe
- canary path (_idbCanaryBoot/_idbCanary reads) and the Tactical
- Transfer dropdown-state persistence are exercised only by the Node
- reproduction above, not by an actual page load/reload cycle. A full
- 7-tab sweep plus a real wipe→reload scenario is still needed to fully
- close this out; flagging here rather than silently skipping it.
- ────────────────────────────────────────────────────────────────────────
  WHAT CHANGED — Consolidation sweep, phase 2: audited backup/restore,
  calculations, and charts for scattering; corrected the file's own
  stale section map (2026-09-05)
@@ -8266,7 +8096,7 @@ window.addEventListener('load', function() {
       navigator.storage.persist().then(function(granted) {
         console.log('[STORAGE] Persistent storage ' + (granted ? 'GRANTED ✅' : 'not yet granted — will retry after next download'));
         // Store result so onTabActivated can show it without an async call
-        BB.set('ld_storage_persist_granted', granted ? '1' : '0');
+        try { localStorage.setItem('ld_storage_persist_granted', granted ? '1' : '0'); } catch(_) {}
       });
     }
   } catch(e) { console.warn('[STORAGE] persist() call failed:', e); }
@@ -8742,7 +8572,7 @@ function _deepLoadAsync(cb) {
       // IDB is the authoritative store; the mirror was only ever a one-time
       // migration source when IDB was empty (the fallback path below still
       // handles that case).  Once IDB is populated we no longer need it.
-      BB.remove('ld_deep_weekly_history_v4');
+      try { localStorage.removeItem('ld_deep_weekly_history_v4'); } catch(_) {}
       _idbGet(DEEP_CACHE_KEY_WEEKLY, function(wData) {
         _idbGet(DEEP_CACHE_KEY_MONTHLY, function(mData) {
           cb({
@@ -8804,13 +8634,15 @@ function deepSaveCache(cache){
   // Canary: write a tiny metadata fingerprint to localStorage so we can
   // distinguish "browser cleared IndexedDB mid-session" from "never downloaded".
   // Only ~100 bytes — safe for quota. Cleared by Restart Fresh along with IDB.
-  if (cache.lastDate && cache.dailyMap) {
-    BB.setJSON('ld_deep_meta_v1', {
-      lastDate: cache.lastDate,
-      indexCount: Object.keys(cache.dailyMap).length,
-      ts: Date.now()
-    });
-  }
+  try {
+    if (cache.lastDate && cache.dailyMap) {
+      localStorage.setItem('ld_deep_meta_v1', JSON.stringify({
+        lastDate: cache.lastDate,
+        indexCount: Object.keys(cache.dailyMap).length,
+        ts: Date.now()
+      }));
+    }
+  } catch(_) {}
   // Request persistent storage every time we save — the browser may not grant
   // it immediately, but repeated calls increase the chance it will.  Once
   // granted, Brave/Chrome will NOT evict IDB under memory pressure or on exit,
@@ -10285,11 +10117,13 @@ async function _fetchDeepWeeklyHistoryImpl(onProgress){
                 _phaseTxt('\uD83D\uDCBE Saving Monthly container', 2, 3);
                 var _okM = await _idbPut(DEEP_CACHE_KEY_MONTHLY, { monthlyMap: cache.monthlyMap || {} });
                 _phaseTxt('\uD83D\uDCBE Saving Monthly container', 3, 3);
-                BB.setJSON('ld_deep_meta_v1', {
-                  lastDate: cache.lastDate,
-                  indexCount: Object.keys(cache.dailyMap).length,
-                  ts: Date.now()
-                });
+                try {
+                  localStorage.setItem('ld_deep_meta_v1', JSON.stringify({
+                    lastDate: cache.lastDate,
+                    indexCount: Object.keys(cache.dailyMap).length,
+                    ts: Date.now()
+                  }));
+                } catch(_) {}
                 // ── Phase 7: Verify ──
                 console.log('[DEEP] ===== ALL CONTAINERS SAVED (daily ok=' + _okD + ', weekly ok=' + _okW + ', monthly ok=' + _okM + ') =====');
                 console.log('[DEEP] Daily: ' + _nIndices + ' indices, lastDate: ' + cache.lastDate);
@@ -10861,11 +10695,13 @@ async function _fetchDeepWeeklyHistoryFastImpl(onProgress) {
             cache.lastDate = deepFmtDate(_newestTargetDayF); // FIX: pre-filter newest day
             // Canary write so a future load can tell "browser wiped IDB"
             // apart from "never downloaded" — mirrors deepSaveCache().
-            BB.setJSON('ld_deep_meta_v1', {
-              lastDate: cache.lastDate,
-              indexCount: Object.keys(cache.dailyMap).length,
-              ts: Date.now()
-            });
+            try {
+              localStorage.setItem('ld_deep_meta_v1', JSON.stringify({
+                lastDate: cache.lastDate,
+                indexCount: Object.keys(cache.dailyMap).length,
+                ts: Date.now()
+              }));
+            } catch(_) {}
             win._deepWeeklyCache = cache;
             if (_okD && _okW && _okM) {
               _deepShowProgress(1, 1, '\u2705 Saved — ' + _nIndices + ' indices now on disk');
@@ -12118,7 +11954,7 @@ function _showAutoAlert(msg, type) {
       // separate store, so if it shows a real prior download, IDB being
       // empty right now is a wipe/read-failure, not a cold start.
       var _idbCanaryBoot = null;
-      _idbCanaryBoot = BB.getJSON('ld_deep_meta_v1', null);
+      try { _idbCanaryBoot = JSON.parse(localStorage.getItem('ld_deep_meta_v1') || 'null'); } catch(_) {}
       var _canaryShowsPriorData = _idbCanaryBoot && _idbCanaryBoot.lastDate && (_idbCanaryBoot.indexCount || 0) > 10;
       if (_canaryShowsPriorData) {
         // CONDITION 1d: Canary proves a real download existed before — IDB
@@ -12366,7 +12202,7 @@ async function downloadNPSBAF2500(logFn) {
     return;
   }
   var _lastExportDate = null;
-  _lastExportDate = BB.get(LD_DL2500_LAST_EXPORT_DATE_KEY);
+  try { _lastExportDate = localStorage.getItem(LD_DL2500_LAST_EXPORT_DATE_KEY); } catch(e) {}
   if (_lastExportDate && _lastExportDate === ldTodayIstStr()) {
     _log('NPS + BAF 2500-day export already ran today (' + _lastExportDate + ') — skipping re-download. Use 🗑️ Restart or wait for tomorrow to force a fresh export.');
     _dl2500LastRun = Date.now(); // also satisfies the session guard above for the rest of today
@@ -12713,7 +12549,7 @@ async function downloadNPSBAF2500(logFn) {
   var _bafAllOk = bafKeysToFetch.length===0 || bafKeysToFetch.every(function(amc){ var r=bafResult[bafFunds[amc].name]; return r && !r.error && Array.isArray(r.entries) && r.entries.length>0 && _dl2500IsCodeFresh(r.entries); });
   var _dl2500AllFreshSuccess = _npsAllOk && _bafAllOk;
   if (_dl2500AllFreshSuccess) {
-    BB.set(LD_DL2500_LAST_EXPORT_DATE_KEY, ldTodayIstStr());
+    try { localStorage.setItem(LD_DL2500_LAST_EXPORT_DATE_KEY, ldTodayIstStr()); } catch(e) {}
     _log('NPS + BAF: all attempted codes returned genuinely same-day-fresh data — marking today as done.');
   } else {
     var _failedNps = npsCodesToFetch.filter(function(code){ var n=npsNames[code]||code; var r=npsResult[n]; return !r || r.error || !r.entries || !r.entries.length; }).length;
@@ -17618,8 +17454,8 @@ async function restartFreshDownload(){
       window._deepWipeInProgress = false;
       return;
     }
-    BB.remove('ld_deep_weekly_history_v4');
-    BB.remove('ld_deep_meta_v1'); // clear canary alongside IDB
+    try{ localStorage.removeItem('ld_deep_weekly_history_v4'); }catch(e){}
+    try{ localStorage.removeItem('ld_deep_meta_v1'); }catch(e){} // clear canary alongside IDB
     // Also clear the NPS/BAF 2500 once-per-day export guard — a deliberate
     // Restart Fresh should re-export NPSData2500.json/BAFData2500.json
     // even if they already ran once today, since the underlying data this
@@ -17629,7 +17465,7 @@ async function restartFreshDownload(){
     // declared in a later, separate <script> block — referencing it here
     // would depend on script execution order rather than being guaranteed
     // safe by simple top-to-bottom hoisting within one block.
-    BB.remove('ld_dl2500_last_export_date');
+    try{ localStorage.removeItem('ld_dl2500_last_export_date'); }catch(e){}
     window._deepWeeklyCache = null;
     window._deepDownloadInProgress = false;
     // AUDIT FIX: window._navMergeFingerprint (the per-fund content
@@ -19657,7 +19493,7 @@ function onTabActivated(){
   }else{
     // IDB is empty — check the canary to distinguish "browser cleared" vs "never downloaded"
     var _idbCanary = null;
-    _idbCanary = BB.getJSON('ld_deep_meta_v1', null);
+    try { _idbCanary = JSON.parse(localStorage.getItem('ld_deep_meta_v1') || 'null'); } catch(_) {}
     if (_idbCanary && _idbCanary.lastDate && (_idbCanary.indexCount || 0) > 10) {
       // Canary says data existed — IDB was cleared externally (Brave privacy sweep, memory pressure, or another tab blocked the IDB connection)
       _ssp('\u26A0\uFE0F History wiped \u2014 previously had ' + _idbCanary.indexCount + ' indices (last date: ' + _idbCanary.lastDate + '). Brave may have cleared storage, or another tab blocked IDB. Click \u26A1 Download (Missing Days) to re-fetch.', 'warn');
@@ -25010,17 +24846,19 @@ function intRunAudit() {
 var LD_SIM_LOG_KEY = 'ld_sim_session_log_v1';
 var LD_SIM_LOG_MAX = 30;
 function intSaveSessionLogEntry(s, totalScore, returnPct) {
-  var log = BB.getJSON(LD_SIM_LOG_KEY, []);
-  if (!Array.isArray(log)) log = [];
-  log.push({
-    ts: Date.now(),
-    score: totalScore,
-    returnPct: Math.round(returnPct * 10) / 10,
-    trades: s.tradeLog.length,
-    days: s.curIdx - s.startIdx
-  });
-  if (log.length > LD_SIM_LOG_MAX) log = log.slice(log.length - LD_SIM_LOG_MAX);
-  BB.setJSON(LD_SIM_LOG_KEY, log); // BB.set/setJSON no-ops safely on quota/unavailable — matches prior silent-skip behavior
+  try {
+    var log = JSON.parse(localStorage.getItem(LD_SIM_LOG_KEY) || '[]');
+    if (!Array.isArray(log)) log = [];
+    log.push({
+      ts: Date.now(),
+      score: totalScore,
+      returnPct: Math.round(returnPct * 10) / 10,
+      trades: s.tradeLog.length,
+      days: s.curIdx - s.startIdx
+    });
+    if (log.length > LD_SIM_LOG_MAX) log = log.slice(log.length - LD_SIM_LOG_MAX);
+    localStorage.setItem(LD_SIM_LOG_KEY, JSON.stringify(log));
+  } catch (e) { /* localStorage unavailable/full — silently skip, not critical */ }
   intRenderSessionLogSummary();
 }
 // Renders a compact trend line + mini sparkline into #intSessionLogSummary
@@ -25032,7 +24870,7 @@ function intRenderSessionLogSummary() {
   var el = document.getElementById('intSessionLogSummary');
   if (!el) return;
   var log = [];
-  log = BB.getJSON(LD_SIM_LOG_KEY, []); if (!Array.isArray(log)) log = [];
+  try { log = JSON.parse(localStorage.getItem(LD_SIM_LOG_KEY) || '[]'); if (!Array.isArray(log)) log = []; } catch (e) { log = []; }
   if (!log.length) { el.innerHTML = ''; return; }
   var recent = log.slice(-10);
   var avgRecent = recent.reduce(function(a, e) { return a + e.score; }, 0) / recent.length;
@@ -27566,13 +27404,14 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
       var el = document.getElementById(id);
       if (el) state[id] = el.value;
     });
-    if (!BB.setJSON(_TACTICAL_LS_KEY, state)) console.warn('[TACTICAL] save state failed — storage quota or unavailable');
+    try { localStorage.setItem(_TACTICAL_LS_KEY, JSON.stringify(state)); } catch(e) { console.warn('[TACTICAL] save state failed —', e.message); }
   }
 
   function _restoreTacticalState() {
     try {
-      var state = BB.getJSON(_TACTICAL_LS_KEY, null);
-      if (!state) return;
+      var raw = localStorage.getItem(_TACTICAL_LS_KEY);
+      if (!raw) return;
+      var state = JSON.parse(raw);
       _tacticalIds.forEach(function(id) {
         var el = document.getElementById(id);
         if (el && state[id] !== undefined) {
@@ -28120,13 +27959,17 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
   var _SCAN_DEFAULT_MID_CODE = 'SM005002';    // [NPS] KOTAK Scheme C - Tier I — matching parking fund, same AMC as the default target
 
   function _scanTargetCode() {
-    var saved = BB.get('tacticalScanTargetCode');
-    if (saved && DD.NPS._schemeNames[saved]) return saved;
+    try {
+      var saved = localStorage.getItem('tacticalScanTargetCode');
+      if (saved && DD.NPS._schemeNames[saved]) return saved;
+    } catch(e) {}
     return _SCAN_DEFAULT_TARGET_CODE;
   }
   function _scanMidCode() {
-    var saved = BB.get('tacticalScanMidCode');
-    if (saved && DD.NPS._schemeNames[saved]) return saved;
+    try {
+      var saved = localStorage.getItem('tacticalScanMidCode');
+      if (saved && DD.NPS._schemeNames[saved]) return saved;
+    } catch(e) {}
     return _SCAN_DEFAULT_MID_CODE;
   }
   // User choice (per request: "USER CHOICE OPTIONAL") — lets the person
@@ -28135,7 +27978,7 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
   // (those remain for ad-hoc single-fund charting/backtesting; this scan
   // is independent and always covers all 4 BAF sources at once).
   function setScanTarget(code) {
-    BB.set('tacticalScanTargetCode', code);
+    try { localStorage.setItem('tacticalScanTargetCode', code); } catch(e) {}
     _runDailyScan(true);
   }
   window.PSnap = window.PSnap || {};
@@ -28154,8 +27997,10 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
   function _runDailyScan(force) {
     var today = _todayIso();
     if (!force) {
-      var cached = BB.getJSON(_SCAN_LS_KEY, null);
-      if (cached && cached.date === today) { _renderTopAlert(cached); return Promise.resolve(cached); }
+      try {
+        var cached = JSON.parse(localStorage.getItem(_SCAN_LS_KEY) || 'null');
+        if (cached && cached.date === today) { _renderTopAlert(cached); return Promise.resolve(cached); }
+      } catch(e) {}
     }
     // Guard: only proceed if BAF/NPS data is ALREADY cached in memory or
     // IndexedDB. Without this, the very first call to _loadBaf()/_loadNps()
@@ -28228,7 +28073,7 @@ function bsBtRun(bafParsed, npsEParsed, bafName, npsEName) {
         best: bestOverall,
         perFund: perFund
       };
-      BB.setJSON(_SCAN_LS_KEY, result);
+      try { localStorage.setItem(_SCAN_LS_KEY, JSON.stringify(result)); } catch(e) {}
       _renderTopAlert(result);
       return result;
     }).catch(function(e) {
